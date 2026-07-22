@@ -27,6 +27,12 @@ Post-run-5 revisions (2026-07-22, after the 19-issue acceptance-walk batch):
 ledger thinness enforced at each `done`, mid-run directives are this-run-only,
 the finale builds cold, and the halt block — not the cron — is what resumes a
 run. All four are corrections to mechanics, none touches the roles or gates.
+Post-walk revisions (2026-07-23, after the 30-finding deployed walk): verify
+gates pick HOSTILE fixtures and drive production-shaped data; the post-deploy
+smoke walk is mandatory, owned by the merging session. The gates themselves
+were re-examined and kept unchanged — the run's 7 rejections were all real
+money/auth defects; what leaked was deployed-behaviour-on-real-data, which
+these three rules aim at.
 
 ## Scope argument
 
@@ -266,11 +272,20 @@ After the last issue:
    (render). for-abdul.md stays the agents' source of truth — the board is a
    distillation, never the only copy of a fact.
 4. Close the report by recommending follow-ups — recommend, never start; Abdul
-   picks the time:
-   - Always: after merge + deploy, a `/parallel-hunt` round on the live system —
-     it hunts the seams BETWEEN issues and against live external systems (Zoho,
-     email, WhatsApp), the class of bug per-issue gates cannot see. Its `deferred`
-     register entries become the issues for the next /run-issues round.
+   picks the time. ONE exception is not optional and not deferred:
+   - **MANDATORY — the post-deploy smoke walk.** The session that merges and
+     deploys immediately runs an agent-driven READ-ONLY walk of the DEPLOYED
+     site with real data, BEFORE the human walk: every list page and its
+     filters/search, every detail page, the send/receive surfaces as far as
+     read-only allows. Read-only means no permission risk; there is no reason
+     to skip it. It was skipped after both 2026-07 merges and the human walk
+     then found 30 issues, most of which a smoke walk would have caught
+     (empty facets, duplicate rows, dead search, a Telegram invite).
+   - Recommended: after the smoke walk, a `/parallel-hunt` round on the live
+     system — it hunts the seams BETWEEN issues and against live external
+     systems (Zoho, email, WhatsApp), the class of bug per-issue gates cannot
+     see. Its `deferred` register entries become the issues for the next
+     /run-issues round.
    - Only if the coherence findings are structural (duplication across issues,
      drifted seams): an `improve-codebase-architecture` session on a clean tree
      before the next phase's issues are written.
@@ -363,7 +378,17 @@ Vercel.
 > it; two consecutive refusals → stop and report, never poll. Your job is not
 > to tick the checklist — it is to catch behaviour
 > that technically passes while being subtly wrong: states, edge inputs, design
-> floor. Verdict into the issue file: pass, or reject with concrete observed
+> floor. Pick HOSTILE fixtures: when the acceptance claims "never X" or
+> "always Y", drive the entity MOST LIKELY to produce X, and name your fixture
+> choice and why in the verdict — a pass on a friendly fixture is not a pass
+> (real leak: "never Telegram" proven on a supplier with no Telegram
+> connection; the Telegram-connected one broke it live). Where the run's rules
+> allow production READS, drive filters, search and dedupe against
+> production-shaped data — seeds hide duplicate rows and empty facets. A
+> mutation's acceptance includes what a plain browser REFRESH shows afterwards;
+> a fresh HTTP request cannot stand in for the browser's cache. Judge the
+> issue's INTENT across every surface it names or implies, not the letter of
+> one surface. Verdict into the issue file: pass, or reject with concrete observed
 > behaviour. Route findings at write time: append to the target home FIRST,
 > then cite the appended location in the verdict — never declare a routing you
 > cannot cite. Touch no code.
