@@ -30,8 +30,8 @@ flowchart TD
 ### [run-issues](skills/run-issues/SKILL.md)
 
 One thin runner session implements a range of tracker issues end to end,
-unsupervised. The human is needed twice: a go-ahead before the final coherence
-review, and the merge read at the end. The design choices that earn their keep:
+unsupervised. The human is needed once: the merge read at the end. The design
+choices that earn their keep:
 
 - Every worker is a fresh subagent. An implementer gets one issue; verify and
   review gates get one verdict each, then die. Context never accumulates, and a
@@ -46,7 +46,9 @@ review, and the merge read at the end. The design choices that earn their keep:
   journal only a resuming runner and the finale read. Shared external quotas
   (API caps, send limits) are run state owned by the runner, and one agent holds
   the spend window at a time.
-- A cron wakes the run after usage-limit resets. Nothing merges without a human.
+- A halt writes its own resume state into the ledger — what is on disk, what is
+  owed, in what order — so a run picks up where it stopped whether a session cron
+  revives it or a human does. Nothing merges without a human.
 
 ### [parallel-hunt](skills/parallel-hunt/SKILL.md)
 
