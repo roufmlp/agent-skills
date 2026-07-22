@@ -1,25 +1,32 @@
 ---
 name: run-issues
-description: Autonomously implement a range of tracker issues one by one — fresh Opus implementer per issue (TDD), ephemeral Fable verify + review gates, two-strike Fable escalation, cron auto-resume across usage limits, human merge gate at the end. Use when the user wants to implement issues sequentially without supervision ("run issues 05-09", "implement all remaining issues", "continue until all issues are done"), or to RESUME an interrupted run ("/run-issues resume").
+description: Autonomously implement a range of tracker issues one by one — fresh Opus implementer per issue (TDD), ephemeral Fable verify + review gates, two-strike Fable escalation, ledger-driven resume across usage limits, human merge gate at the end. Use when the user wants to implement issues sequentially without supervision ("run issues 05-09", "implement all remaining issues", "continue until all issues are done"), or to RESUME an interrupted run ("/run-issues resume").
 argument-hint: "issue range: one issue, a range (05-09), or 'all'; optionally --effort=max"
 ---
 
 # Run issues
 
 One thin runner session implements a range of issues end to end. Workers and gates
-are subagents (fresh context each). After launch the user is needed only twice: the
-finale go-ahead, and the merge read.
+are subagents (fresh context each). After launch the user is needed only once: the
+merge read.
 
 Settled design — do not relitigate in-session (agreed with Abdul 2026-07-19,
 cost revision same day after the first real run): Opus implementers; Opus verify
 gate + Fable review gate (Fable is the judgment choke point, verify is
 observational); two-strike escalation; runner owns the branch, Abdul owns main;
-finale judgment half waits for explicit confirmation; effort floors below.
+finale runs FULLY AUTOMATICALLY, judgment half included (revised 2026-07-21:
+the go-ahead gate existed to time fable spend, but skipping the judgment half
+on run 27-32 cost a 64-finding acceptance walk — the spend is cheaper than
+the walk); effort floors below.
 Post-run-1 revisions (grilled and agreed 2026-07-19, after the 13c–14 run):
 thin ledger + journal split, derived-money fable tag, shared-quota ownership,
 routing verification, one-writer worktrees + explicit-path commits,
 HTML-over-HTTP verification default, preview-deploy skip where blocked.
 Review-gate effort floors were examined and deliberately left unchanged.
+Post-run-5 revisions (2026-07-22, after the 19-issue acceptance-walk batch):
+ledger thinness enforced at each `done`, mid-run directives are this-run-only,
+the finale builds cold, and the halt block — not the cron — is what resumes a
+run. All four are corrections to mechanics, none touches the roles or gates.
 
 ## Scope argument
 
@@ -84,6 +91,17 @@ to a future spawn it goes in carry-forward as a bullet, not in log prose —
 a learning that lives only in narrative survives only if the runner remembers
 to re-brief it.
 
+**Thinness is enforced at every `done`, not hoped for.** Log entries are written
+for the runner's next decision, and once an issue is `done` its table row already
+carries attempts, verdicts and the commit — so at the moment the ledger flips to
+`done`, **collapse that issue's log entries to one line** and move the story to
+the journal. Hard cap: the whole ledger stays under ~15k characters; check it at
+each `done` and prune before adding. (Measured on the 19-issue run of 2026-07-22:
+the ledger had regrown to 39.8k, 23k of it Log — 25 entries averaging ~900
+characters of narrative against the "~2 lines" rule — re-read by ~57 spawns.
+That is the fat-ledger failure the split was invented to end, returning through
+the log instead of through narrative sections.)
+
 **The narrative goes in `run-journal.md`** — what each attempt did and why,
 verdict stories, dead ends. The runner appends as it goes. It is read exactly
 twice: by a resuming runner on revival (so resume briefs stay as good as the
@@ -113,6 +131,18 @@ messaging send limits, trial-org allowances — is RUN STATE, owned by the runne
   code with the cap long gone.
 - Every brief that touches a rate-limited system carries: **two consecutive
   refusals → stop and report. Never poll.**
+
+## Mid-run directives from the user
+
+A directive arriving mid-run (a model change, a scope tweak, a new constraint)
+is **THIS RUN ONLY** unless the user says it is standing. Record it in the
+ledger's carry-forward with its scope written on it, and re-brief it to every
+later spawn from there. **Never promote it to a memory file in-session** — memory
+is for facts that outlive the run, and a runner cannot tell which those are while
+the run is still going. Ask at run close if it should become standing.
+(2026-07-22: "use fable for UI/UX" was written to memory mid-run, then rescinded
+and the file deleted at close, leaving seven issues' model assignment needing a
+historical footnote to explain.)
 
 ## Per-issue loop
 
@@ -179,8 +209,8 @@ should have been a gate or the implementer. (First real run: a side agent's
 probe files landed in the run tree and only explicit-path staging kept them out
 of a gate-passed commit.) Commit per issue after gates pass. **There is NO merge between issues** — the next issue builds
 directly on the branch; merge to main happens once, at run end, by Abdul. A
-single-issue run therefore reaches the finale ask immediately after its only
-issue — that stop is by design, not a stall. Extending a finished run to a new
+single-issue run therefore runs the full finale immediately after its only
+issue and stops at the merge read — that stop is by design, not a stall. Extending a finished run to a new
 issue is a NEW run: Abdul merges first, then invokes /run-issues again from
 main. Nothing merges to main and nothing deploys beyond preview
 without his read. The review gate appends anything a human should look at to
@@ -194,24 +224,47 @@ uncommitted files can be lost, and the clean check catches those — report any
 dirty tree to Abdul instead of removing). Standing worktree inventory must never
 exceed the number of live runs.
 
-## Finale — mechanical half automatic, judgment half on confirmation
+## Finale — fully automatic, judgment half included
+
+Revised 2026-07-21 (Abdul): the judgment half no longer waits for a go-ahead.
+Skipping it on the 27-32 run cost a 64-finding acceptance walk; the fable
+spend is cheaper than the walk. Do not relitigate.
 
 After the last issue:
 
-1. **Automatic:** full typecheck, full test suite, preview deploy — but only
+1. **Mechanical:** full typecheck, full test suite, **a build from a COLD cache**
+   (delete `.next` / `dist` / the framework's cache first — a warm cache makes
+   the build agree with whatever it already compiled), preview deploy — but only
    where the deploy needs no permission the classifier withholds. Where it is
    blocked (e.g. a repo whose deploy path touches a protected secrets file):
    skip it, say so in the briefing, NEVER work around the classifier, and never
    re-litigate per run — the repo's CLAUDE.md records the standing decision.
    Failures here reopen the offending issue via the per-issue loop.
-2. **Then STOP and ask:** "Finale pending — one fable pass (whole-branch coherence
-   review at max effort + full /verify) before your merge read. Say go."
-   The resume cron must NEVER trigger this half; only the user does. This lets him
-   time the fable spend (e.g. after a limit reset).
-3. On go: one fable subagent reviews the ENTIRE branch diff as a single change —
-   design coherence, duplication across issues, drifted seams, coderules — and a
-   full end-to-end /verify runs. Verdicts + `for-abdul.md` become the merge
-   briefing.
+   **Committed run state is build input.** The ledger, journal, issue files and
+   briefings sit inside the repo, so whatever scans the project scans them too:
+   confirm the toolchain excludes them, and treat a code fence in a write-up as
+   something the build may try to compile. (2026-07-22: the branch built green on
+   a warm cache and the first production deploy failed cold — Tailwind v4 scanned
+   `.scratch`, found a `bg-[url(…)]` quoted in an issue write-up, and emitted CSS
+   Turbopack could not resolve.)
+2. **Judgment, immediately after:** one fable subagent reviews the ENTIRE
+   branch diff as a single change — design coherence, duplication across
+   issues, drifted seams, coderules — and a full end-to-end /verify runs.
+   Verdicts + `for-abdul.md` become the merge briefing. Track it in the
+   ledger (`finale-mechanical → finale-judgment → awaiting-merge`) so a
+   limit-interrupted finale resumes idempotently instead of re-running or
+   being forgotten. If the fable spawn fails on a usage limit, leave the
+   ledger at `finale-judgment`, write the halt block, and let the run be
+   revived after reset — never downgrade the pass to Opus to save the wait,
+   and never declare the run complete with the judgment half unrun.
+3. **Regenerate the action board** — `<main-repo-root>/.scratch/<feature>/board.html`,
+   the one-page human view of for-abdul.md (added 2026-07-21; Abdul reads the
+   board, not the file). Live actions only, grouped by when (tonight / daily
+   loop / this week / waiting-on-others / low), one line of what + one line of
+   why per item, done items dropped or marked DONE, ticks persisted via
+   localStorage. Keep the existing file's styling; send it with SendUserFile
+   (render). for-abdul.md stays the agents' source of truth — the board is a
+   distillation, never the only copy of a fact.
 4. Close the report by recommending follow-ups — recommend, never start; Abdul
    picks the time:
    - Always: after merge + deploy, a `/parallel-hunt` round on the live system —
@@ -222,16 +275,43 @@ After the last issue:
      drifted seams): an `improve-codebase-architecture` session on a clean tree
      before the next phase's issues are written.
 
-## Auto-resume across usage limits
+## Resume across usage limits
 
-At launch create a repeating scheduled wakeup (CronCreate, every 30 min): "If
-`<run.md>` shows an active run with no ledger progress since last firing, resume
-from ledger state; otherwise do nothing. Never trigger the finale judgment half."
-Firings during a rate-limit window simply fail; the first one after reset revives
-the run. A RESUMING runner reads `run-journal.md` once on revival — that is one
-of the journal's two sanctioned reads — so its briefs carry the full story, not
-just the table. Delete the cron at run end. Remind once at launch: machine stays awake
-(`caffeinate -dimsu`).
+**The ledger is what resumes a run. The cron only saves the short waits.**
+CronCreate jobs are in-memory and session-only: they die with the session and
+expire after 7 days, and they fire only while the session is idle. So the cron
+covers a five-hour window that the same session sits through — nothing longer.
+A weekly limit resetting days out, or a session that ends, is resumed by a human
+re-invoking `/run-issues resume` against the ledger. Never write or imply that a
+long interruption resumes itself. (2026-07-22: the run halted on a weekly limit
+resetting three days later. The runner noticed the cron could not survive it and
+hand-wrote the resume state; the skill, at that point, still promised otherwise.)
+
+At launch create the wakeup anyway (CronCreate, every ~29 min): "If `<run.md>`
+shows an active run with no ledger progress since last firing, resume from ledger
+state; otherwise do nothing. The finale (both halves) is a resumable stage like
+any other — revive it from ledger state, never re-run completed halves." Delete
+it at run end. Remind once at launch: machine stays awake (`caffeinate -dimsu`).
+
+**Every halt writes a HALT BLOCK into the ledger before the session stops** —
+limit hit, user pause, anything. It is the run's only resume document; there is
+no separate handover file, because a second copy is a copy that goes stale. It
+states, in this order:
+
+- **Why halted, and when the block lifts** (limit reset time with timezone, or
+  "paused by the user").
+- **What is on disk right now** — checked, not assumed: was a worker killed
+  mid-edit or between steps, `git status`, typecheck, the tests touching the
+  affected modules. Say which state you verified rather than what you expect.
+- **What is owed, in exact order**, naming the role and model for each — and
+  what must NOT be re-spawned because its work is already on disk and green.
+- **The remaining queue**, in the order the user gave it.
+
+A RESUMING runner reads the ledger, then `run-journal.md` once on revival — that
+is one of the journal's two sanctioned reads — so its briefs carry the full
+story, not just the table. It then re-runs pre-flight (worktree clean and at the
+expected commit, `.env.local` still a symlink, `node_modules` present) before
+spawning anything, and recreates the cron.
 
 Idempotency: every brief begins "Read the ledger first; if your assigned issue is
 already past your stage, stop and return."
@@ -302,7 +382,7 @@ Vercel.
 > cannot cite. Append anything a human should see at merge time to for-abdul.md.
 > Touch no code.
 
-### Coherence finale (fable @ max — only after the user says go)
+### Coherence finale (fable @ max — automatic after the mechanical half passes)
 
 > You are the COHERENCE FINALE. Read run-journal.md — this is one of its two
 > sanctioned reads; you are the fresh eyes it exists for. Review the ENTIRE
