@@ -8,6 +8,9 @@ notes, or memory dumps in here. If a body of guidance runs long, give it its own
 ## Writing
 Everything you write for me follows my writing rules: @writingrules.md
 
+When reporting information to me, be extremely concise and sacrifice grammar for the
+sake of concision.
+
 ## Design
 Any design work (UI, websites, documents, slides) follows my design rules. They are not
 loaded by default — invoke the `designrules` skill before starting, every time.
