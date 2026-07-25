@@ -19,7 +19,9 @@ not to run one.
 `/run-issues 05` · `05-09` · `13c 20 14 22` (explicit list, run in that order) ·
 `all` (every remaining `ready-for-agent` issue in tracker order).
 
-Issues are a dependency chain. Always run in order; never skip past a blocked one.
+Run in the order given. Some issues depend on earlier ones and say so in their own
+file ("run NN first", "this assumes NN has landed"); most do not. A blocked issue
+stops its dependents, not the whole run — see the per-issue loop.
 
 For `all`, resolve the scope from each issue file's `Status:` line and take only
 clean `ready-for-agent` issues. Print the resolved list in the launch message.
@@ -110,8 +112,19 @@ first, while the window exists.
    reject, that is still ONE retry carrying both verdicts, and one strike, not two.
 7. **Two strikes** → kill it and spawn `run-issues-implementer-escalated` with the
    issue and both verdicts, but none of the failed reasoning.
-8. If that also fails a gate → ledger `blocked`, and the run **halts**. It is a
-   dependency chain; do not build on a wrong slice.
+8. If that also fails a gate → ledger `blocked`. **Then work out what depended on
+   it.** Mark every queued issue that declares a dependency on the blocked one
+   `blocked (depends on NN)` and skip it; carry on with the rest. The run halts
+   entirely only when nothing independent is left.
+
+   Dependencies come from the invocation where it declares them, and from the
+   issue files' own cross-references. **Where you cannot tell whether a queued
+   issue depends on the blocked one, treat it as dependent and skip it.** A
+   skipped issue costs one re-run; an issue built on a wrong slice costs a gate
+   cycle, a bad merge, or worse.
+
+   Say in the merge briefing which issues were skipped and for what, so the next
+   run picks them up rather than rediscovering them.
 
 Small-issue coalescing: up to two adjacent trivial issues (copy, config, no logic)
 may share one implementer spawn and one combined gate spawn. Anything with logic

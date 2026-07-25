@@ -220,6 +220,37 @@ issues. A human's call, not a default.
 was read as a cancellation and the gate stood down without a verdict, costing an
 independent read. Say "narrowing, not cancelling" explicitly.
 
+## A blocked issue stops its dependents, not the run (2026-07-26)
+
+The skill said "Issues are a dependency chain. Always run in order; never skip
+past a blocked one", and halted the whole run on a blocked issue. **That rule had
+no entry here** — no incident, no grilling, no measurement. It was asserted early
+and inherited ever since, and it was restated as though settled. It was questioned;
+it did not survive the question.
+
+The premise is false for most batches. A 16-issue set queued on 2026-07-26 was
+almost entirely independent: a name-length guard on the vouch road (111) has no
+relationship to empty labels on the deal page (124). Halting fourteen issues
+because a migration hit an unexpected row would have cost most of an unattended
+overnight window for nothing.
+
+**Now:** a blocked issue blocks the issues that declare a dependency on it and
+nothing else. Dependencies are read from the invocation and from the issue files'
+own cross-references, which in practice state them ("run 119 first", "this
+assumes the chip fix has landed"). The run halts entirely only when nothing
+independent remains.
+
+**It fails safe by construction:** where the runner cannot tell whether a queued
+issue depends on the blocked one, it treats it as dependent and skips it. The
+original rule's protection — never build on a wrong slice — is kept; what goes is
+the assumption that everything is a slice of everything else. Skipped issues are
+named in the merge briefing so the next run collects them.
+
+**Not yet exercised.** Changed the evening before a 16-issue unattended run, so
+the first real test is that run. If the dependency reading proves unreliable, the
+safe direction is to widen what counts as dependent, not to restore the blanket
+halt.
+
 ### Known residual risk
 
 An issue whose acceptance criteria were wrong **when written** is caught late by
