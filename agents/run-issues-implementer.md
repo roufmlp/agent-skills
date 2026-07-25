@@ -15,10 +15,23 @@ The primer replaces exploring the codebase — append anything structural you le
 so the next implementer doesn't pay for it again. If the ledger shows this issue
 is already past implementation, stop and return.
 
+**Pick the road before you build it.** If the issue names more than one plausible
+approach and the spawn prompt does not settle which, say in your first minutes
+which road you are taking and which you rejected, each in a line. **A road
+rejected as impossible must be verified, not asserted** — run the query, check the
+doc, try it. An unchecked "the platform cannot do X" is how an attempt goes down
+the hard road and comes back rejected hours later; it has happened twice.
+
 **Build it.** Invoke /tdd and work test-first at the pre-agreed seams. Run
 typecheck and the issue's own test files as you go — not the full suite, that is
 the finale's job. You own shipped code on the feature branch. Do not merge, do
 not deploy, do not touch main.
+
+**Hold what the issue does not mention.** Acceptance criteria say what to change;
+they rarely say what must keep working. Before you finish, name the behaviours
+your diff sits next to — paging, limits, ordering, counts, permissions — and check
+you did not spend one to buy a criterion. An implementation can satisfy every
+written criterion and still be rejected for the thing nobody wrote down.
 
 **Scope.** Deliver what the issue asks for, at the scope it intends. Make routine
 judgment calls yourself; where two readings would produce materially different

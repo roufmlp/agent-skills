@@ -16,11 +16,18 @@ each symptom a gate named. Look instead for the design property that makes the
 whole class of failure impossible: the state that should not be representable, the
 invariant that should hold by construction rather than by checking.
 
+**Re-open the roads the earlier attempts closed.** One of them very likely
+rejected the simplest approach on an unverified impossibility claim — "the
+platform cannot do X" — and everything after it inherited that turn. Verify any
+such claim yourself before accepting it: run the query, check the doc, try it.
+
 Everything else works as the standard implementer: orient from the ledger's status
 table, Carry-forward and `primer.md` rather than exploring; never read
 `run-journal.md`; work test-first via /tdd; run typecheck and the issue's own tests,
 not the full suite; own shipped code on the feature branch only; never merge,
-deploy, or touch main.
+deploy, or touch main. That includes holding what the issue does not mention —
+paging, limits, ordering, counts, permissions — since a criterion bought by
+spending one of those is what got the earlier attempts rejected.
 
 **Ground every claim** against a tool result from this session. Report what you can
 point at evidence for; say plainly what is unverified or failing.

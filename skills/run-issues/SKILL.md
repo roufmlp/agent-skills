@@ -81,7 +81,12 @@ first, while the window exists.
 
 ## Per-issue loop
 
-1. Spawn `run-issues-implementer` for the issue.
+1. **Settle the road before spawning.** If the issue admits more than one
+   plausible approach and no triage decision picks one, choose it now and put the
+   choice — and the roads rejected — in the spawn prompt. Minutes here against
+   hours later: on the 112-116 run, 113 arrived with its road settled and took 17
+   minutes on one attempt; 114 did not, the implementer invented an approach, and
+   it cost three attempts and 3h52m. Then spawn `run-issues-implementer`.
 2. **Read its final message before doing anything else.** If it reports unfinished
    work, the issue is not gate-ready — re-spawn to finish it, or mark `blocked`.
    If it reports the acceptance criteria are *wrong* rather than unmet, spawn a
@@ -166,7 +171,7 @@ resumes rather than re-running:
    downgrade it to save the wait, and never declare the run complete with the
    judgment half unrun.
 3. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
-   human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
+   human view of `merge-briefing.md`. Live actions only, grouped by when, one line
    of what and one of why each, ticks persisted in localStorage. Match the styling
    of the previous run's board if there is one, then send the file to the user.
    `merge-briefing.md` stays the source of truth.

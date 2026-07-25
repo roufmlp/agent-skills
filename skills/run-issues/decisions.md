@@ -182,6 +182,44 @@ three counts: two implementers can edit the same core file, somebody must declar
 which issues are genuinely independent, and the finale's one-branch coherence read
 gets weaker across two branches.
 
+## Post-run revisions (2026-07-26, after the 112-116 run)
+
+First run on the reworked skill. Both throughput changes held: timestamps landed
+at every transition, and on issue 114 the two gates rejected **independently and
+from different angles** — the review gate via a differential harness against the
+prior commit, the verify gate by reproducing it in the running app on QA data.
+Double rejection correctly counted as ONE strike, so escalation fired on attempt
+3 rather than attempt 2. Whether concurrency saved wall clock is not established:
+five issues of unequal size, no controlled comparison.
+
+**Issue 114 took 3h52m of a 7h run.** Attempts 1 and 2 wasted 2h25m; the
+escalated attempt 3 that passed took 1h27m. Three causes, and the fixes for two
+of them are in this revision:
+
+1. *The criteria said what to change, never what must not change.* Attempt 1 met
+   all four acceptance criteria while dropping the supplier page cap —
+   `SUPPLIER_PAGE_SIZE` 24 became the page sequence `[1, 31, 24, 24, 24, 24, 4]`.
+   Implementers now name the behaviours their diff sits beside (paging, limits,
+   ordering, counts, permissions) and check none was spent to buy a criterion.
+   The real fix is invariants at authoring time — still deferred, now priced.
+2. *No triage decision settled the road, so the implementer invented one.* 113
+   arrived with its road settled: 17 minutes, one attempt. 114 did not: three
+   attempts. The runner now settles multi-road issues before spawning.
+3. *A false impossibility claim steered two attempts.* Attempt 1 rejected
+   ordering the fetch by the normalised key because "PostgREST cannot order by an
+   expression" — untrue, unverified, and the same class of error recurred on 116.
+   Both implementer briefs now require an impossibility claim to be verified
+   against the real thing before it closes a road.
+
+**Considered, not adopted.** A per-issue wall-clock budget that halts and reports
+rather than grinding to attempt 3. It would have surfaced 114 at ~1h with both
+verdicts in hand, but it trades away unattended completion on genuinely hard
+issues. A human's call, not a default.
+
+**Runner error recorded by the run itself:** a scope narrowing sent to a live gate
+was read as a cancellation and the gate stood down without a verdict, costing an
+independent read. Say "narrowing, not cancelling" explicitly.
+
 ### Known residual risk
 
 An issue whose acceptance criteria were wrong **when written** is caught late by
