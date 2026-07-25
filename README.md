@@ -88,6 +88,25 @@ OWASP Top 10 and the Supabase production checklist, plus a pre-launch gate that
 runs every time). These are the difference between an agent that works for me and
 an agent that works.
 
+## The agent definitions
+
+The orchestration skills don't paste briefs into their workers. Each role is a
+registered agent type in [`agents/`](agents/), and the runner spawns it by name.
+An agent file carries its own brief, model and effort level, and is loaded only
+when that role actually runs — so the skill stays a thin protocol and the detail
+lives with the role that needs it.
+
+Eleven roles: six for `run-issues` (implementer, escalated implementer, verify
+gate, review gate, a critical review gate for diffs that change money or auth, and
+the coherence finale) and five for `parallel-hunt` (finder, fixer, claim gate, fix
+gate, and a critical fix gate).
+
+This is also the only way to set effort per role — the `Agent` tool takes a model
+but no effort parameter, so without these files every worker silently inherits one
+session-wide setting. [How the models and effort levels were
+chosen](docs/model-and-effort-choices.md), including what the measurements said and
+where they contradicted the documentation.
+
 ## Case study
 
 [Five issues, one unsupervised day](docs/case-study-five-issue-run.md) — a real
@@ -102,6 +121,25 @@ Copy any skill folder into `~/.claude/skills/` and it becomes invocable in Claud
 Code. The orchestration skills assume an issue-tracker convention (see credits)
 and a repo with tests worth gating on; the steering docs are mine — take the
 structure, replace the taste.
+
+**The two orchestration skills also need the agent definitions.** Copy `agents/`
+into `~/.claude/agents/` — the runner spawns roles by name, so without them a run
+stops at the first spawn with "agent type not found". Two things to know: newly
+copied types can take a moment to appear, so restart Claude Code only if a spawn
+still reports the type missing; and an invalid `effort:` value is accepted
+silently and falls back to the default, so a typo costs you the setting with no
+warning.
+
+The files use `model: inherit`, meaning every worker runs whatever model the
+session runs. Start the session on the model you want the run to use.
+
+**Nothing here needs editing before it runs.** The skills and agent files depend
+on each other and on nothing outside this repo — no personal memory files, no
+project-local skills, no named model. Where a run wants something a project may or
+may not have (a preview deploy, a canonical env file, a skill that drives the
+running app), it is written as a conditional and the run works either way. The
+steering docs are the exception, and deliberately so: they are my taste, published
+to be replaced rather than adopted.
 
 ## Credits
 
