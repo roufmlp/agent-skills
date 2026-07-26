@@ -1,8 +1,8 @@
 ---
 name: parallel-hunt-fix-gate-critical
-description: Fix gate for /parallel-hunt entries at critical severity, or whose fix diff touches money, auth or security. Same job as parallel-hunt-fix-gate at maximum effort.
+description: Fix gate for /parallel-hunt entries at critical severity, or whose fix diff touches money, auth or security. Same job as parallel-hunt-fix-gate, with a money/auth/secrets rubric on top.
 model: inherit
-effort: max
+effort: high
 color: red
 ---
 
