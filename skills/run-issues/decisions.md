@@ -251,9 +251,291 @@ the first real test is that run. If the dependency reading proves unreliable, th
 safe direction is to widen what counts as dependent, not to restore the blanket
 halt.
 
-### Known residual risk
+### Known residual risk — addressed 2026-07-27
 
 An issue whose acceptance criteria were wrong **when written** is caught late by
 decision 9 and not at all by the gates, since every gate grades against the issue.
-The early fix — a blind-spot pass and rubric-shaped criteria at authoring time —
-was deliberately deferred to its own session.
+The early fix now exists: `/harden-issues` (its own skill) attacks criteria at
+authoring time — evidence-backed sharpenings applied directly, open forks routed
+to the human, a `Hardened:` stamp on resolved issues — and issues arrive with a
+rubric-shaped template (`Status:`, acceptance criteria, `## Must still be true`)
+already in place. This skill's only coupling is the pre-flight stamp check:
+launch-time information, never a gate. Grilled and settled 2026-07-27 from two
+runs' evidence (112, 114, 110, 117, 122, 124, 125, 126 all shipped criteria
+faults through green gates); the design brief lives in a memory file, not
+published here.
+
+## Cost grill (2026-07-27, after the 111-136 batch)
+
+The 14-issue batch of 2026-07-26 cost roughly double its floor (three clean
+issues at 28-38 min; everything else 60-300). Grilled and settled with the
+human. The evidence lives on `main` in the project's repo: `run.md`, the
+1177-line journal, and the merge briefing under `.scratch/<feature>/`.
+
+**The Opus 5 rework was not one thing.** Thin ledger, cached agent-file briefs
+and concurrent gates are keepers. The two cost suspects it introduced were the
+effort dial becoming real for the first time, and rubric gates whose
+pass-with-findings verdicts spilled into unmodelled correction rounds.
+
+1. **The correction round is a ledger stage, not a reject.** Five issues passed
+   both gates and then got more work with no status, no timestamp, no price —
+   and the statusless stage caused the two-writer incident (121's round sent
+   while 129's correction was still writing). Rejected the alternative of
+   all-or-nothing gates: it converts small follow-ups into full retry cycles
+   (implement + two fresh gates), inflates strikes toward the max-effort
+   escalation, and — the disqualifier — teaches gates that honesty is
+   expensive, which corrodes exactly what makes them worth running. The stage
+   is capped: one round, verdict-enumerated items only, no new spawn while any
+   row shows `correction`, runner verifies the named evidence rather than
+   grepping file paths, not a strike. Anything bigger is minted.
+
+2. **Implementer effort drops to `high`; the next batch is the A/B.** xhigh
+   never had evidence: the 80% first-pass rate cited for it was measured on the
+   23 July batch, which ran at `high` under the decorative floors. xhigh's
+   first real outing went 9/14 first-pass while paying a measured +23% on
+   every attempt — the only cost in the run that multiplies every issue.
+   Confounded in both directions (the gates got stricter in the same commit),
+   so the next run buys the evidence. **The judge is the shape of its
+   rejections, not the rate:** effort-shaped rejects (sloppiness, missed
+   adjacent behaviour, half-done work) argue xhigh back in; criteria-shaped
+   rejects (wrong road, wrong spec) indict the issue, not the rung. Escalated
+   implementer, finale and critical review stay `max` — rare, and the
+   break-glass and once-per-run roles justify it.
+
+3. **No whale circuit breaker; whales run last.** 129's 4h58m decomposed as
+   attempt 1 (59m), a 529 killing both gates, a review reject, attempt 2, a
+   second gate pair and doc corrections — attempts self-bound at ~1-1.5h, so
+   the whale is stages compounding on a genuinely big issue, not a runaway,
+   and the three-attempt cap already bounds the worst case. A wall-clock kill
+   would have thrown away 129's passing attempt 2. Runner-side splitting
+   rejected: untriaged specs, the decision-9 failure mode. Adopted instead:
+   size the issue at road-settling and write the estimate in the ledger row;
+   schedule big ones last where order and dependencies permit (runs halt on
+   usage limits — cheap issues land first); an issue too big to be one issue
+   goes back through `/harden-issues`, which owns the split rule.
+
+4. **The verify gate sweeps every route the diff touches.** On 121 a server
+   component importing from a `"use client"` module passed both gates — verify
+   drove its acceptance path, review read the diff, and opening the other
+   pages was nobody's job. Three of five production deal pages rendered a
+   21,935-byte error shell until the finale caught it. The sweep is seconds of
+   HTTP against a server already running: fetch each touched route, and a 200
+   wrapping an error shell is a FAIL. The finale's whole-branch sweep stays as
+   backstop.
+
+5. **Mid-run minting stays free, and write-only.** 15 issues minted in a
+   14-issue run were real work cheaply captured — 154 alone named a defect
+   (62 of 63 fake query builders don't project selected columns) that eight
+   consecutive issues had been rediscovering. A cap throws away findings;
+   clock accounting changes no behaviour. The rule that keeps it cheap: a mint
+   records evidence already in hand, licenses no further investigation
+   mid-run, and the merge briefing lists what was minted.
+
+## Max tier cut everywhere but the finale (2026-07-27)
+
+Reverses the last clause of decision 2 above ("Escalated implementer, finale and
+critical review stay `max` — rare, and the break-glass and once-per-run roles
+justify it"). Settled with the human after a panel review of the whole chain.
+
+**The reason it fell: "rare" was wrong, and the evidence for the tier was earned
+at `high`.** Modelled over a 10-issue run through to a hunt, using this file's own
+measured multipliers, max ran 15 spawns — 19% of them, taking 30% of the bill, a
+premium of ~14% on its own. Against that, neither decisions file records a single
+defect max caught that `high` would have missed. The seven money/auth rejections
+cited to justify the critical review gate were produced on the 23 July batch, when
+the effort floors were decorative and everything ran at session-default `high`.
+A tier whose whole case rests on results produced one rung below it is not
+evidenced, it is assumed.
+
+`run-issues-implementer-escalated`, `run-issues-review-gate-critical` and
+`parallel-hunt-fix-gate-critical` drop to `high`. The `-critical` variants keep
+their extra rubric — the money/auth/secrets trace was always the substance; the
+tier was the wrapper. `run-issues-finale` stays `max`: once per run, and it is the
+one stage with a recorded catch (121's three broken production pages, after both
+gates passed).
+
+**The judge, next run:** the shape of what the critical gates miss. A money or
+auth defect reaching the merge read argues the tier back in. Slower or shallower
+verdicts that still catch the defect do not.
+
+Not adopted here, and still open: routing strike 2 to a criteria re-check instead
+of the escalated implementer. Every documented cause of an expensive failure in
+this file is upstream of the implementer — a missing invariant, an unsettled road,
+an unverified premise — so the escalation path is better attacked at its cause
+than at its price. That is a behaviour change, not a frontmatter edit.
+
+## Strike 2 re-checks the spec before buying a third implementer (2026-07-27)
+
+Escalation assumed the implementer was the weak link. The record does not support
+that. 114 failed on criteria that omitted the invariant, an unsettled road and a
+false impossibility claim; 122 spent two attempts down a road falsified by an
+unverified premise. In both, a cleverer implementer was being asked to satisfy
+criteria that were themselves wrong — and both gates grade against those same
+criteria, so the good outcome (rejection) and the bad one (a correctly-built
+defect shipping) are equally available.
+
+The escalated implementer's own brief already carries the check: "if you conclude
+the issue itself is wrong … say so with concrete evidence instead of forcing a
+third bad implementation." That check now runs *before* the attempt, for 1.0 unit,
+instead of after it for 3.0.
+
+**Honest accounting: this costs more, not less.** One attacker spawn is +1.0 unit
+on every second strike, because the escalation may still be needed. What it buys
+is that the 3.0 stops being spent on an attempt that could not have worked.
+Break-even is one spec-caused failure in three; the two multi-attempt disasters on
+record were both spec-caused.
+
+**Strike-2 mode is narrower than a normal hardening pass:** classes 1, 5 and 9
+only, evidence or silence, and it never waits. A fork it cannot settle returns
+`criteria-open`, the issue goes `blocked (criteria)`, and the run carries on. A
+question mid-run is a blocked issue, never a stall — no run stops for a human
+between launch and the merge read.
+
+**Named exception to the hardening guard.** `/harden-issues` otherwise refuses to
+touch an issue a run holds, because a second writer rewriting criteria under a
+live implementer causes a rejection on correct work. Strike-2 is the one carve-out
+and is safe for a stated reason, not by luck: the run has stopped, the implementer
+is dead, and the runner spawns nothing else until the attacker returns. Written
+into both files so the next reader does not find two rules contradicting.
+
+**The judge, next run:** how the three verdicts split. Mostly `criteria-sound`
+means the re-check is a tax and escalation was right; `criteria-fault` at any real
+rate pays for the whole change.
+
+## Provisional stamping: a pending question never removes an issue (2026-07-27)
+
+Amends the same-day decision that `all` takes only stamped issues. That rule, plus
+`/harden-issues`' "no stamp while a question is open", had a failure nobody would
+see: one deferred question drops an issue out of every future `all` run,
+permanently, while the file looks healthy. It also meant that today — with no
+issue yet stamped, because the pass had no agent files until this session — `all`
+resolved to an empty list.
+
+**Default-and-decay.** Every question the pass raises now ships with its
+recommended answer, marked `[reversible]` or `[irreversible]`. Unanswered
+reversible questions take the default, the default is written into the file as a
+default rather than a decision, and the issue is stamped
+`Hardened (provisional): <date> — <n> sharpened, <m> defaults pending`. Provisional
+counts as stamped for `all`. The merge briefing names every issue that shipped
+provisional, with its pending question, so the answer lands after the run.
+
+Two things never default: an `[irreversible]` question — a migration's direction,
+a money or auth rule, anything that ships data — and a split, which stays the
+human's alone. Both leave the issue unstamped and out of `all`.
+
+The standing constraint this serves, stated by the human on 2026-07-27: **no run
+stops mid-flight for their input.** Anything needing them is a blocked issue, a
+default taken, or a line in the merge briefing — never a wait.
+
+**`needs-info` becomes `needs-harden`.** The old status had no return path here —
+nothing re-reads a `.scratch/` issue file the way an upstream tracker re-reads a
+reporter's reply. Both places a run sets it — a superseded issue at scope
+resolution, and criteria a worker proved wrong — now set `needs-harden`, which
+`/harden-issues` takes as in-scope. The status now names the thing that clears it.
+
+**An empty `all` scope halts and says so**, rather than reporting a completed run
+over no work.
+
+## Default-and-decay across the chain (2026-07-27)
+
+Extends the same-day provisional-stamping decision to the rest of the chain that
+feeds this skill its issues, so the standing constraint holds everywhere and not
+just in one skill.
+
+**The audit that prompted it.** A chain day on a ~14-issue batch demanded roughly
+3h38m of the human's time. Of that, 45-55 min was irreversible judgement — the
+merge read, merge and deploy, run scope, pending secrets. The rest was blocking
+loops: the issue-drafting tool's "iterate until the user approves", the triage
+tool's step 2 "wait for direction" and its one-question-at-a-time grilling, the
+PRD-drafting tool's "check with the user that these seams match". None of those
+decisions needed the human; they needed a written rule and a default.
+
+**The rule, now in all four tools upstream of this one.** Every question carries
+the pass's recommended answer and a `[reversible]` / `[irreversible]` mark.
+Reversible questions apply their default, record it in the file as a default
+rather than a decision, and queue to a decisions-queue file. Only irreversible
+ones wait. Irreversible means: a split, a `wontfix` close, a write to an
+out-of-scope area, a transition on an issue a run holds, a migration's direction,
+a money or auth rule, anything that ships data or commits a public contract.
+
+**Write before you ask, everywhere.** The PRD-drafting tool writes its output to
+disk before publishing; the issue-drafting tool writes slice files before the
+harden pass and the quiz; the triage tool writes its recommendation and its
+grilling findings into the issue as they land. Every one of those previously
+lived only in a session context, so an abandoned or rate-limited session lost the
+whole artefact with no record it had been attempted.
+
+**Grilling is now conditional on there being someone to grill.** The triage tool
+runs `/grilling` only where a real reporter exists. Against a local `.scratch/`
+issue file the loop cannot terminate — nobody answers — so it routes to
+`needs-harden` instead. This is the same root cause as the old `needs-info` dead
+end: triage is built for a public tracker with reporters, used here on files that
+have none.
+
+**`Status:` is now the first line of the issue template.** Without it the stamp
+had nowhere to land and `/run-issues` could not resolve scope — the contract was
+assumed upstream and provided by nothing.
+
+Still open: whether the triage step belongs in this chain at all, and which
+tracker is canonical. Both recorded in a separate panel-review write-up.
+
+## /daily-brief owns the human loop (2026-07-27)
+
+The last piece of the 30-minute design. Every skill in the chain now defaults and
+queues instead of asking; `/daily-brief` is where those queues become one file the
+human reads once a day, and where their answers become writes.
+
+**It closes three resting states this file already recorded as dead ends.**
+`awaiting-merge` had no owner, no expiry and no reminder — an unmerged branch had
+no clock on it anywhere. The project's pending-actions file was written to and
+never read back. Queued defaults surfaced only in a merge briefing, so answers
+scattered across runs. All three now have one reader on a schedule.
+
+**The brief is a view, not a store.** Regenerated from source every firing,
+authoritative only between being written and being applied. The chain's own rule
+against second copies applies to it more than to anything else, because it is the
+one artefact whose whole job is to duplicate state.
+
+**The merge hazard, and the fix.** `merge` written into a file is an approval made
+hours before the machine acts. The branch can move in between, and the human would
+be merging a diff they never read. So every merge block carries the branch head
+SHA it was written against; at apply time a differing SHA means no merge, rebuild
+the block against the new diff, mark it `changed since you read it`. **A stale
+approval is not an approval.** This is what makes "main belongs to the human"
+survive an asynchronous decision.
+
+**Apply runs before rebuild**, so a collation never overwrites an answer. And the
+apply half re-reads `run.md` before touching any issue, skipping anything a run
+holds — the same guard the hardening pass carries, whose only carve-out is
+strike-2 mode.
+
+Not adopted: having the brief decide anything. Every item in it already has a
+default that has already taken effect. The brief exists so the human can overturn
+a default, never so the machine can ask them a question.
+
+## /daily-brief runs by hand, not on a schedule (2026-07-27)
+
+Reverses the same-day intention to schedule it. `/schedule` creates **cloud**
+routines, and a cloud routine cannot do this job: it runs in a sandboxed checkout,
+cannot read `~/.claude/`, cannot write `brief.md` back to the machine, and cannot
+see an unpushed feature branch. Since a run commits per issue and never pushes, and
+mid-run ledger state lives on the unmerged branch, a 6pm cloud firing would collate
+yesterday's `main` and present it as today. **A brief that looks current and is not
+is worse than no brief.**
+
+A local wakeup would see everything, but the argument for it collapsed once stated
+plainly: the only thing a timer buys is that the brief is already built when the
+human opens it — about a minute. Every other benefit assumed the human was absent,
+and the whole design has them present for thirty minutes a day. The one real
+argument, that a stale-dated brief signals a broken machine, does not apply when
+the human is the one invoking it.
+
+So: bare `/daily-brief`, once a day. Apply then rebuild, in that order, from one
+command. If the collation wait ever becomes annoying, a local wakeup is a small
+addition — built then, on evidence, not now on a guess.
+
+Committed run state (the ledger, journal, and issue files under `.scratch/`) is
+already tracked in git in projects that don't gitignore it, so the content a cloud
+agent would need can already exist there. Freshness and write-back are what fail,
+not availability. Worth knowing if the brief is ever moved into the repo to make a
+cloud routine viable.

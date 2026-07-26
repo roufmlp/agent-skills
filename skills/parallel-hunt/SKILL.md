@@ -24,7 +24,7 @@ Spawn by `subagent_type`; the orchestrator never pastes a brief.
 | Fixer | `parallel-hunt-fixer` | high | one batch of fixes |
 | Claim gate | `parallel-hunt-claim-gate` | high | one review, then dies |
 | Fix gate | `parallel-hunt-fix-gate` | high | one batch, then dies |
-| Fix gate, critical | `parallel-hunt-fix-gate-critical` | max | one batch, then dies |
+| Fix gate, critical | `parallel-hunt-fix-gate-critical` | high | one batch, then dies |
 
 Use the critical fix gate for `severity: critical` entries, or any fix whose diff
 touches money, auth or security.
@@ -53,10 +53,23 @@ Status machine, single writer per transition:
 - `candidate → open` or `retracted` — claim gate only.
 - `open → in-fix → fix-ready` — fixer only.
 - `fix-ready → verified`, or back to `in-fix` with written reasons — fix gate only.
-- `deferred` — orchestrator, at round end. A deferred entry already **is** the
-  issue file a future run picks up; there is no conversion step.
+- `deferred` — orchestrator, at round end, and only from `open`, `in-fix` or
+  `fix-ready`. A `candidate` is gated or deleted, never deferred; `retracted` is
+  terminal. **Deferring is a conversion:** write the entry as an issue file in
+  `<main-repo-root>/.scratch/<feature>/issues/` with `Status: ready-for-agent`,
+  carrying its evidence and reproducer as acceptance criteria, and say in the
+  round report that it needs `/harden-issues` before the next batch. A file left
+  in `bugs/` is invisible to `/run-issues`, which resolves scope from `issues/`.
 
-Commit `.scratch/<feature>/` to main when the round ends.
+**Retractions clean up after themselves.** The claim gate may touch nothing but
+status and its verdict, and the finder is dead, so the orchestrator deletes the
+finder's regression test file for that bug ID when it records a retraction. A
+deliberately failing test left in the suite poisons every later green judgement.
+
+At round end commit `register.md`, `bugs/` and the finder's regression test
+directory — those paths only. Never commit the whole `.scratch/<feature>/`
+directory: a run's ledger, journal and issue files live there too, and committing
+them mid-run puts half-written run state on main.
 
 ## Code ownership — the merge-tax rule
 
@@ -114,11 +127,18 @@ safe.
 
 ## Pre-flight
 
+- **One skill per checkout.** Refuse to start if `git status` is dirty, or if
+  `.scratch/<feature>/run.md` shows a run that is not at `awaiting-merge` with its
+  branch merged. A hunt beside a live run puts two writers in one tree and lands
+  deliberately failing tests in the run's finale.
+- **One tree, one branch.** Finder and fixer both work in the main checkout on
+  `hunt/<scope>`, cut at launch. A second worktree hides the finder's pinning
+  tests from the fixer. Exactly one finder and one fixer live at a time. The
+  branch goes to the human at round end; the orchestrator never merges to main.
 - **The session is on the model the whole round should use.** Agent files use
   `model: inherit`, so every worker inherits it. Check before spawning anything.
 - The permission allowlist covers the run — test commands, git, the repo paths. A
-  worker blocked on a permission prompt stalls silently; fix the allowlist first
-  (see `/fewer-permission-prompts`).
+  worker blocked on a permission prompt stalls silently; fix the allowlist first.
 - If the project keeps its env in a canonical file outside the worktrees, every
   worktree's `.env.local` is a **symlink** to it, never a copy. Replace any copy
   found. Env files are never committed or pushed.
@@ -132,5 +152,6 @@ safe.
 Pre-launch security gates (coderules' ten points as register entries),
 test-coverage campaigns, migration and deprecation sweeps, docs-drift rounds.
 
-**Not** for building one feature — that is a dependency chain. Use
-`/to-issues` then `/run-issues`.
+**Not** for building one feature — that is a dependency chain. Take an issue file
+(with a `Status:` line, acceptance criteria, and a `## Must still be true`
+section) through `/run-issues` instead.

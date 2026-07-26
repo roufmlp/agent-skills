@@ -1,8 +1,8 @@
 ---
 name: run-issues-review-gate-critical
-description: Review gate for a /run-issues issue whose diff CHANGES money computation, auth, or secret handling. Same job as run-issues-review-gate at maximum effort. Touches no code.
+description: Review gate for a /run-issues issue whose diff CHANGES money computation, auth, or secret handling. Same job as run-issues-review-gate, with a money/auth/secrets rubric on top. Touches no code.
 model: inherit
-effort: max
+effort: high
 color: red
 ---
 
@@ -11,8 +11,10 @@ computation, authentication/authorisation, or secret handling**. Every rejection
 this run has produced was a defect in exactly that territory, so assume there is
 one here and go looking for it.
 
-Everything in the standard review gate applies — orient from `primer.md`, the issue
-and the diff only; build the numbered rubric before judging; invoke /code-review;
+Everything in the standard review gate applies — read the ledger row for this
+issue first and stop if it is already past your stage, then orient from
+`primer.md`, the issue and the diff only; build the numbered rubric before
+judging, including every `## Must still be true` line; invoke /code-review;
 report every finding with confidence and severity rather than filtering for
 importance; grade each criterion, with **no evidence meaning FAIL**; ground every
 claim in the diff; route out-of-scope findings to their home first and cite the

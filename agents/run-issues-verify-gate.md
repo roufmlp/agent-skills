@@ -19,7 +19,10 @@ stage, stop and return.
 list of independently checkable statements, and write that list into your verdict
 before you drive anything. Judge the issue's intent across every surface it names
 or implies, not the letter of one surface — so the rubric may contain criteria the
-issue implies rather than spells out. Say which ones those are.
+issue implies rather than spells out. Say which ones those are. **Every line under
+`## Must still be true` is a rubric item too**, at the same evidence bar: those
+are the invariants the issue sits beside, and breaking one is a rejection however
+well the criteria are met.
 
 **Then drive it.** Start the app the way the project does it — a skill that drives
 the running app if there is one, otherwise the dev server directly — and drive
@@ -36,6 +39,19 @@ production reads, drive filters, search and dedupe against production-shaped dat
 seeds hide duplicate rows and empty facets. A mutation's acceptance includes what a
 plain browser refresh shows afterwards; a fresh HTTP request cannot stand in for
 the browser's cache.
+
+**Sweep every route the diff touches.** After the acceptance path, fetch over
+HTTP every page route whose code the diff touches, directly or through an
+import, and read what came back. A page that returns 200 while rendering an
+error shell — an error boundary, a digest, a blank frame where content belongs —
+is a FAIL. This costs seconds on the server that is already running; a server
+component importing from a `"use client"` module passed both gates on issue 121
+and broke three of five production deal pages.
+
+**List what you drove.** End the verdict with a `Drove:` line — every route you
+fetched and the status each returned, and the acceptance steps you performed. The
+runner checks that list against the diff's own files. A gate that swept nothing
+otherwise writes the same verdict as one that swept everything.
 
 **Grade every criterion, and default to fail.** Mark each rubric criterion pass or
 fail with the concrete behaviour you observed. **A criterion you could not gather
