@@ -26,6 +26,12 @@
 5. Keep the business logic in one portable core, separate from screens and
    channels. It carries between stacks and it's the only part worth unit-testing
    heavily.
+6. **Reuse approved patterns, not unreviewed precedent.** Before copying a shape
+   from existing code, check `docs/patterns.md`. Recorded there: reuse it and cite
+   the entry. Not recorded: what you found is evidence somebody did it once, not
+   that it is right. Copy it only if you can state in one line why it is correct,
+   and put that line in your final message. Repetition never confers approval — a
+   second occurrence is not a convention, and neither is a fifth.
 
 ## Security: the non-negotiables
 
@@ -135,4 +141,5 @@ Run before anything goes live with real users or real data, every time:
 _Sources: [OWASP Top 10 (2025)](https://owasp.org/Top10/2025/);
 [Supabase production checklist](https://supabase.com/docs/guides/deployment/going-into-prod);
 [Supabase, Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)._
-_Last updated: 2026-07-06 — initial version._
+_Last updated: 2026-07-27 — added rule 6, reuse approved patterns
+(docs/patterns.md precedence over unreviewed precedent)._

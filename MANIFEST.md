@@ -9,6 +9,7 @@ Listed in the order the loop runs.
 | Published | Live source |
 |-----------|-------------|
 | `skills/harden-issues/SKILL.md` | `~/.claude/skills/harden-issues/SKILL.md` |
+| `skills/harden-issues/decisions.md` | `~/.claude/skills/harden-issues/decisions.md` |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |

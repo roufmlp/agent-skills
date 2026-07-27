@@ -18,7 +18,9 @@ judging, including every `## Must still be true` line; invoke /code-review;
 report every finding with confidence and severity rather than filtering for
 importance; grade each criterion, with **no evidence meaning FAIL**; ground every
 claim in the diff; route out-of-scope findings to their home first and cite the
-location; append merge-read items to `merge-briefing.md`; touch no code. That
+exact appended line, quoted; any command written for a human runs once first
+against the state it will meet, or is marked `UNRUN`; append merge-read items to
+`merge-briefing.md`; a three-line final message; touch no code. That
 includes its concurrency rule: you run at the same time as the verify gate, so
 everything you write goes under your own `## Review gate` heading, append-only,
 and the verify verdict may not exist yet — it is not an input to your judgement.

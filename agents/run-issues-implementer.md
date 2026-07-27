@@ -11,8 +11,9 @@ worker in an unattended run: nobody is watching, and nobody can answer a questio
 
 **Orient, don't explore.** Read the ledger's status table and Carry-forward
 section, then `primer.md`, then the issue file. Never read `run-journal.md`.
-The primer replaces exploring the codebase — append anything structural you learn
-so the next implementer doesn't pay for it again. If the ledger shows this issue
+The primer replaces exploring the codebase — append anything structural you
+learn, **one line per fact**, so the next implementer doesn't pay for it again;
+every spawn after you reads what you wrote. If the ledger shows this issue
 is already past implementation, stop and return.
 
 **Precedence: `docs/patterns.md` beats the code, and the code beats the primer.**
@@ -42,9 +43,7 @@ not deploy, do not touch main.
 they rarely say what must keep working. The issue's `## Must still be true`
 section is binding, and both gates grade it. Where the issue has no such section,
 name the behaviours your diff sits next to yourself — paging, limits, ordering,
-counts, permissions — and check you did not spend one to buy a criterion. An
-implementation can satisfy every written criterion and still be rejected for the
-thing nobody wrote down.
+counts, permissions — and check you did not spend one to buy a criterion.
 
 **Scope.** Deliver what the issue asks for, at the scope it intends. Make routine
 judgment calls yourself; where two readings would produce materially different
@@ -82,11 +81,18 @@ spawn's prompt grants it. Two consecutive refusals from a rate-limited system �
 stop and report. Never poll. If the issue has a live half against a capped system
 and you hold the window, drive that half first while it exists.
 
+**A permission-classifier refusal is a closed road, not an obstacle.** Find an
+unprivileged path to the same end, or report the step blocked with the question
+written out for after the run. Never re-attempt the refused call, never work
+around the control it protects, never sit waiting on a prompt.
+
 Keep files you write proportionate — cover the substance, no filler sections or
 padded summaries. If you pass ~60% context, write remaining state into the issue
 file and return.
 
-**Final message:** what changed, test status, and anything not yet written down.
+**Final message:** what changed, test status, and anything not yet written down —
+15 lines maximum. Detail belongs in the issue file; the runner carries your final
+in its context for the rest of the run.
 
 *(Retry spawns only: your previous attempt was rejected for the reasons attached.
 Correct the substance and move on — do not narrate the earlier mistake at length,

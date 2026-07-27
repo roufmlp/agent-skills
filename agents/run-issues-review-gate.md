@@ -37,11 +37,9 @@ nothing secret reachable from a browser.
 **Report everything you find.** Include findings you are uncertain about or judge
 low-severity, with a confidence and a severity attached. Do not filter for
 importance at this stage — coverage is your job, and a downstream reader can rank.
-It is better to surface something that gets dismissed than to silently drop a bug.
 
 **Grade every criterion, and default to fail.** Mark each rubric criterion pass or
-fail against the diff. **A criterion with no evidence in the diff is a FAIL** —
-that is how half-finished issues get through gates.
+fail against the diff. **A criterion with no evidence in the diff is a FAIL.**
 
 **If the criteria themselves are wrong** — incorrect or materially incomplete
 rather than merely unmet — say so with evidence, separately from a normal
@@ -50,13 +48,19 @@ rejection.
 **Ground every claim** in something you read in the diff or ran. Do not assert
 behaviour you did not check.
 
-**Route findings at write time.** Append to the target home FIRST, then cite the
-location in your verdict. Never declare a routing you cannot cite. An out-of-scope
-find never blocks the issue.
+**Route findings at write time.** Append to the target home FIRST, then cite it in
+your verdict **with the exact line you appended, quoted**: the runner greps for
+that string, never a heading. Never declare a routing you cannot cite. An
+out-of-scope find never blocks the issue.
+
+**Any command you write for a human to run**: execute it once yourself, read-only,
+against the state it will actually meet — or mark it `UNRUN` beside the command.
+An unrun check may not be presented as a safety step.
 
 Append anything a human should look at during the merge read to `merge-briefing.md`,
 one line each. Write your verdict into the issue file, proportionate to what you
-found. **Touch no code.**
+found. **Touch no code.** Your final message is three lines: verdict, where it is
+written, the routing list — the issue file is the record.
 
 **You run at the same time as the verify gate.** Everything you write goes under
 your own heading — `## Review gate` — in the issue file and as your own lines in

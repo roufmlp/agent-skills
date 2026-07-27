@@ -17,12 +17,16 @@ subagents, with all state in files so any later session can resume the run.
 flowchart TD
     ST["steering/ — CLAUDE.md, writingrules, coderules<br/>standing rules for every session"] --> SES["a Claude Code session"]
     SES -->|invokes| SK["skills/ — repeatable workflows"]
+    SK --> HI["harden-issues<br/>criteria attack pass"]
     SK --> RI["run-issues<br/>autonomous issue runner"]
     SK --> PH["parallel-hunt<br/>concurrent bug hunt"]
+    HI -->|stamps issues for| RI
     RI --> W1["fresh implementer per issue,<br/>adversarial verify + review gates"]
     PH --> W2["finder and fixer workers,<br/>adversarial claim + fix gates"]
     W1 --> F["state lives in files, not contexts —<br/>any session can resume the run"]
     W2 --> F
+    HI -.->|queued questions| DB["daily-brief<br/>one list, once a day"]
+    RI -.->|queued questions| DB
 ```
 
 ## The orchestration skills
@@ -49,6 +53,29 @@ choices that earn their keep:
 - A halt writes its own resume state into the ledger — what is on disk, what is
   owed, in what order — so a run picks up where it stopped whether a session cron
   revives it or a human does. Nothing merges without a human.
+
+### [harden-issues](skills/harden-issues/SKILL.md)
+
+The fix for the failure mode gates cannot catch: an issue whose acceptance
+criteria were wrong when written passes every gate, because every gate grades
+against the issue. This pass attacks criteria at authoring time — one attacker
+subagent per issue plus a seam agent over the whole set, working a checklist of
+nine blind-spot classes that each shipped a real defect through green gates
+(unstated invariants, vague words, guards that cannot fail, unverified premises,
+empty test data, deploy ordering, unobservable criteria, oversized slices, plus
+a seam pass for what falls between issues). It may only write what it can cite
+evidence for; every open fork routes to the human. Hardened issues carry a dated
+stamp that `run-issues` checks at launch.
+
+### [daily-brief](skills/daily-brief/SKILL.md)
+
+The human loop, made single. Nothing in the chain stops mid-run to ask a
+question — every skill takes its recommended default, records it as a default
+rather than a decision, and queues it. This skill collates those queues, plus
+unmerged branches and anything else resting on a human, into one brief read once
+a day, then writes the answers back. Merge approvals carry the branch SHA they
+were read against: a branch that moved since is re-presented, never merged — a
+stale approval is not an approval.
 
 ### [parallel-hunt](skills/parallel-hunt/SKILL.md)
 
@@ -96,10 +123,11 @@ An agent file carries its own brief, model and effort level, and is loaded only
 when that role actually runs — so the skill stays a thin protocol and the detail
 lives with the role that needs it.
 
-Eleven roles: six for `run-issues` (implementer, escalated implementer, verify
+Thirteen roles: six for `run-issues` (implementer, escalated implementer, verify
 gate, review gate, a critical review gate for diffs that change money or auth, and
-the coherence finale) and five for `parallel-hunt` (finder, fixer, claim gate, fix
-gate, and a critical fix gate).
+the coherence finale), five for `parallel-hunt` (finder, fixer, claim gate, fix
+gate, and a critical fix gate) and two for `harden-issues` (the per-issue attacker
+and the cross-issue seam agent).
 
 This is also the only way to set effort per role — the `Agent` tool takes a model
 but no effort parameter, so without these files every worker silently inherits one
@@ -118,11 +146,12 @@ the post-run review that fed eight revisions back into the skill you see here.
 ## Using these yourself
 
 Copy any skill folder into `~/.claude/skills/` and it becomes invocable in Claude
-Code. The orchestration skills assume an issue-tracker convention (see credits)
-and a repo with tests worth gating on; the steering docs are mine — take the
-structure, replace the taste.
+Code. The orchestration skills assume issues living as files (this pack's
+convention: `.scratch/<feature>/issues/`, a `Status:` line first) and a repo with
+tests worth gating on; the steering docs are mine — take the structure, replace
+the taste.
 
-**The two orchestration skills also need the agent definitions.** Copy `agents/`
+**The orchestration skills also need the agent definitions.** Copy `agents/`
 into `~/.claude/agents/` — the runner spawns roles by name, so without them a run
 stops at the first spawn with "agent type not found". Two things to know: newly
 copied types can take a moment to appear, so restart Claude Code only if a spawn
@@ -144,9 +173,11 @@ to be replaced rather than adopted.
 ## Credits
 
 My daily process skills (`tdd`, `grilling`, `to-issues`, `handoff`, `triage` and
-friends) are [Matt Pocock's skills](https://github.com/mattpocock/skills), used
-unmodified and referenced here rather than republished. `run-issues` builds
-on the issue-tracker conventions his pack establishes.
+friends) are [Matt Pocock's skills](https://github.com/mattpocock/skills),
+referenced here rather than republished — used unmodified except `to-prd` and
+`to-issues`, which my local copies point at issue files as the canonical record
+and extend with a `harden-issues` step and a rubric-shaped criteria template.
+`run-issues` builds on the issue conventions his pack establishes.
 
 ## Licence
 

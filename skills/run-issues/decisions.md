@@ -539,3 +539,140 @@ already tracked in git in projects that don't gitignore it, so the content a clo
 agent would need can already exist there. Freshness and write-back are what fail,
 not availability. Worth knowing if the brief is ever moved into the repo to make a
 cloud routine viable.
+
+## The five forks from the 2026-07-27 panel, taken by the human (2026-07-27)
+
+All five put to the human in one sitting and answered; none is a default.
+
+**The chain ships publicly minus the upstream forks.** `harden-issues` and
+`daily-brief` joined this pack; `to-prd` and `to-issues` stay private because
+they are modified copies of Matt Pocock's skills and republishing a fork is an
+attribution question, not a scrub question (see MANIFEST.md, "What ships"). The
+pack's story: issues arrive however you make them; the pack takes over at
+hardening.
+
+**`triage` leaves the chain but the skill survives.** It was built for a public
+tracker with reporters. Against issue files there is no reporter, so its
+wait-for-direction and grilling loops were dead ends dressed as diligence. Bug
+reports now enter at `/harden-issues` or as a direct issue file. The skill keeps
+existing for any repo that grows a real tracker with outside reporters — deleted
+from the chain, not from disk.
+
+**Issue files are the canonical tracker.** Every downstream skill appends `##`
+headings to issue files — harden stamps, status lines, deferred entries — and a
+tracker issue body cannot carry that. Upstream authoring now writes files as the
+record; a tracker mirror, if ever wanted, is a read-only view added later.
+
+**The reuse rule is approved verbatim** and lives in coderules under "Reuse
+approved patterns, not unreviewed precedent", closing the drift class where a
+wrong shape written once becomes the house style through the primer. The lint
+half shipped with it in the app repo it was decided on: anchor-without-href,
+placeholder-href and static-element-handler checks at `error`, plus a seeded
+`docs/patterns.md`. One correction to the working doc's claim: that repo did not
+have `eslint-config-next`, and `eslint-plugin-jsx-a11y` caps its peer range below
+the repo's ESLint major — so the checks are hand-rolled `no-restricted-syntax`
+selectors with fixture tests, zero new dependencies.
+
+**`harden-issues` gets its own `decisions.md`**, same pattern as this file and
+parallel-hunt's. Provenance moves out of the hot SKILL.md, which is billed on
+every invocation.
+
+Judge for the sync decision: if the published pack draws a question about where
+issues come from, that is the signal to either write the attribution and ship the
+upstream forks, or add a small "authoring issues" note — not to quietly re-add
+the references.
+
+## Ledger discovery, pruning and the owner line (2026-07-27, after the first run on the reworked chain)
+
+Four findings from a real three-issue run. All four are ledger-shaped, and none
+was caught by panel review: the panel read the skill, and these only appear when
+you read a run's artefacts against it.
+
+**The ledger's own rule had no teeth, and the ledger broke it.** `run.md` reached
+15,443 bytes. The status table was 13% of it. Halt blocks were 27% (1,788 bytes of
+which the file itself labelled *superseded* and kept anyway) and finale narrative
+was 20%. Every implementer and gate reads this file, so the ~7 KB the skill's own
+"nothing else belongs in it" excludes was billed roughly a dozen times in one run.
+Fix: name what gets moved out and when, and give it a checkable threshold.
+
+**"Which ledger" is the expensive one — 25 measured minutes.** The journal
+diagnosed it and wrote the fix; nothing implemented it, so it was still live. The
+sharper version, found by running the enumeration: the ambiguity is not many runs,
+it is **one run with many copies**. Run state is committed, so every worktree
+branched from that commit carries a frozen snapshot — twelve copies, six with an
+identical live-looking owner line. The discriminator was already in the format and
+unused: the `Worktree:` line written at launch. The real copy is the one whose
+`Worktree:` names the tree it sits in; every other is a snapshot to read never,
+write never.
+
+**The owner line was never cleared.** All six live-looking copies belonged to a
+run that was finished, PR open, `awaiting-merge` — still naming a live session
+hours later. Indistinguishable from a run that died mid-flight, which is exactly
+the state the heartbeat exists to detect and what the cron keys off. Reaching
+`awaiting-merge` or halting now rewrites the line to `Owner: none — …`.
+
+**Every command handed to a human runs once first.** The briefing's step one was a
+reconciliation query naming the column its own migration adds, presented as a
+*pre*-migration check. It cannot run pre-migration. Written by a gate, copied to
+the board by the runner, executed by neither, and it failed in the human's hands
+with `column does not exist` under a heading saying the order was not negotiable.
+The run's own central finding one level up: a criterion naming a test as a
+tripwire has not proved it is one; an instruction naming a check as a safety step
+has not proved it runs. A check that errors is worse than none — it reads as
+diligence and fails at the moment someone is about to touch production.
+
+**Judge for the next run:** does the ledger stay under the half threshold without
+the runner being reminded, and does a `resume` with no range land on the right
+ledger first try.
+
+**Not changed, deliberately.** Gates were 43% of the modelled bill and 104 of the
+run's 181 working minutes, against 77 for implementation. They are not the waste:
+this run had zero strikes, three first-pass gates, and the verify gates caught a
+wedged test-database state, an exact money reproduction, and two surviving
+mutations. The cost grill already ruled the concurrent gates are not the driver.
+Left alone.
+
+## Second panel: cost, autonomy, enforcement (2026-07-27)
+
+Five personas over this skill plus the agent briefs, with the same run's artefacts
+as evidence. What changed and why, compressed:
+
+**Enforcement over prose.** The ledger rules were right and the live ledger broke
+three of them. Pruning now fires at the two existing transitions (halt write, row
+to done) on two mechanical triggers (>1 HALT BLOCK heading; table+Carry-forward
+under half the file). Carry-forward entries name their consumer and die with it.
+Correction rounds get open/close stamps.
+
+**Authors enforce the run-commands-first rule.** The failed-query rule lived only
+in the runner's file; the gates who write the commands never saw it. Now: gates
+run any human-bound command once (read-only) or mark it UNRUN; the finale re-runs
+all of them and ships nothing UNRUN.
+
+**Pre-flight grew three checks, all launch-time:** dry-run the allowlist (the old
+text asserted coverage; the actual settings refuted it), probe fixture health
+read-only (one verify gate paid a 55-minute stage for that discovery at gate
+prices), and echo the launch line on every invocation (the 11.5-hour halt was a
+misread request). Model check gained its remedy: a wrong-model session passes the
+intended model explicitly on every spawn.
+
+**Recurring token cuts:** the action board rendered by a fresh cheap subagent,
+never the runner at end-of-run context; worker finals capped (implementer 15
+lines, gates 3); cron predicate is one grep, not a ledger read; primer appends
+one line per fact; routing verified by exact quoted line, not heading.
+
+**Autonomy:** classifier refusal = closed road (unprivileged path or report
+blocked, never retry) — was invented mid-run and buried in a ledger, now standing
+in the worker briefs; ambiguous resume prefers the invocation's range then stops
+at launch, never mid-run; run-close standing-directive question goes to the
+Decisions inbox, not chat.
+
+**Rejected, with reasons:** splitting the resume section into its own file (a few
+hundred tokens once, against re-creating the 25-minute wrong-file class through
+indirection); moving the attacker's nine per-class anchors out of its brief (they
+are rule+number, the settled hot-file format, not stories); a watchdog that kills
+suspected prompt-stalled workers (a heuristic kill risks the two-writer incident).
+
+**Net: the skill grew ~1.5 KB** (stories out, rules in) — paid once per session,
+against per-run recurring savings. Judge next run: runner glue under ~30 min, no
+gate paying for environmental discovery, no human-bound command failing in the
+human's hands.

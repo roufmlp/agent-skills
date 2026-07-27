@@ -9,8 +9,8 @@ argument-hint: "issue numbers, a range, 'all ready-for-agent', or nothing when i
 Attack acceptance criteria before anyone builds to them. An issue whose criteria
 are wrong when written passes every gate — the implementer builds to the bad spec
 and both gates grade against that same bad spec. This pass is the early fix.
-Settled 2026-07-27 after two runs' evidence; the brief lives in a memory file, not
-published here.
+Provenance and the incident record live in this directory's `decisions.md`; read
+it when changing this skill, not when running it.
 
 Two entry points, same pass:
 
@@ -31,9 +31,7 @@ numbered question for the human. The pass never settles a fork by choice.
 Any road-shaped statement it writes ("the rule is X", "the cause is Y") is a
 hypothesis unless its premise was tested. Untested → write it as a hypothesis
 with an explicit premise-check clause for the implementer, testing the premise
-itself, not a narrow question near it. This is the 122 lesson: a manual pre-batch
-pass settled "latest outcome wins" as fact, and the run spent two attempts down
-the falsified road.
+itself, not a narrow question near it.
 
 ## Fan-out
 
@@ -75,46 +73,38 @@ unsettled fork returns as a blocked issue, not a question the run sits on.
 ## The attack checklist
 
 Earned, not invented — each class shipped a real defect through green gates in the
-July 2026 runs. The attacker works the list against the issue AND the current
-code/data, and reports per class: sharpened (with evidence), question (for the
-human), or clean.
+July 2026 runs (the incident behind each is in `decisions.md`). The attacker works
+the list against the issue AND the current code/data, and reports per class:
+sharpened (with evidence), question (for the human), or clean.
 
 1. **Unstated invariants.** What must NOT change. Name the neighbouring behaviours
    the slice sits beside — paging, limits, ordering, counts, permissions — and
-   write them into `## Must still be true`. (114 met all four criteria while
-   dropping the page cap.)
+   write them into `## Must still be true`.
 2. **Invariant scope.** Every invariant states who it covers: all callers,
-   including ones routed in by other issues later. (126's request-count invariant
-   was graded against four callers while two more arrived from 120.)
+   including ones routed in by other issues later.
 3. **Vague words.** "Consistent", "bounded", "handled", "a recovery affordance" —
-   each criterion must name a fixture and an answer. (122's "internally
-   consistent" was satisfied by the bug it described.)
+   each criterion must name a fixture and an answer.
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
-   reintroduced" — where cheap. (Eleven guards that could not fail in fourteen
-   issues.)
+   reintroduced" — where cheap.
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
-   against the real code or data, or flagged. (114's headline premise was false
-   of the actual database; 116 said two channels, the code had three.)
+   against the real code or data, or flagged.
 6. **Empty or missing hostile data.** Does QA/production hold data that can
    exercise each criterion? If not, say so and name the fixture to create —
-   otherwise the gates validate over an empty set. (118: five tables, zero rows.)
+   otherwise the gates validate over an empty set.
 7. **Deploy and boundary reality.** Migration ordering (one-way? code-first or
-   db-first?), client/server module boundary, platform caps. (Three migrations in
-   one run, each with an unstated ordering hazard; the run's worst defect was a
-   server page importing a client module.)
+   db-first?), client/server module boundary, platform caps.
 8. **Observability.** How will each criterion be verified, and is the property
    observable to a gate or a walk at all? A criterion nobody can observe is not a
-   criterion. (112's known fault is structurally invisible to a UI walk.)
+   criterion.
 9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min;
    suspect anything whose criteria span several independent deliverables, or that
    packs migration + logic + UI into one slice. Propose the cut line — where one
    half ships and gates alone ("extract + harness", then "behavioural tests") —
    as a question for the human; splitting is their call, never the pass's or the
-   runner's. (129 ran 4h58m, 19% of its batch; 114 ran 3h52m, 55% of its run.
-   `/run-issues` deliberately never splits mid-run — an oversized issue that
-   reaches a runner arrives back here.)
+   runner's. `/run-issues` deliberately never splits mid-run — an oversized
+   issue that reaches a runner arrives back here.
 
 The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only

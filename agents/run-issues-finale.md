@@ -55,8 +55,13 @@ Clock:       <total run time, and any issue over 90 min>
 
 Then: per-issue summary, gate history, open concerns, and what to look at first
 and why. Lead with the outcome. Keep it proportionate — no padding, no restating
-the ledger, no filler sections. They are reading it to decide whether to merge,
-not to relive the run.
+the ledger, no filler sections.
+
+**Every command the briefing hands a human must have run once, against the state
+it will actually meet.** You are the last stage: run each yourself, read-only,
+before it ships — including commands gates wrote earlier. One marked `UNRUN`, or
+one that cannot run in the state it claims to check, does not ship. A check that
+errors in the human's hands reads as diligence and fails at the worst moment.
 
 **Candidate rules.** Where an incident in this run cost a retry, a strike or an
 escalation, write one `## Decisions inbox` block per incident: what happened, and
