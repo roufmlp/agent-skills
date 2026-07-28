@@ -1,8 +1,8 @@
 # Case study: five issues, one unsupervised day
 
 A real run of [run-issues](../skills/run-issues/SKILL.md), July 2026, on a
-multi-tenant procurement SaaS build (Next.js + Supabase, with a Zoho Books
-integration). Client and product names are removed; the numbers and defects are
+multi-tenant SaaS build (Next.js + Supabase, with a Zoho Books integration).
+Client, product and domain names are removed; the numbers and defects are
 as they happened.
 
 ## Where the runner came from
