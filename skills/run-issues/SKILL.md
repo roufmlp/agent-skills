@@ -224,8 +224,8 @@ first, while the window exists.
    criteria are frozen for the run; the next strike-2 buys one escalated
    attempt, then `blocked`. Rejection CLASSES are counted across resets —
    strikes reset, the class ledger does not. Without the cap, lawful resets
-   compound: one measured issue ran 7 attempts and 14 gate runs where the skill
-   promises three (decisions.md).
+   compound: one measured issue ran more than twice the promised three attempts
+   (decisions.md).
 
    This is the one case where a hardening pass may touch an issue a live run
    holds, and only because the run has stopped: no implementer is in the tree, and
