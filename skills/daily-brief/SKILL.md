@@ -92,6 +92,13 @@ Where the SHA matches:
    there is no reason to skip it.
 5. Report all of it into tomorrow's brief, including anything the walk found.
 
+**The walk is bound to the merge, not to this path.** If the human merged a run
+branch themselves — a PR taken mid-session, a manual merge — the next brief
+session runs steps 2, 4 and 5 for that merge anyway: rewrite the statuses, walk
+the deployed site, report. Where the repo reserves merge and deploy to the
+human, the `merge` answer degrades to exactly that — record the merge, run the
+walk.
+
 A bounce reason instead of `merge` goes into the merge briefing as the human's
 words, and the branch stays unmerged.
 

@@ -676,3 +676,114 @@ suspected prompt-stalled workers (a heuristic kill risks the two-writer incident
 against per-run recurring savings. Judge next run: runner glue under ~30 min, no
 gate paying for environmental discovery, no human-bound command failing in the
 human's hands.
+
+## Prose rejections are fixed by deletion, not refinement (2026-07-28, run 154-181)
+
+**The incident.** Issue 181 passed both gates on every acceptance criterion, and
+its implementer had VOLUNTEERED an extra meta-test beyond the criteria. The test
+was sound; a comment describing it over-claimed. Three sequential narrow review
+gates, ~300k subagent tokens, went on that comment. Each gate was RIGHT and each
+found a real, driven error — round 1 named two string methods as regex compilers
+(they match literally), round 2's replacement umbrella sentence was false of its
+own first route.
+
+**The mechanism, which is the general lesson.** Round 1 correctly deleted the
+false universal ("unrepresentable") and, in the SAME edit, added a list of routes
+around the check. That addition is a new positive claim with its own falsifiable
+surface — so the fix for an over-claim was itself an over-claim, twice. On this
+class, *more precise* and *more likely wrong* move together.
+
+**The rule.** A gate rejection on NON-EXECUTABLE prose is fixed by deleting the
+claim, not restating it. One round. If a second rejection lands, the edit is
+deletion down to the minimal sentence the gate cannot falsify, and the detail
+becomes an issue with tests. Re-assertion is permitted only when the claim
+becomes executable — a test cannot over-claim.
+
+**The predictor nobody read.** The same over-claim class had already rejected
+FOUR earlier attempts on that issue. The base rate for "a new prose claim about
+this mechanism survives the gate" was 0 for 5 when the runner priced the fix as
+a four-line edit. Corollary rule: **any fix in a class with two or more prior
+rejections is delete-only.** Check the strike record before pricing a fix.
+
+**Two cheaper defects underneath it.** (a) The same claim had been copied into
+the code comment, the primer and the issue file — four surfaces, so four edits
+per correction and a 4x gate cost. One canonical statement; everywhere else
+cites `file:line` and asserts nothing. (b) Claims about LANGUAGE SEMANTICS were
+argued across three rounds when a REPL settles them in thirty seconds. Drive a
+language claim before writing it down.
+
+**Not the lesson: that the hold was wrong.** Panel-reviewed 2026-07-28, six
+personas, unanimous "right call, wrong execution". Holding cost nothing — no
+migration in flight, no second writer in the branch, and merging is the human's
+manual step anyway. The rounds cost; the hold did not.
+
+## Panel over run 154-181: cap the resets, mtime staleness, runner errors refund (2026-07-28)
+
+Five personas over the run and the skill — run economist, skill maintainer, gate
+designer, implementer's advocate, auditor of the human's minute. Votes: keep the
+amendments (3-2 with-trims over as-is; nobody voted revert), and the
+prose-deletion rule stays — trimmed, and mirrored into the agent briefs that
+actually type and grade prose, which never read the runner's step 5.
+
+The run's shape, for the record: six issues 49% under estimate (~351 min against
+690), three at zero strikes; issue 181 alone ~339 min — 7 attempts (61 min of
+implementation), 14 gate runs (~160 min), 3 re-checks, plus a ~105-min evening
+resolution. Every rejection individually correct; the loss was structural.
+
+What changed, compressed:
+
+- **Two criteria-fault resets maximum per issue.** Each reset was lawful and
+  together they were unbounded — the skill promises three attempts and 181 got
+  seven. The runner invented the cap mid-loop ("stated in advance so it cannot
+  drift"); now it is written into step 8. Rejection classes are counted across
+  resets — strikes reset, the class ledger does not.
+- **Staleness keyed on the ledger file's mtime.** The handwritten
+  `heartbeat <HH:MM>` failed twice in the very run cited as its evidence, on a
+  runner who had already diagnosed the failure mode — knowing about a
+  memory-enforced rule does not enforce it. Every transition updates mtime and
+  nobody can forget to write it. The dangerous direction was a cron resuming
+  into a live tree: the two-writer incident by another door.
+- **Runner errors refund strikes.** One attempt's strike stood on the ledger's
+  own "RUNNER ERROR" — a claimed shape mis-sorted onto the not-yours list, so
+  the implementer was told to skip work that was in scope. A rejection ground
+  attributable to the runner's brief is annulled from the strike and journalled;
+  the symmetry criteria-fault already grants for spec fault. Not-yours items now
+  cite the line that excludes them — a gate's summary sentence is not a warrant.
+- **Gate-side prose rubric.** The delete-only rule was runner-only; the gates
+  that priced three restatement rounds never saw it, and the final round split
+  on severity, not fact. Both gate briefs now grade beyond-criteria prose
+  non-blocking (unless a criterion names it or the artefact's purpose IS the
+  claim — a guard's contract still blocks), enumerate every contradiction per
+  round, name the defect class so repeats can be counted, and recommend
+  deletion, never restatement.
+- **Tenancy-empirical and prove-on-disk moved from run lore to the briefs.**
+  Both bit twice: a review gate cleared a live cross-tenant leak by generalising
+  a composite-FK trace onto a read no pin covered (issue 180), and six distinct
+  false-green mechanisms in one run (a stale test-runner cache, no-op patches,
+  silent reverts) burned both of one issue's gates. A tenancy claim is settled
+  by deleting the predicate and running the suite; a mutation is trusted only
+  after the cache is cleared and the mutated line echoed.
+- **Blocked handoffs stop sizing prose fixes in lines.** "Fix is two prose
+  lines" — against a class with a 0-for-5 survival record — became four sites in
+  three files and an evening. The finale corrected the count; the panel added
+  the rule: state the strike-class record, present merge-now-fix-later beside
+  fix-first with costs, and resolution is a procedure (one word from the human,
+  one implementer, one narrow gate, unattended), not a supervised evening.
+- **Prose-graded criteria flagged at authoring time** (step 1 + the attacker's
+  class 8): a bar the gates grade by reading prose regenerates on every fix,
+  because each edit mints a new falsifiable claim. This, more than difficulty,
+  separated 181 from its six clean siblings, whose bars were mutations, query
+  counts and byte-identical captures.
+
+Confirmed by the run, unchanged: the strike-2 re-check (three firings, two real
+criteria-faults, one disciplined criteria-sound — best ROI in the file); the
+max→high tier cut (nothing money- or auth-shaped reached the merge read; what
+saved issue 180 was gate redundancy plus the runner driving the dispute, not a
+tier); concurrent gates; ledger discovery by `Worktree:` line (right ledger
+among 17 copies, first try).
+
+**Judges, next run:** no issue exceeds two criteria-fault resets; zero
+false-stale or missed-stale wakeups on the mtime predicate; a prose rejection,
+if one recurs, closes in one delete-only round; no strike stands on a ground the
+runner's own brief mis-sorted; the merge briefing opens with this run's header
+only and reads in under thirty minutes.

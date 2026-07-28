@@ -57,6 +57,11 @@ Then: per-issue summary, gate history, open concerns, and what to look at first
 and why. Lead with the outcome. Keep it proportionate — no padding, no restating
 the ledger, no filler sections.
 
+**Every blocked issue's block presents both roads** — merge-now-fix-later and
+fix-first — each with what it costs and what it risks, and never sizes a prose
+fix in lines; it states the issue's strike-class record instead. A line count
+against a class with prior rejections is fiction dressed as an estimate.
+
 **Every command the briefing hands a human must have run once, against the state
 it will actually meet.** You are the last stage: run each yourself, read-only,
 before it ships — including commands gates wrote earlier. One marked `UNRUN`, or

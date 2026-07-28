@@ -64,8 +64,11 @@ In the main checkout, under `.scratch/<feature>/`:
   write and every row moved to `done` — not as a separate chore. Two mechanical
   triggers, either one means prune before the next spawn: more than one
   `## HALT BLOCK` heading, or status table plus Carry-forward under half the
-  file (a measured ledger once hit 15.4 KB with the status table at 13% —
-  decisions.md).
+  file (decisions.md). A third trigger while an issue is still fighting: before
+  re-spawning gates on the same issue, a row over ~10 lines loses its verdict
+  story to the journal, keeping stamps only — a growing row is re-billed to
+  every one of its own gate spawns, and the existing triggers fire exactly when
+  it has stopped growing (decisions.md).
 - **`run-journal.md`** — the narrative, append-only. Every log line goes here:
   what each attempt did, verdict stories, dead ends. Subagents never read it. It
   is read exactly twice — by a resuming runner, and by the finale.
@@ -77,6 +80,10 @@ In the main checkout, under `.scratch/<feature>/`:
   be true lives in `docs/patterns.md`, on main, and outranks both the primer and
   the code.
 - **`merge-briefing.md`** — the merge-read briefing, built up as the run goes.
+  **A new run archives the old briefing at launch** — same rule as the primer.
+  Gate verdicts get one summary line each; the full verdict text lives in the
+  issue files, which already carry it. It is a thirty-minute read or it has
+  failed.
 
 Ledger statuses: `queued → in-progress → gates → done`, plus `correction`
 (between `gates` and `done`, when taken) and `blocked`. Both gates run under the
@@ -86,17 +93,16 @@ verdicts into issue files. Everyone appends; nobody rewrites another's section.
 **Stamp every transition with the local time** (`HH:MM`, dated on the day's first
 entry) — the run's own timings are the only evidence for whether the pipeline is
 worth changing. A correction round is a transition too: its row gains
-`correction: open HH:MM → closed HH:MM`. One run took correction rounds on two of
-three issues and neither's cost could be reconstructed afterwards.
+`correction: open HH:MM → closed HH:MM` (decisions.md).
 
 **Carry-forward** is what the runner curates for future spawns: shared-quota state,
 traps discovered, conventions later issues must follow, do-not-tidy lists. A
 learning that lives only in the journal survives only if the runner remembers to
 re-brief it. **Every entry names the issue(s) it serves**, and the runner deletes
 it when its last consumer goes `done` — an unexpired entry is billed to every
-remaining spawn, and the waste grows with the square of the batch. A human action
-taken mid-run (a SQL fix, a console change) is recorded here with its **observed**
-effect, not its intended one: one has already silently failed to land.
+remaining spawn. A human action taken mid-run (a SQL fix, a console change) is
+recorded here with its **observed** effect, not its intended one: one has
+already silently failed to land.
 
 ## Shared external quotas
 
@@ -120,6 +126,13 @@ first, while the window exists.
    queued behind it. Never split an issue yourself — a runner-invented sub-issue
    is an untriaged spec. An issue too big to be one issue goes back through
    `/harden-issues`.
+
+   **Flag a prose-graded criterion while settling the road** — one whose
+   pass/fail is decided by reading prose rather than driving behaviour. Its bar
+   regenerates on every fix (each edit mints a new falsifiable claim), so make
+   it executable or bounded before spawn, or send the issue back through
+   `/harden-issues`. This, more than difficulty, is what separates a whale from
+   a clean issue (decisions.md).
 2. **Read its final message before doing anything else.** If it reports unfinished
    work, the issue is not gate-ready — re-spawn to finish it, or mark `blocked`.
    If it reports the acceptance criteria are *wrong* rather than unmet, spawn a
@@ -137,8 +150,7 @@ first, while the window exists.
    **While the gates run, the runner preps issue N+1, read-only:** settle its
    road, size it, pre-write the spawn prompt, prune the ledger, run the fixture
    pre-check (below). None of it touches the tree, so single-writer holds; on
-   gate-pass only routing-verify, lint and commit remain serial. On one measured
-   run the runner's serial glue was ~49 minutes, all spent after stages returned.
+   gate-pass only routing-verify, lint and commit remain serial (decisions.md).
 4. Both pass → **verify the routings**: grep each target file for the exact
    line the gate quoted as appended — gates end each routed finding with that
    quote, and the runner greps the string, never a heading (a heading-level
@@ -162,12 +174,38 @@ first, while the window exists.
    when the runner verifies each item's *named evidence* (the test now exists and
    is green, the mutation now reds), not just that files were touched. Then
    commit and `done`. A correction round is not a strike.
+
+   **A rejection on non-executable PROSE is fixed by deleting the claim, never
+   restating it.** A fix for an over-claim is itself a new claim with its own
+   falsifiable surface, so on this class more precise and more likely wrong
+   move together. Second rejection → delete down to the minimal sentence the
+   gate cannot falsify; re-assert only by making the claim executable. Before
+   pricing any fix, read the strike record: two or more prior rejections in the
+   class makes it delete-only and forbids sizing the fix in lines. One
+   canonical statement per claim — everywhere else cites `file:line` and
+   asserts nothing. The same rule governs post-block resolution rounds.
+   (decisions.md.)
 6. Ledger `done`; set the issue's `Status:` to `done — on branch <branch>,
    unmerged` (gate history goes in the body — `all` runs parse that line).
 7. A gate rejects → re-spawn the implementer with the written reasons. If **both**
    reject, that is still ONE retry carrying both verdicts, and one strike, not two.
    Then re-run step 3 in full: both gates, on the new diff. A gate that passed the
    previous attempt has not seen this one.
+
+   **The retry brief's not-yours list is checked, not asserted:** every item the
+   runner excludes cites the criterion or executable-record line that excludes
+   it — a gate's summary sentence is not a warrant. A rejection ground
+   attributable to the runner's own brief is **annulled from the strike** and
+   journalled as a runner error — the same refund criteria-fault grants for
+   spec fault. After a criteria correction, the re-spawn prompt carries the
+   CURRENT surviving contract — corrected criteria plus the latest verdicts
+   only; verdicts graded against a superseded spec are journal, never prompt.
+
+   **When the gates split:** a factual split is settled by the runner driving
+   it — a tenancy claim by deleting the predicate (or planting the cross-tenant
+   row) and running the suite, cache-cleared, never by reading the code
+   (twice on one measured run: decisions.md). A severity or standards split
+   takes the stricter verdict.
 8. **Two strikes → re-check the criteria before buying a third implementer.**
    Spawn `harden-issues-attacker` in strike-2 mode with both verdicts: classes 1,
    5 and 9 only, evidence or silence, and no waiting. One of three outcomes:
@@ -181,6 +219,13 @@ first, while the window exists.
    - **A fork it cannot settle from evidence** → ledger `blocked (criteria)`, the
      question goes to the merge briefing, and the run moves to step 9. **It never
      waits for an answer.** A question mid-run is a blocked issue, never a stall.
+
+   **Two criteria-fault resets maximum per issue.** After the second, the
+   criteria are frozen for the run; the next strike-2 buys one escalated
+   attempt, then `blocked`. Rejection CLASSES are counted across resets —
+   strikes reset, the class ledger does not. Without the cap, lawful resets
+   compound: one measured issue ran 7 attempts and 14 gate runs where the skill
+   promises three (decisions.md).
 
    This is the one case where a hardening pass may touch an issue a live run
    holds, and only because the run has stopped: no implementer is in the tree, and
@@ -196,6 +241,13 @@ first, while the window exists.
 
    Say in the merge briefing which issues were skipped and for what, so the next
    run picks them up rather than rediscovering them.
+
+   **A blocked row's handoff never sizes a fix in lines** — in a class with
+   prior rejections a line count is fiction (a "two prose lines" fix became
+   four sites in three files and an evening — decisions.md). It states the
+   strike-class record beside any size claim, and the briefing presents both
+   roads side by side — merge-now-fix-later and fix-first — each with what it
+   costs and what it risks. The judgement is the human's; the sizing is not.
 
 Small-issue coalescing: up to two adjacent trivial issues (copy, config, no logic)
 may share one implementer spawn and one combined gate spawn. Anything with logic
@@ -219,6 +271,15 @@ briefing lists every such entry:
 - Bugs found **outside** the issue's scope → routed to one of the homes above.
 
 Handoff documents are never the home for any of this.
+
+## Resolving a blocked issue
+
+Resolution happens after the run closes, and it is a procedure, not an evening
+of improvisation. The human's answer is one word — `merge`, `fix` or `drop`.
+`fix` spawns ONE implementer, under the delete-only prose rule where it applies,
+then ONE narrow gate round maximum, unattended; anything more is minted as an
+issue. The human supervises nothing — they answer, and the machine reports back
+in the next brief.
 
 ## Branch and human gate
 
@@ -282,6 +343,9 @@ resumes rather than re-running:
      filters and search, every detail page, the send and receive surfaces as far
      as read-only allows. Read-only means no permission risk, so there is no
      reason to skip it.
+     **The walk fires on ANY merge of a run branch, whoever merged** — a merge
+     outside the `/daily-brief` path does not skip it; the next brief session
+     runs it and reports what it found.
    - Recommended after it: a `/parallel-hunt` round on the live system. It hunts
      the seams between issues and against live external systems — the class of bug
      per-issue gates cannot see. Its `deferred` entries become the next run's
@@ -295,20 +359,23 @@ resumes rather than re-running:
 further than a five-hour window the same session sits through. A weekly limit
 resetting days out is resumed by a human re-invoking `/run-issues resume`.
 
-**The ledger carries an owner heartbeat.** One line at the top: `Owner: <session>,
-heartbeat <HH:MM>`, rewritten on every ledger touch. A long implement attempt moves
-no status line for an hour, so "no progress" cannot mean "dead" — only a stale
-heartbeat can.
+**The ledger carries an owner line; staleness is the FILE's mtime, never a
+handwritten timestamp.** One line at the top: `Owner: <session>`. Every
+transition already updates the file's mtime and nobody can forget to write it —
+a handwritten `heartbeat <HH:MM>` field failed twice in one run, on a runner who
+had already diagnosed the failure mode (decisions.md). A long implement attempt
+moves no status line for an hour, so "no progress" cannot mean "dead" — only a
+stale mtime can.
 
 **The owner line is cleared the moment the run stops owning the tree.** Reaching
 `awaiting-merge`, or halting, rewrites it to `Owner: none — <awaiting-merge|HALTED>
 <date> <HH:MM>`.
 
 Create the wakeup anyway at launch (every ~29 min): "Check `grep -m1 '^Owner:'
-<run.md>` — do not read the rest of the file. If it names a session and its
-heartbeat is over 60 minutes old, resume from ledger state; otherwise do
-nothing. The finale is a resumable stage — revive it, never re-run completed
-halves." Delete it at run end. Remind once that the machine must stay awake
+<run.md>` and the file's mtime (`stat -f %m` on macOS, `stat -c %Y` on Linux) —
+do not read the rest of the file. If the owner line names a session and the
+mtime is over 60 minutes old, resume from ledger state; otherwise do nothing.
+The finale is a resumable stage — revive it, never re-run completed halves." Delete it at run end. Remind once that the machine must stay awake
 (on macOS, `caffeinate -dimsu`).
 
 **Every halt writes a HALT BLOCK into the ledger before the session stops.** It is
@@ -351,8 +418,8 @@ before spawning anything, and recreate the cron.
 
 - **Print one launch line before spawn #1, on every invocation** — issues in
   order, branch, and what will NOT happen (no merge, no prod). Not a wait, an
-  interrupt window: the longest stall on record was an 11.5-hour halt from a run
-  started on a misread request.
+  interrupt window (an 11.5-hour halt once came from a misread request —
+  decisions.md).
 - **The session is on the model the whole run should use.** Agent files use
   `model: inherit`, so every worker inherits it. If the session is on a different
   model, pass the intended model explicitly on every spawn — never ask, never
@@ -381,9 +448,7 @@ before spawning anything, and recreate the cron.
   seeded state the batch will drive: row counts on the tables the issues touch,
   any counters or sequences, a can-create sanity check. Results go into
   Carry-forward as the known-good path. Fixture viability is run state like any
-  quota: on one measured run nobody owned it, and a verify gate paid a 55-minute
-  stage (versus 19 for a strictly bigger issue) to discover mid-drive that the
-  test database could not mint a document.
+  quota; discovering it mid-drive is paid at gate prices (decisions.md).
 - If the project keeps its env in a canonical file outside the worktree, the
   worktree's `.env.local` is a **symlink** to it, never a copy. Replace any copy.
   Env files are never committed.

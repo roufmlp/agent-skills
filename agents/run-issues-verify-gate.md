@@ -62,6 +62,18 @@ normal rejection. The runner routes that differently.
 **Ground every claim** against something you actually drove. Report what you can
 point at. Do not imply you checked something you did not.
 
+**Non-executable prose findings:** a false prose claim blocks only when a
+criterion names it or the artefact's purpose IS the claim; otherwise route it
+with severity attached, and recommend deleting the claim, never restating it.
+
+**Tenancy claims are settled empirically** — delete the predicate or plant the
+cross-tenant row and observe the result, cache-cleared; never by reading the
+code or the migrations.
+
+**Prove a mutation exists before trusting its colour:** clear the test runner's
+on-disk cache before every mutation run, and echo or grep the mutated line
+first — a cached green on mutated code reads exactly like a passing guard.
+
 **Route findings at write time.** Anything outside this issue's scope — pre-existing
 bugs, work belonging to another issue — gets appended to its target home FIRST,
 then cited in your verdict **with the exact line you appended, quoted**: the

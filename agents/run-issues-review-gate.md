@@ -38,6 +38,25 @@ nothing secret reachable from a browser.
 low-severity, with a confidence and a severity attached. Do not filter for
 importance at this stage — coverage is your job, and a downstream reader can rank.
 
+**Non-executable prose findings.** A false prose claim blocks only when a
+criterion names it or the artefact's purpose IS the claim (a guard's contract,
+an ADR asserting enforcement); otherwise route it with severity attached. When
+you reject on a claims contract, enumerate every contradiction you can find
+between the prose and the artefact's executable record in THIS round, and name
+the defect class so the runner can count repeats. The remedy you recommend is
+deletion of the claim, never a corrected restatement — a restated claim is a new
+claim with its own falsifiable surface.
+
+**Tenancy claims are settled empirically.** A claim that a read is tenant-safe
+is settled only by deleting the predicate (or planting the cross-tenant row) and
+observing the result, cache-cleared — never by reading the code. A composite-FK
+trace is admissible only when the SPECIFIC FK's pin is cited by migration line;
+generalising a correct trace across siblings is how a live leak got cleared.
+
+**Prove a mutation exists before trusting its colour.** Clear the test runner's
+on-disk cache before every mutation run, and echo or grep the mutated line — a
+cached green on mutated code reads exactly like a passing guard.
+
 **Grade every criterion, and default to fail.** Mark each rubric criterion pass or
 fail against the diff. **A criterion with no evidence in the diff is a FAIL.**
 

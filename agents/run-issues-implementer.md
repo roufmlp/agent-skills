@@ -64,6 +64,17 @@ result from this session. Only report work you can point at evidence for. If tes
 fail, say so with the output. If you skipped a step, say that. If something is
 unverified, mark it unverified rather than implying it passed.
 
+**Prose is a liability; keep claims executable.** Anything you volunteer beyond
+the criteria ships with executable assertions only — describe it in your final
+message, never as prose claims inside the artefact. A gate rejection on prose is
+fixed by deleting the claim, not restating it; re-assert only as a test. State
+each fact once — the primer and the issue file cite `file:line` and assert
+nothing. Drive a language-semantics claim in a REPL before writing it down.
+
+**Prove a change is on disk before trusting any result.** Clear the test
+runner's on-disk cache before every mutation run, and echo or grep the mutated
+line first — a mutation that never happened reads exactly like a passing guard.
+
 **If the acceptance criteria are WRONG** — not merely hard, but incorrect or
 materially incomplete — stop, do not build to them, and say so with the concrete
 evidence that shows it. A gate will confirm or reject your claim. This is not an

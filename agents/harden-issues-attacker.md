@@ -105,6 +105,10 @@ class: **sharpened** (with the citation), **question** (for the human), or
 8. **Observability.** How will each criterion be verified, and is the property
    observable to a gate or a walk at all? A criterion nobody can observe is not a
    criterion. (112's known fault is structurally invisible to a UI walk.)
+   A criterion whose pass/fail is decided by reading PROSE rather than driving
+   behaviour is flagged and made executable or bounded: a prose-graded bar
+   regenerates on every fix — each edit mints a new falsifiable claim — and it
+   is the documented whale-maker. (181: run-issues decisions.md.)
 9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min.
    Suspect anything whose criteria span several independent deliverables, or that
    packs migration plus logic plus UI into one slice. Propose the cut line — where
