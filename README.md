@@ -146,12 +146,16 @@ The design choices that earn their keep:
 - Every worker is a fresh subagent. An implementer gets one issue; verify and
   review gates get one verdict each, then die. Context never accumulates, and a
   codebase primer means exploration is paid once per run, not once per issue.
-- Gates are adversarial and must cite driven evidence. A verify gate drives the
-  running app and rejects with observed behaviour; a review gate tries to refute
-  the diff. "It looks right" is not a verdict.
-- Two strikes and the implementer is dismissed. A fresh implementer on a stronger
-  model gets the issue and both rejection verdicts, but none of the failed
-  reasoning, and is told not to trust the previous diagnosis.
+- Gates are adversarial and must cite driven evidence. Both spawn in one message
+  and neither reads the other's verdict: verify drives the running app and rejects
+  with observed behaviour, review tries to refute the diff. "It looks right" is
+  not a verdict.
+- Two strikes buy a criteria re-check, not a third implementer. An attacker
+  re-reads the issue against both verdicts. If the criteria were wrong, the
+  attempts are annulled and a fresh implementer builds to the corrected issue. If
+  they were sound, an escalated implementer on a stronger model gets both verdicts
+  but none of the failed reasoning, and is told not to trust the previous
+  diagnosis.
 - The ledger is thin because every spawn reads it; the narrative lives in a
   journal only a resuming runner and the finale read. Shared external quotas
   (API caps, send limits) are run state owned by the runner, and one agent holds
