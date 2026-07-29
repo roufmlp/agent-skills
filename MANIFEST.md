@@ -15,6 +15,7 @@ Listed in the order the loop runs.
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
+| `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `agents/*.md` | `~/.claude/agents/*.md` (13 role definitions the orchestration skills spawn) |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |

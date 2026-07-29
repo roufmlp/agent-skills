@@ -96,6 +96,17 @@ typography, colour, states, the premium-feel psychology) that agents must read
 before any visual work. It exists because "make it look good" is not an
 instruction; a checklist an agent can be held to is.
 
+### [panel-review](skills/panel-review/SKILL.md)
+
+The orchestration idea pointed at prose. One reviewer has blind spots, so this
+spawns four to six personas as parallel subagents — each gets the draft, the
+target and its own brief, never another persona's output — then synthesises on
+agreement, maps the disagreements and decides each with a stated reason. The
+mechanism is borrowed from Stanford's STORM (OVAL Lab, NAACL 2024), whose panel
+researches topics; here the panel is picked per artefact instead. The rule that
+makes it safe on career copy: personas advise on selection and framing only, and
+one suggesting a fabricated number is overruled in synthesis, not obeyed.
+
 ### [memory-reel](skills/memory-reel/SKILL.md)
 
 A different genre: turns a folder of mixed photos and videos into an edited,
