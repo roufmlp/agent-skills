@@ -27,6 +27,15 @@ flowchart TD
     W2 --> F
     HI -.->|queued questions| DB["daily-brief<br/>one list, once a day"]
     RI -.->|queued questions| DB
+
+    classDef rule fill:#eef2f6,stroke:#64748b,color:#0f172a
+    classDef skill fill:#dbeafe,stroke:#2563eb,color:#0c1e3a
+    classDef worker fill:#fef3c7,stroke:#d97706,color:#3f2d02
+    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
+    class ST,SES rule
+    class SK,HI,RI,PH,DB skill
+    class W1,W2 worker
+    class F state
 ```
 
 ## The orchestration skills
@@ -34,8 +43,36 @@ flowchart TD
 ### [run-issues](skills/run-issues/SKILL.md)
 
 One thin runner session implements a range of tracker issues end to end,
-unsupervised. The human is needed once: the merge read at the end. The design
-choices that earn their keep:
+unsupervised. The human is needed once: the merge read at the end.
+
+```mermaid
+flowchart TD
+    N["next issue from the ledger"] --> IMP["fresh implementer subagent<br/>tests first, one issue, then dies"]
+    IMP --> VG{"verify gate<br/>drives the running app"}
+    VG -->|rejects with observed behaviour| STRIKE
+    VG -->|passes| RG{"review gate<br/>tries to refute the diff"}
+    RG -->|rejects| STRIKE["strike recorded"]
+    RG -->|passes| C["commit · ledger updated"]
+    STRIKE --> Q{"second strike?"}
+    Q -->|"no — retry"| IMP
+    Q -->|"yes — dismiss"| ESC["escalated implementer<br/>stronger model, both verdicts,<br/>none of the failed reasoning"]
+    ESC --> VG
+    C --> MORE{"issues left?"}
+    MORE -->|yes| N
+    MORE -->|no| FIN["coherence finale<br/>reads the branch as one change"]
+    FIN --> H["human merge gate<br/>nothing merges without it"]
+
+    classDef work fill:#fef3c7,stroke:#d97706,color:#3f2d02
+    classDef gate fill:#fee2e2,stroke:#dc2626,color:#4c0519
+    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef human fill:#dbeafe,stroke:#2563eb,color:#0c1e3a
+    class N,IMP,ESC,STRIKE work
+    class VG,RG,Q,MORE,FIN gate
+    class C state
+    class H human
+```
+
+The design choices that earn their keep:
 
 - Every worker is a fresh subagent. An implementer gets one issue; verify and
   review gates get one verdict each, then die. Context never accumulates, and a
@@ -81,11 +118,41 @@ stale approval is not an approval.
 
 A concurrent bug-hunt round: finder and fixer workers run as background subagents
 over a shared file register, with claim gates killing phantom bugs before they
-enter the pipeline and fix gates refusing fixes that mask symptoms. Strict code
-ownership keeps the merge tax at zero: the finder may only add new regression
-tests, the fixer owns shipped code, and nobody waits on anybody. Workers are
-replaced after one work unit because long sessions degrade quietly; the register
-is the handoff, so succession needs no ceremony.
+enter the pipeline and fix gates refusing fixes that mask symptoms.
+
+```mermaid
+flowchart TD
+    REG[("the register<br/>one file · the only handoff")]
+
+    FIND["finder subagent<br/>may only add regression tests"] --> CG{"claim gate<br/>tries to refute the bug"}
+    CG -->|retracted| DEAD["phantom killed<br/>before it costs a fix"]
+    CG -->|promoted| REG
+
+    REG --> FIX["fixer subagent<br/>owns shipped code · test-first"]
+    FIX --> FG{"fix gate<br/>tries to refute the fix"}
+    FG -->|"sent back — masks a symptom"| FIX
+    FG -->|verified| DONE["entry closed"]
+    DONE --> REG
+
+    FIND -.->|"one work unit, then replaced"| FIND
+    FIX -.->|"one work unit, then replaced"| FIX
+
+    classDef work fill:#fef3c7,stroke:#d97706,color:#3f2d02
+    classDef gate fill:#fee2e2,stroke:#dc2626,color:#4c0519
+    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef dead fill:#eef2f6,stroke:#64748b,color:#0f172a
+    class FIND,FIX work
+    class CG,FG gate
+    class REG,DONE state
+    class DEAD dead
+```
+
+Nobody waits on anybody: the finder is hunting the next bug while the fixer is
+still on the last one. Strict code ownership is what keeps the merge tax at zero
+while they run concurrently — the finder may only add regression tests, the fixer
+owns shipped code. Workers are replaced after each work unit because long sessions
+degrade quietly, and because the register holds everything, succession needs no
+handover.
 
 ## The other skills
 
