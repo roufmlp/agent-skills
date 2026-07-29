@@ -14,28 +14,47 @@ turn one session into a thin runner that spawns workers and gates as disposable
 subagents, with all state in files so any later session can resume the run.
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
 flowchart TD
-    ST["steering/ — CLAUDE.md, writingrules, coderules<br/>standing rules for every session"] --> SES["a Claude Code session"]
-    SES -->|invokes| SK["skills/ — repeatable workflows"]
-    SK --> HI["harden-issues<br/>criteria attack pass"]
-    SK --> RI["run-issues<br/>autonomous issue runner"]
-    SK --> PH["parallel-hunt<br/>concurrent bug hunt"]
+    ST["steering/<br/>CLAUDE.md · writingrules · coderules"]
+    SES["a Claude Code session"]
+    SK["skills/<br/>repeatable workflows"]
+
+    subgraph ORCH ["the orchestration skills"]
+        HI["harden-issues<br/>criteria attack pass"]
+        RI["run-issues<br/>autonomous issue runner"]
+        PH["parallel-hunt<br/>concurrent bug hunt"]
+    end
+
+    subgraph SPAWN ["what they spawn, and throw away"]
+        W1["fresh implementer per issue<br/>adversarial verify + review gates"]
+        W2["finder and fixer workers<br/>adversarial claim + fix gates"]
+    end
+
+    F[("state lives in files, not contexts<br/>any later session resumes the run")]
+    DB["daily-brief<br/>one list, once a day"]
+
+    ST --> SES
+    SES -->|invokes| SK
+    SK --> HI
+    SK --> RI
+    SK --> PH
     HI -->|stamps issues for| RI
-    RI --> W1["fresh implementer per issue,<br/>adversarial verify + review gates"]
-    PH --> W2["finder and fixer workers,<br/>adversarial claim + fix gates"]
-    W1 --> F["state lives in files, not contexts —<br/>any session can resume the run"]
+    RI --> W1
+    PH --> W2
+    W1 --> F
     W2 --> F
-    HI -.->|queued questions| DB["daily-brief<br/>one list, once a day"]
+    HI -.->|queued questions| DB
     RI -.->|queued questions| DB
 
-    classDef rule fill:#eef2f6,stroke:#64748b,color:#0f172a
-    classDef skill fill:#dbeafe,stroke:#2563eb,color:#0c1e3a
-    classDef worker fill:#fef3c7,stroke:#d97706,color:#3f2d02
-    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
-    class ST,SES rule
-    class SK,HI,RI,PH,DB skill
-    class W1,W2 worker
-    class F state
+    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
+    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
+    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
+    class ST,SES,SK,HI,RI,PH,W1,W2 step
+    class F keep
+    class DB human
+    style ORCH fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+    style SPAWN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
 ```
 
 ## The orchestration skills
@@ -46,30 +65,80 @@ One thin runner session implements a range of tracker issues end to end,
 unsupervised. The human is needed once: the merge read at the end.
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
 flowchart TD
-    N["next issue from the ledger"] --> IMP["fresh implementer subagent<br/>tests first, one issue, then dies"]
-    IMP --> VG{"verify gate<br/>drives the running app"}
-    VG -->|rejects with observed behaviour| STRIKE
-    VG -->|passes| RG{"review gate<br/>tries to refute the diff"}
-    RG -->|rejects| STRIKE["strike recorded"]
-    RG -->|passes| C["commit · ledger updated"]
-    STRIKE --> Q{"second strike?"}
-    Q -->|"no — retry"| IMP
-    Q -->|"yes — dismiss"| ESC["escalated implementer<br/>stronger model, both verdicts,<br/>none of the failed reasoning"]
-    ESC --> VG
-    C --> MORE{"issues left?"}
-    MORE -->|yes| N
-    MORE -->|no| FIN["coherence finale<br/>reads the branch as one change"]
-    FIN --> H["human merge gate<br/>nothing merges without it"]
+    N["next issue from the ledger"]
 
-    classDef work fill:#fef3c7,stroke:#d97706,color:#3f2d02
-    classDef gate fill:#fee2e2,stroke:#dc2626,color:#4c0519
-    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
-    classDef human fill:#dbeafe,stroke:#2563eb,color:#0c1e3a
-    class N,IMP,ESC,STRIKE work
-    class VG,RG,Q,MORE,FIN gate
-    class C state
+    subgraph ATT ["one attempt"]
+        IMP["fresh implementer<br/>test-first · one issue · then dies"]
+        FM{"final message read<br/>before gates are bought"}
+    end
+
+    subgraph ADJ ["adjudication"]
+        G{"verify drives the app<br/>review refutes the diff<br/>spawned concurrently"}
+        CORR["correction round<br/>one only · scoped to the verdicts"]
+        STR["one strike<br/>both gates rejecting is still one"]
+        ANN["annulled<br/>runner's own brief was at fault"]
+        RC{"strike-2 criteria attack<br/>classes 1, 5, 9 · evidence or silence"}
+        ESC["escalated implementer<br/>stronger model · both verdicts<br/>none of the failed reasoning"]
+    end
+
+    RT["routings greped · lint · commit"]
+    NH["needs-harden"]
+    B["blocked"]
+    BC["blocked (criteria)"]
+    DEP["dependents marked<br/>blocked (depends on NN)"]
+    MORE{"issues left?"}
+
+    subgraph CLOSE ["the run closes"]
+        FIN["coherence finale<br/>reads the branch as one change"]
+        H["human merge gate<br/>nothing merges without it"]
+    end
+
+    N --> IMP
+    IMP --> FM
+    FM -->|"unfinished work"| IMP
+    FM -->|"criteria are wrong"| NH
+    FM -->|"gate-ready"| G
+
+    G -->|"both pass"| RT
+    G -->|"pass, follow-ups listed"| CORR
+    CORR --> RT
+    G -->|"either rejects"| STR
+
+    STR -->|"runner error"| ANN
+    ANN --> IMP
+    STR -->|"strike 1"| IMP
+    STR -->|"strike 2"| RC
+    STR -->|"strike 3"| B
+
+    RC -->|"criteria fault · reset<br/>max two per issue"| IMP
+    RC -->|"criteria sound"| ESC
+    RC -->|"unsettleable fork"| BC
+    ESC --> G
+
+    B --> DEP
+    RT --> MORE
+    DEP --> MORE
+    BC --> MORE
+    NH --> MORE
+    MORE -->|yes| N
+    MORE -->|no| FIN
+    FIN --> H
+
+    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
+    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
+    classDef gate fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#4C0519
+    classDef stop fill:#FFFFFF,stroke:#94A3B8,stroke-width:1px,stroke-dasharray:4 3,color:#334155
+    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
+    class N,IMP,ESC,CORR,ANN step
+    class FM,G,RC,MORE gate
+    class RT,STR,FIN keep
+    class NH,B,BC,DEP stop
     class H human
+    style ATT fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+    style ADJ fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+    style CLOSE fill:#FBFCFD,stroke:#CBD5E1,color:#475569
 ```
 
 The design choices that earn their keep:
@@ -121,30 +190,49 @@ over a shared file register, with claim gates killing phantom bugs before they
 enter the pipeline and fix gates refusing fixes that mask symptoms.
 
 ```mermaid
+%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
 flowchart TD
     REG[("the register<br/>one file · the only handoff")]
 
-    FIND["finder subagent<br/>may only add regression tests"] --> CG{"claim gate<br/>tries to refute the bug"}
-    CG -->|retracted| DEAD["phantom killed<br/>before it costs a fix"]
-    CG -->|promoted| REG
+    subgraph RUN ["the round, running — nobody waits on anybody"]
+        FIND["finder subagent<br/>one sweep group, then replaced<br/>may only add regression tests"]
+        CG{"claim gate<br/>one review · tries to refute the bug"}
+        FIX["fixer subagent<br/>one batch, then replaced<br/>owns shipped code · test-first"]
+        FG{"fix gate<br/>one batch · tries to refute the fix"}
+    end
 
-    REG --> FIX["fixer subagent<br/>owns shipped code · test-first"]
-    FIX --> FG{"fix gate<br/>tries to refute the fix"}
-    FG -->|"sent back — masks a symptom"| FIX
-    FG -->|verified| DONE["entry closed"]
-    DONE --> REG
+    DEAD["retracted<br/>phantom killed before it costs a fix"]
+    DEFER["deferred<br/>reported at round end, never hidden"]
 
-    FIND -.->|"one work unit, then replaced"| FIND
-    FIX -.->|"one work unit, then replaced"| FIX
+    subgraph ENDR ["round end"]
+        COMMIT["register · regression tests · fixes<br/>committed to the branch"]
+        HUM["a human reads the branch<br/>the orchestrator never merges to main"]
+    end
 
-    classDef work fill:#fef3c7,stroke:#d97706,color:#3f2d02
-    classDef gate fill:#fee2e2,stroke:#dc2626,color:#4c0519
-    classDef state fill:#dcfce7,stroke:#16a34a,color:#052e16
-    classDef dead fill:#eef2f6,stroke:#64748b,color:#0f172a
-    class FIND,FIX work
+    FIND -->|"candidate"| CG
+    CG -->|"retracted"| DEAD
+    CG -->|"promoted → open"| REG
+    REG -->|"open → in-fix"| FIX
+    FIX -->|"fix-ready"| FG
+    FG -->|"sent back · masks a symptom"| FIX
+    FG -->|"verified"| REG
+    REG -->|"still open when the round ends"| DEFER
+    REG --> COMMIT
+    DEFER --> COMMIT
+    COMMIT --> HUM
+
+    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
+    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
+    classDef gate fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#4C0519
+    classDef stop fill:#FFFFFF,stroke:#94A3B8,stroke-width:1px,stroke-dasharray:4 3,color:#334155
+    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
+    class FIND,FIX step
     class CG,FG gate
-    class REG,DONE state
-    class DEAD dead
+    class REG,COMMIT keep
+    class DEAD,DEFER stop
+    class HUM human
+    style RUN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+    style ENDR fill:#FBFCFD,stroke:#CBD5E1,color:#475569
 ```
 
 Nobody waits on anybody: the finder is hunting the next bug while the fixer is
