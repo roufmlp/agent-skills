@@ -7,8 +7,8 @@ These two skills spawn a lot of subagents. A single nineteen-issue run of
 what a run costs and most of what it catches: **which model runs each role**, and
 **how hard that role is told to think**.
 
-For four months I answered both from documentation. This is what happened when I
-measured instead.
+Until the day I ran this, I answered both from documentation. This is what
+happened when I measured instead.
 
 ---
 
