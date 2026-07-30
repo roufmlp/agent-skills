@@ -276,13 +276,6 @@ researches topics; here the panel is picked per artefact instead. The rule that
 makes it safe on career copy: personas advise on selection and framing only, and
 one suggesting a fabricated number is overruled in synthesis, not obeyed.
 
-### [memory-reel](skills/memory-reel/SKILL.md)
-
-A different genre: turns a folder of mixed photos and videos into an edited,
-music-driven film, unattended. Inventory and contact sheets before any questions,
-a plan the user approves before any build, and chunked resumable scripts because
-sandbox shells die mid-render. First version; actively improving.
-
 ## Steering
 
 [steering/](steering/) holds the standing rules every session loads: a lean
@@ -292,8 +285,10 @@ mandatory, how to brief me on manual steps),
 partly from Wikipedia's "Signs of AI writing" catalogue) and
 [coderules.md](steering/coderules.md) (security non-negotiables grounded in the
 OWASP Top 10 and the Supabase production checklist, plus a pre-launch gate that
-runs every time). These are the difference between an agent that works for me and
-an agent that works.
+runs every time), and [designrules.md](steering/designrules.md), which loads on
+demand through the skill below rather than sitting in every session's context.
+These are the difference between an agent that works for me and an agent that
+works.
 
 ## The agent definitions
 

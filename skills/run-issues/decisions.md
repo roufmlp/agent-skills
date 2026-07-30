@@ -4,7 +4,20 @@ Read this before changing how the run works. Do not read it to run one — the
 skill and the agent files are self-contained. Nothing here is loaded into a
 subagent's context.
 
-Newest section last.
+Newest section last, each dated. It is a running log, not a document — entries
+were written the day the incident happened and are left as written, including
+the ones later overturned. That is the point of keeping it.
+
+**Passing through and curious?** Three entries carry the argument on their own:
+
+- [What was measured, not assumed](#what-was-measured-not-assumed) — where a
+  four-month-old assumption met a stopwatch and lost.
+- [A blocked issue stops its dependents, not the
+  run](#a-blocked-issue-stops-its-dependents-not-the-run-2026-07-26) — the
+  cheapest correctness rule here, and it took a bad run to see it.
+- [Prose rejections are fixed by deletion, not
+  refinement](#prose-rejections-are-fixed-by-deletion-not-refinement-2026-07-28)
+  — what gate feedback taught about writing.
 
 ---
 

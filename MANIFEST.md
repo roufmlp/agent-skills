@@ -19,12 +19,11 @@ Listed in the order the loop runs.
 | `agents/*.md` | `~/.claude/agents/*.md` (13 role definitions the orchestration skills spawn) |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |
-| `skills/designrules/designrules.md` | `~/.claude/designrules.md` |
 | `skills/designrules/SKILL.md` | `~/.claude/skills/designrules/SKILL.md` (pointer adapted for this repo) |
-| `skills/memory-reel/` | Claude desktop app personal skill (export from Settings → Skills) |
 | `steering/CLAUDE.md` | `~/.claude/CLAUDE.md` |
 | `steering/writingrules.md` | `~/.claude/writingrules.md` |
 | `steering/coderules.md` | `~/.claude/coderules.md` |
+| `steering/designrules.md` | `~/.claude/designrules.md` |
 
 ## Scrub rules (run on every sync)
 
