@@ -60,8 +60,8 @@ post-deploy smoke walk is mandatory and owned by the merging session.
 
 The gates themselves were re-examined and kept — the run's seven rejections were
 all real money or auth defects. What leaked was deployed-behaviour-on-real-data,
-which these rules aim at. Real leak: an acceptance of "never Telegram" was proven
-on a supplier that had no Telegram connection; the connected one broke it live.
+which these rules aim at. Real leak: an acceptance of "never notify" was proven
+on a record with no messaging connection; the connected one broke it live.
 
 ---
 
@@ -197,8 +197,8 @@ escalated attempt 3 that passed took 1h27m. Three causes, and the fixes for two
 of them are in this revision:
 
 1. *The criteria said what to change, never what must not change.* Attempt 1 met
-   all four acceptance criteria while dropping the supplier page cap —
-   `SUPPLIER_PAGE_SIZE` 24 became the page sequence `[1, 31, 24, 24, 24, 24, 4]`.
+   all four acceptance criteria while dropping the page cap —
+   `PAGE_SIZE` 24 became the page sequence `[1, 31, 24, 24, 24, 24, 4]`.
    Implementers now name the behaviours their diff sits beside (paging, limits,
    ordering, counts, permissions) and check none was spent to buy a criterion.
    The real fix is invariants at authoring time — still deferred, now priced.

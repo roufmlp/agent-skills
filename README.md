@@ -6,6 +6,16 @@ and a parallel bug hunt that spawn fresh subagents for every job, gate their out
 adversarially, and resume themselves across rate limits. Everything here runs my
 real projects first; this repo is the record.
 
+## The setting nothing read
+
+For four months these skills carried a table assigning a thinking-effort level to
+every role. Nothing in the harness ever read it — the `Agent` tool takes a model
+but has no effort parameter, so every worker had been inheriting one session-wide
+setting the whole time. [How the models and effort levels were actually
+chosen](docs/model-and-effort-choices.md) is the record of finding that, measuring
+the replacement instead of guessing at it, and reporting the result where it
+contradicted the documentation.
+
 ## How the pieces fit
 
 Three layers. Steering documents set standing rules for every session. Skills
@@ -301,9 +311,7 @@ and the cross-issue seam agent).
 
 This is also the only way to set effort per role — the `Agent` tool takes a model
 but no effort parameter, so without these files every worker silently inherits one
-session-wide setting. [How the models and effort levels were
-chosen](docs/model-and-effort-choices.md), including what the measurements said and
-where they contradicted the documentation.
+session-wide setting.
 
 ## Case study
 

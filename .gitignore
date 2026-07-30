@@ -1,0 +1,7 @@
+# Agent working directories — session state, worktrees, scratch notes.
+# Never published: these carry unscrubbed project detail and personal names.
+.claude/
+.scratch/
+
+# OS noise
+.DS_Store
