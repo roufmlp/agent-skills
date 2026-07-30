@@ -8,10 +8,10 @@ real projects first; this repo is the record.
 
 ## The setting nothing read
 
-For four months these skills carried a table assigning a thinking-effort level to
-every role. Nothing in the harness ever read it — the `Agent` tool takes a model
-but has no effort parameter, so every worker had been inheriting one session-wide
-setting the whole time. [How the models and effort levels were actually
+From the first version of these skills until the week I checked, they carried a
+table assigning a thinking-effort level to every role. Nothing in the harness ever
+read it — the `Agent` tool takes a model but has no effort parameter, so every
+worker had been inheriting one session-wide setting the entire time. [How the models and effort levels were actually
 chosen](docs/model-and-effort-choices.md) is the record of finding that, measuring
 the replacement instead of guessing at it, and reporting the result where it
 contradicted the documentation.
