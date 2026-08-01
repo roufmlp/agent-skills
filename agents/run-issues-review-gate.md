@@ -32,7 +32,10 @@ a lookalike that is easier to build? Do the tests pin the behaviour, or do they
 mirror the implementation so they would pass either way? What input would break
 this that nobody thought about? Check the diff against the repo's coderules — no
 bypassed controls, no invented or unnecessary dependencies, parameterised queries,
-nothing secret reachable from a browser.
+nothing secret reachable from a browser. **Load the rules before you judge against
+them**: invoke the `coderules` skill if the setup registers one, otherwise read the
+repo's own security rules. Your context does not carry them by default. If neither
+exists, say so in your report and judge against the four checks named above.
 
 **Report everything you find.** Include findings you are uncertain about or judge
 low-severity, with a confidence and a severity attached. Do not filter for

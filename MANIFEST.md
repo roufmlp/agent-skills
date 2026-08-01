@@ -16,7 +16,9 @@ Listed in the order the loop runs.
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
-| `agents/*.md` | `~/.claude/agents/*.md` (13 role definitions the orchestration skills spawn) |
+| `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
+| `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
+| `agents/*.md` | `~/.claude/agents/*.md` (15 role definitions the orchestration skills spawn) |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |
 | `skills/designrules/SKILL.md` | `~/.claude/skills/designrules/SKILL.md` (pointer adapted for this repo) |
@@ -25,10 +27,19 @@ Listed in the order the loop runs.
 | `steering/coderules.md` | `~/.claude/coderules.md` |
 | `steering/designrules.md` | `~/.claude/designrules.md` |
 
+Two parts of `~/.claude/CLAUDE.md` never ship:
+
+- The `## Public skills repo` section. It names this repo's location on my machine,
+  and rule 1 below covers it.
+- The `triage` parenthetical under `## The chain, and where to start`. It publishes
+  what my repos do not have. No rule reaches it, so it is named here.
+
 ## Scrub rules (run on every sync)
 
-1. Remove personal housekeeping lines (master-copy locations and sync notes
-   pointing into my private notes vault).
+1. Remove personal housekeeping lines: master-copy locations, sync notes, and any
+   line naming a path on my machine, including this repo's own location, a notes
+   vault, or a project checkout. This governs the files being published. The source
+   table above names live paths on purpose, and stays.
 2. Remove project-specific paths and client-identifying names. Tools and
    platforms (Zoho, Vercel, Supabase) may stay; client and product names may not.
 3. **The published pack runs unchanged, on any repo, with nothing outside it.**

@@ -267,14 +267,21 @@ instruction; a checklist an agent can be held to is.
 
 ### [panel-review](skills/panel-review/SKILL.md)
 
-The orchestration idea pointed at prose. One reviewer has blind spots, so this
-spawns four to six personas as parallel subagents — each gets the draft, the
-target and its own brief, never another persona's output — then synthesises on
-agreement, maps the disagreements and decides each with a stated reason. The
-mechanism is borrowed from Stanford's STORM (OVAL Lab, NAACL 2024), whose panel
-researches topics; here the panel is picked per artefact instead. The rule that
-makes it safe on career copy: personas advise on selection and framing only, and
-one suggesting a fabricated number is overruled in synthesis, not obeyed.
+The orchestration idea pointed at judgement — prose or a system design. One
+reviewer has blind spots, so this spawns three to eight personas as parallel
+subagents, each with its own lens and never another persona's output, then
+synthesises on agreement and maps the disagreements, deciding each with a stated
+reason. The mechanism is borrowed from Stanford's STORM (OVAL Lab, NAACL 2024),
+whose panel researches topics; here the panel is *derived*: enumerate the distinct
+ways the artefact can be wrong, name who pays for each, and one exposure buys one
+seat. At `deep` the same list also yields a frozen scenario corpus and a set of
+invariants, so every persona walks identical cases; personas left to derive their
+own walk different inputs, and the map then reports imagination as conflict. Tiers
+route on blast radius, not length, and the `deep` tier adds a refutation gate that
+attacks the panel's own findings and retracts on uncertainty. Two rules keep it
+honest: a claim without a citation is not a claim, and any lens satisfied by
+*adding* material may only propose
+material the artefact already supports.
 
 ## Steering
 
@@ -298,11 +305,12 @@ An agent file carries its own brief, model and effort level, and is loaded only
 when that role actually runs — so the skill stays a thin protocol and the detail
 lives with the role that needs it.
 
-Thirteen roles: six for `run-issues` (implementer, escalated implementer, verify
+Fifteen roles: six for `run-issues` (implementer, escalated implementer, verify
 gate, review gate, a critical review gate for diffs that change money or auth, and
 the coherence finale), five for `parallel-hunt` (finder, fixer, claim gate, fix
-gate, and a critical fix gate) and two for `harden-issues` (the per-issue attacker
-and the cross-issue seam agent).
+gate, and a critical fix gate), two for `harden-issues` (the per-issue attacker
+and the cross-issue seam agent) and two for `panel-review` (one persona seat and
+the refutation gate).
 
 This is also the only way to set effort per role — the `Agent` tool takes a model
 but no effort parameter, so without these files every worker silently inherits one
@@ -319,14 +327,17 @@ the post-run review that fed eight revisions back into the skill you see here.
 ## Using these yourself
 
 Copy any skill folder into `~/.claude/skills/` and it becomes invocable in Claude
-Code. The orchestration skills assume issues living as files (this pack's
-convention: `.scratch/<feature>/issues/`, a `Status:` line first) and a repo with
-tests worth gating on; the steering docs are mine — take the structure, replace
-the taste.
+Code. `panel-review` is the one exception to how skills get picked up: its
+frontmatter carries `disable-model-invocation: true`, so you invoke it by name and
+no model reaches for it on its own. The orchestration skills assume issues living
+as files (this pack's convention: `.scratch/<feature>/issues/`, a `Status:` line
+first) and a repo with tests worth gating on; the steering docs are mine — take
+the structure, replace the taste.
 
-**The orchestration skills also need the agent definitions.** Copy `agents/`
-into `~/.claude/agents/` — the runner spawns roles by name, so without them a run
-stops at the first spawn with "agent type not found". Two things to know: newly
+**`run-issues`, `parallel-hunt`, `harden-issues` and `panel-review` also need the
+agent definitions.** Copy `agents/` into `~/.claude/agents/` — the runner spawns
+roles by name, so without them a run stops at the first spawn with "agent type not
+found". Two things to know: newly
 copied types can take a moment to appear, so restart Claude Code only if a spawn
 still reports the type missing; and an invalid `effort:` value is accepted
 silently and falls back to the default, so a typo costs you the setting with no

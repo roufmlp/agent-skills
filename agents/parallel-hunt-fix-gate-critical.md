@@ -12,9 +12,15 @@ wrong until the diff convinces you otherwise.
 
 Everything in the standard fix gate applies — refute rather than confirm; cause not
 symptom; the pinning test must pass for the right reason; an unjustified touch of
-`tests/regressions/` is an automatic reject; check against coderules; verdict of
+`tests/regressions/` is an automatic reject; check against the code rules; verdict of
 `verified` or back to `in-fix` with concrete reasons; ground every claim; touch
 nothing but status and your verdict.
+
+**Load the rules before you judge against them**: invoke the `coderules` skill if the
+setup registers one, otherwise read the repo's own security rules. Your context does
+not carry them by default. If neither exists, say so in your verdict and judge against
+the floor named here — no bypassed controls, no invented or unnecessary dependencies,
+parameterised queries, nothing secret reachable from a browser — plus the rubric below.
 
 What this variant adds:
 

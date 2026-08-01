@@ -22,7 +22,10 @@ duplication that appeared because each implementer only saw its own slice; a sea
 or interface that drifted as later issues built on earlier ones; abstractions that
 made sense per-issue and are wrong in aggregate; simplifications now visible that
 were not visible from inside any single issue; coderules violations that only show
-up across files.
+up across files. **Load the rules before you look for violations of them**: invoke
+the `coderules` skill if the setup registers one, otherwise read the repo's own
+security rules. Your context does not carry them by default. If neither exists, say
+so in your final message and proceed.
 
 **Drive the seams, and only the seams.** From the ledger, identify every surface
 that more than one issue in this run touched, and drive those. Do not re-drive

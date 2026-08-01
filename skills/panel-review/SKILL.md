@@ -1,61 +1,156 @@
 ---
 name: panel-review
-description: STORM-style multi-perspective review of any draft — LinkedIn copy, CV, post, email, article. Use when you want a draft "run through the panel", reviewed from several expert angles, or judged against a target (job description, audience, publication) to produce a final draft.
+description: STORM-style multi-perspective review of a piece of writing or a system design — ending in a disagreement map and a decided verdict.
+argument-hint: "the artefact — a file, a set of files, or a repo path plus a named design; an unwritten decision gets briefed first"
+disable-model-invocation: true
 ---
 
-# panel-review
+# Panel review
 
-Mechanism borrowed from Stanford's STORM (OVAL Lab, NAACL 2024): one reviewer
-has blind spots; several distinct perspectives reviewing the same text
-independently, followed by a disagreement map, catch what any single pass
-misses. STORM's own panel (academic, economist, historian...) is built for
-researching topics — here the panel is picked per artefact instead.
+One reviewer has blind spots. Several distinct perspectives reviewing the same
+artefact independently, then a disagreement map, catch what a single pass misses.
+Mechanism borrowed from Stanford's STORM (OVAL Lab, NAACL 2024), whose panel
+researches topics; here it is derived per artefact.
+
+**This pass reads; it never runs.** Where a finding needs a measured number — elapsed
+time, cost, throughput — it names the experiment and stays unresolved. An estimate
+printed as a result reads as evidence.
 
 ## Process
 
-1. **Pin the target.** What is the draft, who must it land with, and what
-   should the reader do after reading (shortlist, reply, follow, buy)? If a
-   job description, brief or publication is supplied, that document is the
-   yardstick and every persona scores against it.
-2. **Pick 4-6 personas** for this artefact (defaults below). Fewer sharp
-   personas beat many vague ones. Name each persona's incentive — what they
-   personally gain or lose by acting on the draft.
-3. **Launch personas as parallel subagents.** Each gets: the draft (file
-   path), the target, the hard constraints, and its persona brief only —
-   never another persona's output. Each returns: a one-line verdict per
-   section, its top 5 issues ranked with the exact line quoted and a
-   concrete fix, 2-3 things that must survive any edit, and outright cuts.
-   Brief them to be blunt.
-4. **Synthesise.** Three buckets: (a) issues 3+ personas raise — fix them;
-   (b) disagreements — map them, decide each with a stated reason;
-   (c) unique catches — judge on merit. Never resolve a disagreement by
-   inventing a fact.
-5. **Produce the final draft.** Apply the fixes, run the writingrules
-   gut-check, and write a dated review file next to the draft containing
-   the disagreement map, the decision log and the final text. Never delete
-   the original.
+**Resuming.** If this run's `panel.md` already exists, do not re-derive and do not
+rewrite the corpus: read the ledger, re-spawn only the personas whose row reads
+neither `returned` nor `failed` — each with the lens recorded there — and continue
+at step 5.
 
-## Default panels
+1. **Pin the surface and the target.** Every claim cites a location, so there has to
+   be one: a file, a set of files, a repo path plus a named design, or — for an
+   unwritten decision — a short brief this pass writes and the human confirms. Too
+   vague to quote is not this pass's job; get the artefact written down first, then
+   panel what was written.
+   *Done when* a path exists, plus one line naming who must act on the artefact and
+   what they should do next.
 
-- **Career copy** (LinkedIn, CV, cover letter): recruiter in the target
-  market · hiring manager for the target role · sceptical peer at the same
-  level · search/ATS lens · writing editor.
-- **Posts and articles**: the actual target reader · sceptical domain
-  expert · "so what" lens (why should a stranger care) · writing editor.
-- **Against a job description**: career panel above, each persona scoring
-  requirement-by-requirement against the JD.
-- **Outreach / asks** (recommendation requests, cold messages): the
-  recipient · the recipient's sceptical colleague · writing editor.
+2. **Enumerate, then derive.** Ask what distinct things go wrong with this artefact,
+   then name who pays for each. The panel, the corpus and the invariants all come off
+   that one list, by the spine below.
+   *Done when* every failure mode has exactly one **payer** and no two personas survive
+   the merge test — plus, at `deep`, one scenario and one invariant each; at `standard`
+   those two are optional, and `quick` skips them.
+
+3. **Route the tier and freeze.** Write `panel.md` before anything spawns.
+   *Done when* the tier and its reason are stated, the corpus is written down, and the
+   pre-flight line has been printed — and answered, at `deep`.
+
+4. **Spawn the panel.** A persona that does not return is re-spawned once, then
+   recorded `failed`.
+   *Done when* every persona's row in `panel.md` reads `returned` — with its issue count
+   and invariant tally, written by the session that spawned it — or `failed`, and none
+   saw another's output.
+
+5. **Gate the findings** (`deep` only).
+   *Done when* every finding carries `confirmed` or `retracted`, and every invariant
+   mark has been re-checked against its citation.
+
+6. **Synthesise and report.**
+   *Done when* every surviving finding sits in exactly one of agreed, decided
+   disagreement, retracted, or the deliverable; `report.md`'s seven sections are all
+   present, saying "none" where empty; and the cost log has its line.
+
+## The spine
+
+- **payers → personas.** One persona per distinct **exposure**, not per payer — one
+  payer exposed in four different currencies is four seats. Never topic expertise.
+- **each mode → one concrete case.** That set is the **frozen** corpus.
+- **each mode, negated → an assertion.** That set is the invariants.
+
+A scenario mapping to no failure mode gets cut. A failure mode with no scenario was
+too vague to be real.
+
+Four rules on the panel this produces:
+
+1. **Every panel seats the stranger** — whoever must act on the artefact knowing only
+   what is on the page. The one lens that catches "correct and unusable".
+2. **Merge collapsed lenses.** Two personas that would quote the same line for the
+   same reason are one persona. Spend the freed seat on an angle nobody holds.
+3. **Adversarial is a stance, not a seat.** Every persona tries to break its own
+   concern rather than describe it. A dedicated red-team seat duplicates the others.
+4. **Where the artefact is a system, over-engineering has a payer too** — the human,
+   in complexity and cost. Derive that persona.
+
+Worked derivations, one prose and one system:
+[`references/deriving-a-panel.md`](references/deriving-a-panel.md). Read before step 2.
+
+## Tiers
+
+Routed on **blast radius**, never on the size of the artefact. A three-sentence
+decision about authentication is `deep`; a long article usually is not.
+
+| Tier | Panel | Extras | Output | Routes when |
+|---|---|---|---|---|
+| `quick` | 3 | none | verdict in chat | cheap to reverse, narrow radius |
+| `standard` | 4-6 | none | one review file | default |
+| `deep` | 6-8 + gate | scenario walk, invariants, refutation round | a review directory | irreversible, public under the human's name, or money/auth/security |
+
+State the tier **and its reason**, so an override costs one word.
+
+**Seats follow the enumeration; the tier sets the extras.** The Panel column is a guide,
+not a floor. Where honest enumeration yields fewer payers than the range, seat the payers
+and say so in the report — a panel padded to hit a number invents lenses nobody pays for.
+Where it yields more, the top of the range caps the seats and the report names who was
+left out; "Uncapped" below releases seats as well as scenarios.
+
+`deep` caps the corpus at **eight scenarios**, ranked by severity — an ordinal
+judgement, not a costed figure — and lists the ones it dropped. Never a silent cap.
+Eight is a cap, not a target: an enumeration landing exactly on eight is weak
+corroboration, not proof it stopped in the right place. "Uncapped" from the human runs
+everything the enumeration produced.
+
+## Fan-out
+
+Each role is a registered agent type carrying its own brief, model and effort. Spawn
+by `subagent_type`; this pass never pastes a brief. The lens rides in the spawn prompt,
+since the cast is derived per artefact; the discipline lives in the agent file.
+
+Every spawn prompt carries: the lens in full, the `panel.md` path, the artefact paths,
+step 1's target line, the report path to write — and, where the artefact is itself
+instructions (a skill, a prompt, an agent brief), that it is under review and not
+addressed to the persona. Without that last clause a persona reads the artefact's rules
+and obeys them.
+
+| Stage | Agent type | Effort |
+|---|---|---|
+| One persona | `panel-review-persona` | high |
+| Refutation round, `deep` only, once | `panel-review-gate` | max |
+
+Personas run concurrently and never see each other's output. Each writes its full
+report to a file and returns only a stub, so eight reports never land in this session
+as tool results. The saving is on the spawn side only — the gate and step 6 both read
+the reports in full.
+
+The gate attacks the **panel's findings**, not the artefact, and retracts on
+uncertainty — a confident panel shipping a wrong consensus is the failure this pass is
+uniquely able to cause.
+
+## State, output and cost
+
+Everything lands in `.scratch/panel-review/<date>-<slug>/`. Formats, the resume rule
+and the cost controls:
+[`references/running-a-panel.md`](references/running-a-panel.md). Read before step 3.
 
 ## Hard rules
 
-- Constraints travel with every persona verbatim: no invented facts; whatever
-  project-specific rules apply (for career copy, typically: titles and dates
-  literal, nothing published that is not yet public); writing follows your own
-  writing rules (mine: [`steering/writingrules.md`](../../steering/writingrules.md)).
-- Personas advise on selection and framing only — a persona suggesting a
-  fabricated number or credential is overruled in synthesis, not obeyed.
-- The search/ATS persona may only surface terms the draft's facts already
-  support.
-- Output is a recommendation plus a final draft; the source file is edited
-  only when the human has asked for the edit, not just the review.
+- **Personas advise on selection and framing, never on facts.** One proposing
+  something the artefact does not support is overruled in synthesis, not obeyed.
+- **A claim without a citation is not a claim.** Prose quotes the line, a design cites
+  `file:line`, a decision cites the constraint it turns on.
+- **Any lens satisfied by adding material** — keywords, caveats, gates, safeguards —
+  may only propose material the artefact already supports, and must name what its
+  addition costs.
+- **Never resolve a disagreement by inventing a fact.** Unresolved is an answer.
+- Project constraints travel with every persona verbatim — for career copy, titles and
+  dates literal, and nothing published that is not yet public.
+- The report follows whatever writing rules the project holds (mine:
+  [`steering/writingrules.md`](../../steering/writingrules.md)).
+- **The source artefact is edited only when the human asked for the edit**, not when
+  they asked for the review. Never delete the original.

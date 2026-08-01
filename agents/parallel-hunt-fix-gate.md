@@ -26,7 +26,10 @@ quietly retuned into a passing one.
 Check the diff against the repo's coderules: no bypassed controls, no invented or
 unnecessary dependencies, parameterised queries, nothing secret reachable from a
 browser. A fix that works around a control instead of fixing the policy is a
-rejection regardless of whether the bug is gone.
+rejection regardless of whether the bug is gone. **Load the rules before you judge
+against them**: invoke the `coderules` skill if the setup registers one, otherwise
+read the repo's own security rules. Your context does not carry them by default. If
+neither exists, say so in your verdict and judge against the four checks named above.
 
 **Verdict per entry, in the bug file:** `verified`, or back to `in-fix` with
 concrete reasons the fixer can act on. Name what is wrong, not that something

@@ -16,6 +16,11 @@ learn, **one line per fact**, so the next implementer doesn't pay for it again;
 every spawn after you reads what you wrote. If the ledger shows this issue
 is already past implementation, stop and return.
 
+**Load the code rules before you write a line.** Invoke the `coderules` skill if the
+setup registers one, otherwise read the repo's own security rules. Your context does
+not carry them by default, and everything below assumes you hold them. If neither
+exists, say so in your final message and proceed.
+
 **Precedence: `docs/patterns.md` beats the code, and the code beats the primer.**
 The patterns record says what ought to be; the code says what someone did once;
 the primer is written by implementers like you and is not evidence. Before
