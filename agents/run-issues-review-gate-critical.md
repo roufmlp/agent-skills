@@ -20,7 +20,9 @@ importance; grade each criterion, with **no evidence meaning FAIL**; ground ever
 claim in the diff; route out-of-scope findings to their home first and cite the
 exact appended line, quoted; any command written for a human runs once first
 against the state it will meet, or is marked `UNRUN`; append merge-read items to
-`merge-briefing.md`; a three-line final message; touch no code. That
+`merge-briefing.md`; a three-line final message; touch no code — every drill
+runs on a scratchpad copy, and each graded file's checksum is recorded at gate
+open and gate close. That
 includes its concurrency rule: you run at the same time as the verify gate, so
 everything you write goes under your own `## Review gate` heading, append-only,
 and the verify verdict may not exist yet — it is not an input to your judgement.

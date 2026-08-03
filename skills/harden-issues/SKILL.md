@@ -1,6 +1,6 @@
 ---
 name: harden-issues
-description: Attack acceptance criteria at authoring time — a blind-spot pass over issue files that sharpens criteria with evidence, names invariants, and routes open forks to the human. Use before a /run-issues batch (pre-batch pass over ready-for-agent issues) or when an upstream issue-drafting pass invokes it on drafts. Also on "harden these issues", "pre-batch pass", "attack the criteria".
+description: Attack acceptance criteria at authoring time — a blind-spot pass over issue files that sharpens criteria with evidence, names invariants, and routes open forks to the human. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /harden-issues, or when an upstream issue-drafting pass calls it on freshly drafted slices. Never infer it from wording such as "harden these issues", "pre-batch pass" or "attack the criteria".
 argument-hint: "issue numbers, a range, 'all ready-for-agent', or nothing when invoked on drafts by an upstream tool"
 ---
 
@@ -51,11 +51,20 @@ Findings go to files, not through this session's context: attackers write
 `.scratch/<feature>/harden/seam.md`. The pass reads counts and questions, never
 the working.
 
-**Model: the agents ship on `model: inherit`.** Blind-spot hunting benefits from a
-second, differently-tuned model rather than the session's default, so pin one in
-the agent frontmatter if you have one available and trust it on this job. Either
-way run it at `high`, not `max`: the checklist is enumeration against a file, and
-enumeration is recall rather than chained reasoning.
+**Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
+the tier the session was launched on. A second, differently-tuned model was
+pinned here once, for blind-spot hunting; the pin is gone because it hid the
+choice inside an agent file. To harden on a different model, launch the session
+on it. Effort stays `high`, not `max`: the checklist is enumeration against a
+file, and enumeration is recall rather than chained reasoning.
+
+**Print one launch line before spawn #1, on every invocation** — the resolved
+session model, the issues in scope, and how many attackers are about to spawn.
+Never pass a `model:` value on a spawn: the spawn tool's `model` parameter beats
+agent-file frontmatter, so a spawn-time value defeats `inherit` silently and
+nothing downstream records which tier ran. The launch line is the one place a
+wrong tier is visible, and the stamp does not carry it. Not a wait, an interrupt
+window — do not ask, and do not stall for an answer.
 
 **Never attack an issue a run holds.** Skip anything whose `Status:` is not
 `ready-for-agent`, or whose row in the same directory's `run.md` is past `queued`.

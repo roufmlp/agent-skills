@@ -43,6 +43,84 @@ whose premise was not tested is written as a hypothesis with an explicit
 premise-check clause for the implementer — testing the premise itself, not a
 narrow question near it.
 
+## OPEN DEFECT — the stamp and `Status:` are two sources of truth (found 2026-08-02)
+
+**Not yet fixed in SKILL.md. Fix before the next standalone pass.**
+
+Found after a model-comparison pass over eight issues. All three arms hit it, so it
+is the skill's fault rather than one model's.
+
+**What happened.** Five issues came out of the pass with
+`Hardened (provisional): <date> — n sharpened, m defaults pending.` and with their
+`Status:` line still reading `needs-harden`. By this skill a provisional stamp puts
+an issue in scope. By `/run-issues`, `all` resolves scope from each issue file's
+`Status:` line and takes only clean `ready-for-agent` issues, skipping `needs-*`. So
+all five would have been silently dropped from the next batch, while this skill's own
+output said they were ready. Nothing errors. The run just comes back smaller than it
+should, and nobody is told which issues went missing.
+
+**Why the skill causes it.** SKILL.md says "Then stamp the issue, one line under
+`Status:`". It says where to put the stamp and never says to update `Status:` itself.
+The only place it touches `Status:` is the failure road — "set `needs-harden`
+instead" when an answer needs input nobody has. So a pass that succeeds has no
+instruction to clear the `needs-harden` it started from, and an issue that entered
+through the standalone door keeps the status that sent it here.
+
+**A second, related contradiction, same cause.** The fan-out guard says "Skip
+anything whose `Status:` is not `ready-for-agent`", but the standalone entry point
+says the pass runs over "any set of `ready-for-agent` or `needs-harden` issue files"
+and that `needs-harden` "is what a run sets when it finds criteria that are wrong or
+stale, so those issues return here". Read literally, the guard tells the pass to skip
+exactly the issues the entry point exists to serve. In practice every arm ignored the
+guard and attacked the `needs-harden` issues, which was the right call and is not what
+the text says.
+
+**Proposed fix, both parts in one edit.**
+
+1. In "Output and the stamp", make the status change explicit and part of stamping:
+   on a full or provisional stamp, set `Status: ready-for-agent`; keep any minting
+   note as a separate `Provenance:` line rather than a suffix on `Status:`. Say
+   plainly that the stamp and the status must agree, and that `/run-issues` reads the
+   status, not the stamp.
+2. In "Fan-out", scope the never-attack guard to what it is actually protecting
+   against — an issue a run currently holds. The guard's own justification is the
+   two-writer race ("Rewriting criteria under a working implementer"), so it should
+   key on the run's ledger and on `in-progress`, not on `Status:` being anything
+   other than `ready-for-agent`.
+
+**Cost if left.** Silent under-scoping of every batch after a standalone pass, in the
+direction that looks like success. This is the same shape as the defects the checklist
+exists to catch: a green that means nothing, with no observer.
+
+## The model pin is gone; both agents inherit (2026-08-02)
+
+The human's call. `harden-issues-attacker.md` and `harden-issues-seam.md` had
+pinned a specific model since they were written, on the theory that blind-spot
+hunting was the one job that model still led. Both now read `model: inherit`, so
+the pass runs on whatever tier the session was launched on. Effort is unchanged at
+`high`.
+
+Two reasons. The pin put the model in a file nobody reads at launch, so a session
+started on one tier quietly bought another for the hardest, most parallel stage of
+the pass. And the pinned model was credit-gated, which is why SKILL.md carried a
+respawn fallback — a branch that only exists because of the pin. Wanting a
+different model is now one action: launch the session on it.
+
+This also removes the last exception to `/run-issues`'s "workers inherit the
+session model" rule, so that rule's parenthetical about a deliberate pin went with
+it. The rule against passing `model:` on a spawn stands: the spawn tool's
+parameter still beats frontmatter, and `inherit` is exactly what it would defeat.
+
+**The launch line came with it, same day.** `inherit` makes the tier a launch-time
+choice, and this pass had nowhere that choice was visible: `/run-issues` prints
+its resolved model before spawn #1 and records it in the ledger and the merge
+briefing, while a harden stamp carries a date and two counts and no tier. So a
+spawn-time `model:` value, or a session launched on the wrong tier, would have run
+the whole pass unobserved. SKILL.md now requires the same launch line, and repeats
+the never-pass-`model:` rule where the spawning happens rather than only in
+`/run-issues`. Asked for after the question of how likely a stray wrong-tier spawn
+actually was — low, but nothing would have caught one.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel review, taken by the human: three

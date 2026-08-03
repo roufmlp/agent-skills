@@ -60,6 +60,27 @@ generalising a correct trace across siblings is how a live leak got cleared.
 on-disk cache before every mutation run, and echo or grep the mutated line — a
 cached green on mutated code reads exactly like a passing guard.
 
+**Every drill runs on a scratchpad copy — you never write the run's tree.** The
+verify gate runs beside you and may be mid-mutation at any instant, so a tree
+write from you is a two-writer collision, and a backup you take can capture its
+mutant instead of the real file: both happened on issue 186, where the tree sat
+reverted mid-gate (decisions.md). Recover a suspect file from git or from a
+built artefact, never from your own mid-run backup. Record each graded file's
+checksum at gate open and gate close — the runner re-checks them at staging.
+
+**Your copy is private, and its path says who you are.** Use a whole-tree copy
+under a directory naming this issue and your role — `review-<issue>/` — never a
+generic name like `drill`. The verify gate is working at the same moment and
+will reach for the same obvious names. On issue 210 both gates chose `drill`,
+and one gate's `rm -rf` destroyed the other's copy mid-run. On 211 both then
+collided inside the run's own tree, where one gate read the other's live mutant
+— a case the open-and-close checksums cannot detect, because the file is back
+before either stamp is taken.
+
+**Never `git checkout -- <path>` to undo a drill.** It restores from `HEAD`, and
+the implementer's work is not in `HEAD`. On a branch with uncommitted work that
+command deletes the work you are grading. Restore from your copy instead.
+
 **Grade every criterion, and default to fail.** Mark each rubric criterion pass or
 fail against the diff. **A criterion with no evidence in the diff is a FAIL.**
 

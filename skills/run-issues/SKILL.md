@@ -1,6 +1,6 @@
 ---
 name: run-issues
-description: Autonomously implement a range of tracker issues one by one — a fresh implementer per issue working test-first, adversarial verify and review gates, two-strike escalation, ledger-driven resume across usage limits, and a human merge gate at the end. Use when the user wants issues implemented sequentially without supervision ("run issues 05-09", "implement all remaining issues", "continue until all issues are done"), or to RESUME an interrupted run ("/run-issues resume").
+description: Autonomously implement a range of tracker issues one by one — a fresh implementer per issue working test-first, adversarial verify and review gates, two-strike escalation, ledger-driven resume across usage limits, and a human merge gate at the end. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /run-issues (including /run-issues resume). Never infer it from wording such as "run issue 05", "implement the remaining issues" or "keep going until they are done" — treat those as ordinary requests and handle them in the session.
 argument-hint: "one issue, a range (05-09), an explicit list, or 'all'"
 ---
 
@@ -85,6 +85,16 @@ In the main checkout, under `.scratch/<feature>/`:
   issue files, which already carry it. It is a thirty-minute read or it has
   failed.
 
+  **The narrative sections are filled as each issue closes, not at the finale.**
+  What shipped, what was minted, what was skipped, what waits on the human —
+  each gets its lines when the issue that produced them goes `done`, while the
+  runner still holds the facts. On one run four sections were still empty
+  placeholders when the finale opened the file, and one of them was the section
+  that should have carried a deploy step — the single action in that batch that
+  changed what a customer reads. A reader starting at the top met a stale test
+  count before reaching the correction 100 lines down. An empty section is not
+  neutral: it reads as "nothing to report" (decisions.md).
+
 Ledger statuses: `queued → in-progress → gates → done`, plus `correction`
 (between `gates` and `done`, when taken) and `blocked`. Both gates run under the
 one `gates` status. Only the runner writes the ledger. Gates write
@@ -147,6 +157,26 @@ first, while the window exists.
    count). If verify rejects, read the review anyway: its findings still route,
    and its work is already spent.
 
+   **Concurrent gates share a tree but not a pen.** Both gate briefs require
+   mutation drills on scratchpad copies; a gate that genuinely must write the
+   tree declares it in its verdict, and then it is the only writer — a "touch no
+   code" gate that mutates source to prove a test can fail is a writer, whatever
+   its banner says. Before committing, re-check each graded file's checksum
+   against the ones the gates recorded at gate close. On one run the tree sat
+   reverted to the pre-fix file for two minutes mid-gate, one gate's backup
+   captured the mutant, and only a staging-time checksum stood between the run
+   and committing the defect it had just fixed (decisions.md).
+
+   **Each gate drills in its OWN private whole-tree copy, at a path carrying its
+   issue id and its role.** Never a shared scratch directory, and never a name
+   two gates could both choose. One batch lost work twice to this in a single
+   day: both gates on one issue picked the scratchpad name `drill`, and one
+   gate's `rm -rf` destroyed the other's copy mid-run; the next issue's gates
+   then collided in the run's own tree, where one gate briefly read the other's
+   live mutant. Checksums at gate open and close cannot see the second case —
+   the file is back before either stamp is taken. A private copy makes both
+   unrepresentable rather than detectable (decisions.md).
+
    **While the gates run, the runner preps issue N+1, read-only:** settle its
    road, size it, pre-write the spawn prompt, prune the ledger, run the fixture
    pre-check (below). None of it touches the tree, so single-writer holds; on
@@ -161,6 +191,14 @@ first, while the window exists.
    nothing and catches the shape defects no per-issue gate can see. Then commit,
    staging **explicit paths only** — never `git add -A` or `.`. Glance at
    `git status` and investigate anything unexplained *before* committing.
+
+   **The runner commits. An implementer never commits its own work**, and the
+   runner says so in every spawn. Two of the first three implementers on one
+   batch committed before either gate had opened. Neither did harm, and that is
+   the trap: a self-commit silently changes what "the diff" means to a gate
+   already reading it, so the runner must hand those gates an explicit commit
+   range instead of the working tree. Where an implementer has committed anyway,
+   do not revert it — record it and give the gates the range (decisions.md).
 5. **Both pass but a verdict enumerates follow-up items** (a gap on the issue's
    own invariant, a test the evidence says should exist) → ledger `correction`,
    not `done`. Re-spawn `run-issues-implementer` with the enumerated items, the
@@ -185,6 +223,35 @@ first, while the window exists.
    canonical statement per claim — everywhere else cites `file:line` and
    asserts nothing. The same rule governs post-block resolution rounds.
    (decisions.md.)
+
+   **Three rules on what a claim may SAY. They bind every artefact an agent
+   writes — issue files, the primer, migration headers, the briefing — not
+   only a rejection fix.** (decisions.md.)
+
+   *Never write that something is the only copy.* Uniqueness across a corpus is
+   not a fact one agent can establish, so "this is now the sole home of X" is a
+   guess wearing a fact's clothes. Cite the canonical location; do not claim it
+   is the only one. One primer asserted an issue file was the only copy of a
+   measured record while three others existed — and that sentence was written as
+   the REPAIR for a stale-prose defect, by an agent following the deletion rule
+   above. The class survives its own cure.
+
+   *A recorded cause is tested against a control, never merely observed.* One
+   run that works does not name the reason it works. The same primer recorded
+   that a package import succeeds "when node is launched from the worktree
+   root", having watched it succeed there. The cause was a `node_modules`
+   symlink: the import succeeds from any cwd that has one and fails from every
+   cwd that does not. One control run settles it. A wrong cause does the most
+   damage exactly where that one sat — in a line written to correct a previous
+   agent's wrong cause.
+
+   *Every citation carries its repo-relative path in full, every time.* Not the
+   first mention only, and never a bare filename afterwards. A cross-session
+   sweep of one batch found nine ambiguous citations across six issues; the
+   worst was a bare `review.ts` used eleven times where the tree holds two files
+   by that name. The wrong one resolves to plausible code, so the reader does
+   not discover the mistake — they find a defect that is not there, and an
+   implementer can lose a strike to it. Repetition is cheaper than ambiguity.
 6. Ledger `done`; set the issue's `Status:` to `done — on branch <branch>,
    unmerged` (gate history goes in the body — `all` runs parse that line).
 7. A gate rejects → re-spawn the implementer with the written reasons. If **both**
@@ -200,6 +267,15 @@ first, while the window exists.
    spec fault. After a criteria correction, the re-spawn prompt carries the
    CURRENT surviving contract — corrected criteria plus the latest verdicts
    only; verdicts graded against a superseded spec are journal, never prompt.
+
+   **Any figure or refutation the runner passes onward is re-derived first,
+   from a source that cannot drift, and the brief names that source.** Commit
+   times, a re-run command, the file itself — never the runner's own earlier
+   statement. A grep-backed refutation states its scope beside its conclusion.
+   Three runner errors in one run shared this shape: a transcribed figure off
+   by 960, a refutation from a grep that missed the call one directory over,
+   and hand-written timestamps an hour ahead of the clock (decisions.md).
+   Ledger actuals derive from commit times, full stop.
 
    **When the gates split:** a factual split is settled by the runner driving
    it — a tenancy claim by deleting the predicate (or planting the cross-tenant
@@ -272,6 +348,15 @@ briefing lists every such entry:
 
 Handoff documents are never the home for any of this.
 
+**A ruling that creates work gets its issue number in the same sitting as the
+ruling.** Not "that becomes its own issue" — the number, or the file and line
+where the work now lives. On one batch a ruling settled an open question by
+splitting a road out of scope; nine hours later no issue existed, and the only
+trace of the split was one phrase inside the original issue's own file. A verify
+gate happened to notice, and it was minted then. Nothing was watching for it, so
+nothing would have caught it a day later. A ruling with no artefact cannot be
+told apart from a ruling nobody made (decisions.md).
+
 ## Resolving a blocked issue
 
 Resolution happens after the run closes, and it is a procedure, not an evening
@@ -321,6 +406,15 @@ resumes rather than re-running:
    human's first instruction errored with `column does not exist`. decisions.md.)
    The gate briefs carry the same rule from the author's side; the runner
    re-checks when assembling.
+
+   **A published checksum expires the moment the file moves.** A correction
+   round re-stamps every checksum a gate published for a file it touched, and
+   the finale re-runs any that remain before the briefing closes. Anchor diff
+   commands to `main...HEAD`, never the working tree — a worktree diff prints
+   nothing once the work is committed, and an empty print cannot distinguish
+   "fine" from "the fix was reverted and committed". Both checksums on one issue
+   were correct at gate close and false three hours later, and running them read
+   as the exact alarm the gate wrote them to raise (decisions.md).
 
    If the finale fails on a usage limit, leave the ledger at
    `finale-judgment`, write the halt block, and revive after reset — never
@@ -417,14 +511,32 @@ before spawning anything, and recreate the cron.
 ## Pre-flight
 
 - **Print one launch line before spawn #1, on every invocation** — issues in
-  order, branch, and what will NOT happen (no merge, no prod). Not a wait, an
-  interrupt window (an 11.5-hour halt once came from a misread request —
-  decisions.md).
-- **The session is on the model the whole run should use.** Agent files use
-  `model: inherit`, so every worker inherits it. If the session is on a different
-  model, pass the intended model explicitly on every spawn — never ask, never
-  proceed on inherit from a wrong-model session; that silently changes the whole
-  run's tier.
+  order, branch, the resolved session model, and what will NOT happen (no merge,
+  no prod). Not a wait, an interrupt window (an 11.5-hour halt once came from a
+  misread request — decisions.md).
+- **Re-derive every fact the run will carry into its spawns, from source, and
+  name the source beside it.** Carry-forward entries, batch-plan sentences,
+  anything a previous session wrote down — none of it is evidence. Read the
+  function, run the query, open the migration. On one run the plan file said a
+  helper "answers null when the count is not one"; it actually ordered its rows
+  by creation time and returned the OLDEST, answering null only at zero. The
+  runner repeated it for nine hours across many spawns before a gate refuted it
+  from the migration file. The two versions fail in opposite directions — the
+  false one predicts a loud break, the true one a silent misfile — so the error
+  was invisible while it did damage. One read of the source at pre-flight would
+  have caught it (decisions.md).
+- **Workers inherit the session model. Let them.** Agent files use
+  `model: inherit`, so the run takes the tier it was launched on. Never pass a
+  `model:` value on a spawn to override that: the spawn tool's `model` parameter
+  beats agent-file frontmatter, so a spawn-time value silently defeats both
+  `inherit` and any model an agent file might pin on purpose. No agent file in
+  this pack pins one. Never ask, and never stall — the launch line above is
+  where a wrong tier gets caught, one keystroke before spawn #1.
+- **Record the session model in the ledger's owner line and in the merge
+  briefing.** A run on a tier this pipeline has no evidence for is still a valid
+  run, and it is also the first evidence at that tier — so whoever reads its
+  verdicts later has to know which tier produced them. Say it once, where the
+  verdicts live.
 - **Hardening stamp.** List every scoped issue whose file lacks a `Hardened:`
   line in the launch message, naming `/harden-issues` as the fix **for the next
   run**. Never run it against issues this run holds. Launch-time information for
@@ -439,6 +551,11 @@ before spawning anything, and recreate the cron.
   **If `all` resolves to nothing, say so and stop.** An empty scope means the
   batch was never hardened, not that there is no work — never treat it as a
   completed run.
+- **Confirm the dependency directory exists before trusting any green.** A
+  fresh worktree of one repo ran its typecheck to exit 0 with `node_modules`
+  absent — the compiler resolved off a global install and never loaded the
+  repo's own types. Install dependencies first, then run the checks; a green
+  produced without dependencies on disk is a false green (decisions.md).
 - **Verify the allowlist, never assert it.** Enumerate the command classes this
   run will use — typecheck, lint, test, the cold-build delete, git stage and
   commit, any migration script — and dry-run each in no-op form before

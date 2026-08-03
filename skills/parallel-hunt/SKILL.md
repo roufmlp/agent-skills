@@ -1,6 +1,6 @@
 ---
 name: parallel-hunt
-description: Run a parallel bug-hunt round — a finder and a fixer working concurrently over a shared register, with ephemeral adversarial gates reviewing every claim and every fix. Use whenever the user wants a bug hunt, verification round, hardening pass, or any run with two or more concurrent agents on one repo (finder/fixer, find-and-fix, "parallel run"). Also invoke to RESUME an interrupted hunt ("/parallel-hunt resume").
+description: Run a parallel bug-hunt round — a finder and a fixer working concurrently over a shared register, with ephemeral adversarial gates reviewing every claim and every fix. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /parallel-hunt (including /parallel-hunt resume). Never infer it from a request for a bug hunt, a verification round, a hardening pass or a find-and-fix run — say the command exists and let the user choose it.
 ---
 
 # Parallel hunt

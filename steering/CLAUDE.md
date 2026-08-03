@@ -53,23 +53,28 @@ without being asked:
   memory) — then the handoff expires. A new issue starts from its issue file, the
   primer, and CONTEXT.md/ADRs, not from another session's diary.
 
-## Parallel runs
-Any run with two or more concurrent agents on one repo (finder/fixer, bug hunt,
-verification round) follows the `parallel-hunt` skill — invoke it before starting,
-even if I forget to ask. Never improvise a multi-session run by hand.
+## The three heavy skills start on my command, never on my phrasing
+`run-issues`, `parallel-hunt` and `harden-issues` are expensive multi-agent runs.
+Start one only when I type its command: `/run-issues`, `/parallel-hunt`,
+`/harden-issues`. Nothing else counts. "Run issue 05", "hunt for bugs", "harden
+these issues" and every cousin of those phrases are ordinary requests — do the
+work in the session and, in one line, tell me the command exists if you think the
+full machinery would pay. The one exception is an upstream issue-drafting pass
+calling `harden-issues` on its own drafts, which that pass already authorises.
 
-## Issue runs
-Implementing tracker issues end-to-end (one issue or a range) follows the
-`run-issues` skill — same rule: invoke it even if I forget to ask, don't improvise
-a long implement session that carries tdd + verify + review in one context.
+Two guards survive the change. Never improvise a multi-agent run by hand: if I
+have not typed `/parallel-hunt`, do not spawn concurrent finders and fixers
+yourself. And a long implement session still carries tdd + verify + review in one
+context, which is worse work — say so when you see me heading there.
 
 ## The chain, and where to start
 A rough idea becomes shipped code through one path, each skill invoked in its own
 session: `to-prd` → `to-issues` → `harden-issues` → `run-issues` → merge and
 deploy → `parallel-hunt`. A bug report enters as an issue file and goes through
 `harden-issues` like anything else. `triage` is out of the chain, decided
-2026-07-27. Start at whichever step matches what I actually have; if I hand you
-a rough idea and no PRD, that is `to-prd`.
+2026-07-27. Tell me which step matches what I actually have — if I hand you a
+rough idea and no PRD, that is `to-prd` — then wait for me to type it. Naming the
+step is not starting it.
 
 **Nothing in that chain ever stops mid-run to ask me.** Every skill defaults its
 open questions, records each default as a default rather than a decision, and
@@ -86,6 +91,12 @@ provider's CURRENT official docs first and give today's actual button/menu names
 remembered/stale UIs — and cite the source. Show a screenshot or a simple visual when it
 helps. Split clearly into "you can do now" / "short session with me" / "still on my side
 (code)". Save the brief where it will actually be read: anything arising inside the
-issue chain goes to the pending-on-abdul file in the repo that work is in, which
-`daily-brief` surfaces in section 3 every day. A memory file only for things that
-outlive the project.
+issue chain goes to the pending-actions file in that project's memory directory,
+which `daily-brief` surfaces in section 3 every day.
+
+**That file is never copied into a repo, and every citation of it gives the absolute
+path in full.** Ruled 2026-08-04, after a merge briefing cited it by bare filename and
+sent me looking in the tree for it. Two files with one name drift within a week; the
+memory copy is the one every session updates at close; and it carries UUIDs, project
+refs and account ids that have no business in git history. Repeating a long path is
+cheaper than a pointer that resolves nowhere.

@@ -80,6 +80,18 @@ nothing. Drive a language-semantics claim in a REPL before writing it down.
 runner's on-disk cache before every mutation run, and echo or grep the mutated
 line first — a mutation that never happened reads exactly like a passing guard.
 
+**Never `git checkout -- <path>` to undo a drill.** It restores the file from
+`HEAD`, and your own work is not in `HEAD` — so on a branch with uncommitted
+work it does not undo the mutation, it deletes everything you have written to
+that file. Issue 219's implementer did exactly this and wiped its own work.
+Copy the file to your scratchpad before you mutate it, and restore from the
+copy.
+
+**You never commit.** The runner commits, once both gates have passed. Your work
+stays uncommitted in the working tree and that is correct — the gates read it
+there. A self-commit does no direct harm and that is what makes it dangerous: it
+silently changes what "the diff" means to a gate that is already reading one.
+
 **If the acceptance criteria are WRONG** — not merely hard, but incorrect or
 materially incomplete — stop, do not build to them, and say so with the concrete
 evidence that shows it. A gate will confirm or reject your claim. This is not an

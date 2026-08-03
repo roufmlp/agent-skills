@@ -794,3 +794,215 @@ false-stale or missed-stale wakeups on the mtime predicate; a prose rejection,
 if one recurs, closes in one delete-only round; no strike stands on a ground the
 runner's own brief mis-sorted; the merge briefing opens with this run's header
 only and reads in under thirty minutes.
+
+## Inherit means inherit: the model override removed (2026-08-01)
+
+Reverses "Model check gained its remedy: a non-Opus runner passes `model: opus`
+explicitly", from the 2026-07-27 second panel. Found by three personas
+independently in the 2026-08-01 cost panel, confirmed by its gate, and reversed.
+
+**What the rule said.** "The session model is Opus 5. Agent files use
+`model: inherit`, so every worker inherits it. If the runner session is not
+Opus, pass `model: opus` explicitly on every spawn — never ask, never proceed on
+inherit from a non-Opus runner."
+
+**Three defects, in order of size.**
+
+1. **It made the model dial unreachable.** The spawn tool's `model` parameter
+   takes precedence over the agent definition's frontmatter. So on any non-Opus
+   session the rule overrode every per-stage `model:` value in every agent file.
+   Nobody could test Sonnet on one stage, or on all of them, without first
+   finding this line. Launching on Sonnet looked like it bought Sonnet workers;
+   it would have bought a Sonnet runner driving Opus workers, at a higher bill
+   than either.
+2. **Its premise was already false.** "The session model is Opus 5" —
+   `harden-issues-attacker.md` had pinned a different model since it was
+   written, and `SKILL.md`'s own who-runs-what table says each role carries "its
+   own brief, model and effort".
+3. **It overrode a deliberate pin.** "Every spawn" includes the pinned one. The
+   author did not contemplate that case, and the rule as written breaks a stage
+   whose tier was chosen on purpose.
+
+**Never fired.** Every recorded run launched on Opus, so the branch was never
+taken. Untested text that would have taken effect the first time anyone ran the
+model experiment.
+
+**What replaced it.** Workers inherit; a spawn never carries a `model:`
+override. The anti-silent-degradation intent survives, moved from force to
+visibility: the launch line now prints the resolved session model inside the
+existing interrupt window, and the ledger owner line plus the merge briefing
+carry it so verdicts are read against the tier that produced them. The autonomy
+intent survives untouched — still never ask, still never stall.
+
+**Why visibility beats forcing.** Forcing bought protection against an accident
+nobody has had, and paid for it by making a deliberate change impossible. One
+printed word costs nothing and blocks the accident just as well, because the
+launch line already exists and is already an interrupt window.
+
+**The judge, next run:** whether the launch line's model word is actually
+printed. If a runner omits it, the guard has become prose and the rule needs a
+mechanical trigger, the way ledger pruning did.
+
+## Post-run revisions (2026-08-02)
+
+Three rules promoted from that run's decisions inbox, plus one pre-flight check.
+Gates drill mutations on scratchpad copies, with one tree writer at most while
+gates run and checksums re-checked at staging. A published checksum is
+re-stamped whenever a later round moves its file, and diff commands anchor to
+`main...HEAD`. A figure or refutation passed onward is re-derived from a source
+that cannot drift, with the source named. Pre-flight confirms the dependency
+directory exists before trusting any green.
+
+**The two-writer incident.** During one issue's gates, a source file on disk
+silently reverted to its pre-fix form — guard absent, 478 lines — for over two
+minutes, then restored itself. Both gates saw it independently. The verify
+gate's own mutation drill was the writer; the review gate's backup, taken inside
+that window, captured the mutant, so "restore from my backup" would have shipped
+the defect the issue existed to fix. A checksum re-checked at staging time
+caught it. The next issue's gates ran the new way — verify drilling on
+scratchpad copies, review never writing — and the tree file held one checksum
+from gate open to gate close. The old text said gates "touch no code" while
+requiring mutation drills; the drills were the code-touching. Both statements
+could not stand, so the drills moved off the tree.
+
+**The expired-checksum incident.** Both gates on one issue published staging
+checksums for the same test file. A correction round then added a fixture table
+to it. A merge reader running either command got FAILED — the precise alarm the
+gates wrote them to raise, with nothing wrong. The finale caught it and
+re-stamped, but only because the analysis pass looked; the rule makes the
+re-stamp part of the correction round itself. Same class: a `git diff --numstat`
+handed to a human printed nothing after commit, and empty was also what a
+reverted-and-committed fix would print.
+
+**The drifting-number incidents, three in one run.** A figure transcribed into
+a retry brief unchecked (4,687,680 for 4,688,640 — the implementer caught it);
+a causal refutation asserted from a grep scoped to one directory when the call
+sat one import away in another (the conclusion survived on the gate's reasoning,
+not the runner's); hand-written journal timestamps that ran an hour ahead and
+were corrected against `git log`. None was charged to an implementer; all three
+were the runner deriving from its own earlier statements.
+
+**The false-green launch.** The worktree shipped without its dependency
+directory and the typecheck exited 0 anyway — the compiler resolved off a global
+install with no repo types loaded. Caught at launch because the runner installed
+dependencies on principle. Now a named pre-flight check rather than a habit.
+
+**The judge, next run:** whether the gates' recorded open/close checksums
+actually appear in their verdicts, and whether the runner re-checks them at
+staging. If either half goes missing, the rule has become prose and wants a
+mechanical trigger, the way ledger pruning did.
+
+## Post-run revisions (2026-08-03)
+
+Two of the three candidates the finale left in the decisions inbox were taken.
+Both are now in SKILL.md step 5, beside the prose-deletion rule they extend: a
+claim may not say something is the only copy, and a recorded cause is tested
+against a control rather than merely observed. The third was declined in its
+prose form.
+
+**The run's shape, which is why these two exist.** Four issues, ten gate runs,
+one rejection (annulled as a criteria fault), zero strikes standing, 52% under
+the estimate. And **ten stale-prose defects against zero code defects that
+reached a gate uncaught.** Every one was a sentence true when written and false
+once something else moved. That ratio, not the schedule, is what the run
+measured.
+
+**The only-copy incident.** The primer carried an inverted jsonb claim. The
+runner deleted it and wrote, in its place, that one issue's file was now the
+sole home of the measured record. Three other copies existed. The repair for a
+stale-prose defect was itself a stale-prose defect of the same class, written
+by an agent that was following the deletion rule correctly. That is the whole
+argument for the new rule: deletion tells an agent what to remove and says
+nothing about what the replacement may assert.
+
+**The observed-cause incident.** A scratchpad script could not import a package.
+It worked when run from the worktree root, so the primer recorded the cwd as the
+cause. The real cause was a `node_modules` symlink; the import succeeds from
+any directory holding one. The line also existed to correct a previous primer's
+wrong cause, which is where a wrong cause costs the most.
+
+**The third candidate, declined in this form.** "A correction round re-stamps or
+expires every checksum it invalidates before it closes" is ALREADY promoted —
+2026-08-02 — and a correction round broke it anyway. The ruling is that a rule
+which has now failed after promotion does not want restating. The finale's
+mechanical form goes to the architecture session instead: publish every checksum
+as a command a human can run (`shasum -a 256 -c` against a stamped file), not a
+digest a human must trust. It fails loudly the moment a correction round moves
+anything, and it would have caught all ten of this run's defects rather than one.
+
+**A placement finding, not yet acted on.** The existing checksum-expiry rule
+sits in the Finale section (SKILL.md step 2 of the finale), not in step 5 where
+a correction round is actually closed. A runner reading step 5 to close a round
+never meets it. Whether the mechanical form supersedes the placement question,
+or the rule should also move, is for the architecture session.
+
+**The judge, next run:** whether stale-prose defects fall below ten with two
+more prose rules in place. If they do not, prose rules are not the instrument
+and the mechanical form should be bought without further evidence.
+
+---
+
+## The seven rules from the 2026-08-03 batch (adopted 2026-08-04)
+
+Thirteen issues, one strike and it was annulled on a criteria fault, twelve
+issues minted. Every rule below was written by something that went wrong in that
+run, and each is now in `SKILL.md` or an agent file rather than only here.
+
+**1. Gates drill in a private whole-tree copy, at a path naming the issue and
+the role.** Two collisions in one day. One issue's gates both chose the
+scratchpad name `drill`, and one gate's `rm -rf` destroyed the other's copy
+mid-run. The next issue's gates then collided inside the run's own tree, where
+one briefly read the other's live mutant. The second case is the reason a naming
+rule beats a detection rule: checksums at gate open and close cannot see it,
+because the file is restored before either stamp is taken. In
+`run-issues-verify-gate.md` and `run-issues-review-gate.md`.
+
+**2. Never `git checkout -- <path>` on a branch with uncommitted work.** It
+restores from `HEAD`, where the implementer's work is not. One implementer used
+it to undo a drill and deleted its own uncommitted work instead. The repair is a
+scratchpad copy taken before the mutation. In the implementer and both gate
+files.
+
+**3. Implementers never self-commit; the runner commits after both gates pass.**
+Two of the first three implementers on this run committed before the gates
+opened. Neither caused harm, which is exactly the trap — a self-commit silently
+changes what "the diff" means to a gate already reading one, and the runner then
+has to hand out explicit commit ranges. Where it has already happened, record it
+and give the gates the range rather than reverting. In `SKILL.md` step 4 and the
+implementer file.
+
+**4. A ruling that creates work gets its issue number in the same sitting.** A
+ruling settled an open question by splitting a road out of scope. Nine hours
+later no issue existed and the only trace was one phrase inside the original
+issue's own file. A verify gate happened to notice, and it was minted then.
+Nothing was watching for it. A ruling with no artefact cannot be told apart from
+a ruling nobody made. In `SKILL.md`, "Nothing finishes vaguely".
+
+**5. Facts carried into spawns are re-derived from source at pre-flight, with a
+citation.** The batch plan said a workspace helper "answers null when the count
+is not one". It orders its rows by creation time and returns the OLDEST,
+answering null only at zero. The runner repeated the false version for nine
+hours before a gate refuted it from the migration file. The two versions fail in
+opposite directions — the false one predicts a loud break, the true one a silent
+misfile — so the error stayed invisible while it did damage. In `SKILL.md`,
+Pre-flight.
+
+**6. Every citation carries its repo-relative path in full, every time.** A
+cross-session sweep found nine ambiguous citations across six issues. The worst
+used a bare `review.ts` eleven times where the tree holds two files by that
+name; the wrong one resolves to plausible code, so the reader finds a defect
+that is not there and an implementer can lose a strike to it. Now the third of
+the claim rules in `SKILL.md` step 5.
+
+**7. The briefing's narrative sections are filled as each issue closes.** Four
+sections were still empty placeholders when the finale opened the file,
+including the one that should have carried a deploy step — the single action in
+the batch that changed what a customer reads. A reader starting at the top met a
+stale test count before reaching its correction 100 lines down. An empty section
+reads as "nothing to report". In `SKILL.md`, run state.
+
+**What this run also proves about the strike-2 re-check.** One issue was
+rejected twice by both gates. The criteria re-check found the bar it failed on
+had never been written — both attempts met every criterion as written — and
+annulled both strikes. It also refuted the runner's own hypothesis about the
+fix. The re-check earns its cost.

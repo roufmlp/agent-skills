@@ -65,3 +65,67 @@ Summary of what applies here:
    before they are reported: a gate that did not run the reproducer says so rather
    than implying it verified one, and a finder that could not reproduce a suspicion
    files a note rather than a register entry.
+
+---
+
+## Round 9 (2026-08-01/02) — three findings the round paid for
+
+### 1. Gates need somewhere to drive a state that is not the shared tree
+
+Two gates wrote into the hunt worktree in one round. One left an untracked throwaway
+named `*.test.ts` in the repo **root**, where it would have joined the suite. The other
+**overwrote four source files and restored them with `git checkout --` while a fixer was
+mid-edit**. The work survived on timing alone: the clobber window closed before the
+fixer's first edit, which the fixer verified rather than assumed.
+
+Both gates were rigorous, and both self-reported. **The failure is the instruction, not
+the judgement.** A gate that must drive a state to test a claim has nowhere to put it.
+
+Mid-round the orchestrator began telling every gate to use a `git clone --shared` under
+a scratch directory and delete it after. Every gate after that did, and it cost nothing.
+**Put it in the gate agent files:** never write source in the hunt tree; clone to
+scratch; never `git checkout --`. Some checks need no clone at all — ESLint accepts
+`--suppressions-location` pointed at an empty file.
+
+### 2. Every fix rejection was prose. None was code.
+
+Four rejections across sixteen entries and four assigned tasks, and **not one was a
+wrong diff**. Each was a sentence a fixer wrote that its own diff did not support:
+
+- A claim about what a shipped acceptance criterion had decided. The criterion said
+  something narrower, and the fix had quietly widened past it.
+- A claim that the fix also repaired a second defect. Driven both sides of the commit:
+  the repair did not exist.
+- A claim that a test's isolation guarded a particular assertion. The component under
+  test never emits the class that assertion looks for.
+- A retracted entry whose bug file recommended a fix that would have left the record
+  half-written with no remediation task at all — worse than the bug. Flagged, not built.
+
+`run-issues` already carries the rule this produces: **delete a rejected prose claim,
+never restate it.** It belongs here too, and the fixer agent file should say the claim is
+part of the deliverable. Three of these were caught only because a gate re-measured a
+sentence nobody had asked it to check.
+
+### 3. A green pin proves the behaviour, not the wiring
+
+Three pins in one round could pass while proving nothing: an any-throw `catch`, a
+whole-object `not.toEqual`, and an early `return` on a null. All three were caught by a
+claim gate reading the pin rather than running it.
+
+Worse, three *fixes* were correct while nothing protected the path to them. Deleting the
+line that carried a value from the read to the screen compiled clean and red nothing
+across 3565 tests, three separate times. The remedy each time was one rendering case, or
+one required prop that turns the deletion into a type error.
+
+**Worth a line in the claim-gate and fix-gate files:** ask what a green pin would still
+pass with the fix removed *and* the wiring cut, not only with the fix removed.
+
+### A method worth keeping, and its limit
+
+A lint-suppressions file is a map of where a repo has agreed to look away. Deleting one
+file's entry and re-running the linter enumerated four real defects in a file three
+finder units had already swept.
+
+**But it cannot close a class.** The lint config named shapes its own rule could not see,
+and said of one, "There is no count of how many remain." Use it to enumerate; never
+report the result as closure.
