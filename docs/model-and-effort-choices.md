@@ -45,8 +45,9 @@ and every probe would come back at the session default.
 
 Two agent files, identical apart from one line. Same model, same tools, same
 prompt, same task — enumerate the edge cases of an ISO-8601 duration parser.
-Interleaved runs so API load couldn't drift between conditions, and a control with
-no effort key at all to establish where the session default sits.
+Interleaved runs so API load couldn't drift between conditions, three per rung,
+and a control with no effort key at all to establish where the session default
+sits.
 
 | rung | mean wall-clock | vs default | mean output words |
 |---|---|---|---|
