@@ -65,11 +65,12 @@ pointing at an invariant nobody wrote down.
 
 ## Before you touch anything
 
-Read the issue file, then the code and data it concerns. **If its `Status:` is
-anything other than `ready-for-agent`, or the run ledger in the same directory
-shows a row for it past `queued`, stop and return without editing.** A live run
-holds that file; rewriting criteria under a working implementer causes a rejection
-on correct work.
+Read the issue file, then the code and data it concerns. **If the run ledger in
+the same directory shows a row for it past `queued`, stop and return without
+editing.** A live run holds that file; rewriting criteria under a working
+implementer causes a rejection on correct work. The issue's own `Status:` is not
+the guard — `needs-harden` is what a run sets when it finds criteria that are
+wrong or stale, so those issues are exactly the ones you are here to attack.
 
 ## The attack checklist
 

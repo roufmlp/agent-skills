@@ -44,8 +44,9 @@ question carries your recommended answer marked `[reversible]` or
 into the file as a default rather than a decision.
 
 **Never touch `Status:` or `Hardened:`.** The orchestrating session owns those.
-Skip any issue whose `Status:` is not `ready-for-agent` or whose ledger row is
-past `queued` — a live run holds it.
+Skip any issue whose ledger row is past `queued` — a live run holds it. The
+issue's own `Status:` is not the guard: `needs-harden` issues are in scope, and
+are usually the ones most worth reading across.
 
 ## What you write
 

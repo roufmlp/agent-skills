@@ -66,10 +66,15 @@ nothing downstream records which tier ran. The launch line is the one place a
 wrong tier is visible, and the stamp does not carry it. Not a wait, an interrupt
 window — do not ask, and do not stall for an answer.
 
-**Never attack an issue a run holds.** Skip anything whose `Status:` is not
-`ready-for-agent`, or whose row in the same directory's `run.md` is past `queued`.
-Rewriting criteria under a working implementer causes a rejection on correct work,
-then a strike, then an escalation chasing a criterion the implementer never saw.
+**Never attack an issue a run holds.** The guard keys on the run, not on the
+issue's status: skip anything whose row in the same directory's `run.md` is past
+`queued`, and skip everything if that ledger's owner line names a live session.
+`needs-harden` and `ready-for-agent` are both in scope — `needs-harden` is what a
+run sets when it finds criteria that are wrong or stale, so those issues are
+exactly what this pass exists to serve, and a status-shaped guard would tell it to
+skip them. What the guard protects against is a second writer: rewriting criteria
+under a working implementer causes a rejection on correct work, then a strike,
+then an escalation chasing a criterion the implementer never saw.
 
 **The one exception: strike-2 mode.** A `/run-issues` runner may spawn a single
 attacker against an issue it holds, after two rejections, before it buys a third
@@ -130,10 +135,16 @@ because of something a sibling issue deletes).
   one, or as the standalone numbered list. Apply their answers to the files.
 - Then stamp the issue, one line under `Status:`:
   `Hardened: <date> — <n> sharpened, <m> questions resolved.`
+- **Stamping also sets `Status: ready-for-agent`.** The two must agree, and the
+  stamp alone is not enough: `/run-issues` resolves `all` from the `Status:`
+  line and skips anything reading `needs-*`, so an issue that entered through
+  the standalone door and keeps its `needs-harden` status is silently dropped
+  from the next batch while this pass reports it ready. Keep any minting or
+  provenance note on its own `Provenance:` line, never as a suffix on `Status:`.
 
 **An open question never removes an issue from a run.** Where the human has not
 answered, take the recommended default, write it into the file as a default rather
-than a decision, and stamp:
+than a decision, and stamp — status included, same rule:
 
 `Hardened (provisional): <date> — <n> sharpened, <m> defaults pending.`
 

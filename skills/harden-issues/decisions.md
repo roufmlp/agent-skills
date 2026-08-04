@@ -43,9 +43,7 @@ whose premise was not tested is written as a hypothesis with an explicit
 premise-check clause for the implementer — testing the premise itself, not a
 narrow question near it.
 
-## OPEN DEFECT — the stamp and `Status:` are two sources of truth (found 2026-08-02)
-
-**Not yet fixed in SKILL.md. Fix before the next standalone pass.**
+## The stamp and `Status:` were two sources of truth (found 2026-08-02, fixed 2026-08-04)
 
 Found after a model-comparison pass over eight issues. All three arms hit it, so it
 is the skill's fault rather than one model's.
@@ -75,22 +73,26 @@ exactly the issues the entry point exists to serve. In practice every arm ignore
 guard and attacked the `needs-harden` issues, which was the right call and is not what
 the text says.
 
-**Proposed fix, both parts in one edit.**
+**Cost if it had been left.** Silent under-scoping of every batch after a standalone
+pass, in the direction that looks like success. This is the same shape as the defects
+the checklist exists to catch: a green that means nothing, with no observer.
 
-1. In "Output and the stamp", make the status change explicit and part of stamping:
-   on a full or provisional stamp, set `Status: ready-for-agent`; keep any minting
-   note as a separate `Provenance:` line rather than a suffix on `Status:`. Say
-   plainly that the stamp and the status must agree, and that `/run-issues` reads the
-   status, not the stamp.
-2. In "Fan-out", scope the never-attack guard to what it is actually protecting
-   against — an issue a run currently holds. The guard's own justification is the
-   two-writer race ("Rewriting criteria under a working implementer"), so it should
-   key on the run's ledger and on `in-progress`, not on `Status:` being anything
-   other than `ready-for-agent`.
+**The fix, applied 2026-08-04 in one edit across four files.**
 
-**Cost if left.** Silent under-scoping of every batch after a standalone pass, in the
-direction that looks like success. This is the same shape as the defects the checklist
-exists to catch: a green that means nothing, with no observer.
+1. In "Output and the stamp", the status change is now part of stamping: a full or
+   provisional stamp sets `Status: ready-for-agent`, and any minting note goes on
+   its own `Provenance:` line rather than as a suffix on `Status:`. The text says
+   plainly that the two must agree and that `/run-issues` reads the status, not the
+   stamp.
+2. In "Fan-out", the never-attack guard now keys on what it was always protecting
+   against — an issue a run currently holds. It reads the run ledger's row and owner
+   line, not the issue's `Status:`, and says outright that `needs-harden` is in
+   scope. The same guard was duplicated in `harden-issues-attacker.md` and
+   `harden-issues-seam.md`; both were corrected the same way, since an agent obeying
+   its own brief would have re-introduced the skip the skill had just dropped.
+
+**The judge, next standalone pass:** whether any issue leaves the pass with a
+`Hardened` stamp and a `needs-*` status. One is a regression, not a slip.
 
 ## The model pin is gone; both agents inherit (2026-08-02)
 
