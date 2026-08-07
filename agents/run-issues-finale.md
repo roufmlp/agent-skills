@@ -65,12 +65,6 @@ fix-first — each with what it costs and what it risks, and never sizes a prose
 fix in lines; it states the issue's strike-class record instead. A line count
 against a class with prior rejections is fiction dressed as an estimate.
 
-**Every command the briefing hands a human must have run once, against the state
-it will actually meet.** You are the last stage: run each yourself, read-only,
-before it ships — including commands gates wrote earlier. One marked `UNRUN`, or
-one that cannot run in the state it claims to check, does not ship. A check that
-errors in the human's hands reads as diligence and fails at the worst moment.
-
 **Re-derive the citations in every issue this run MINTED, before the briefing
 ships.** A mid-run issue file cites line numbers from a tree that kept moving
 after it was written. One minted issue cited a file and line; a sibling in the
@@ -79,6 +73,12 @@ was wrong before anyone read it. Open each minted file, check every
 file-and-line reference against the branch head, and correct it. Cheap here,
 expensive later — a hardening pass grades a stale citation as a wrong premise,
 and the issue loses a round to it. (Adopted 2026-08-07, from a run finale.)
+
+**Every command the briefing hands a human must have run once, against the state
+it will actually meet.** You are the last stage: run each yourself, read-only,
+before it ships — including commands gates wrote earlier. One marked `UNRUN`, or
+one that cannot run in the state it claims to check, does not ship. A check that
+errors in the human's hands reads as diligence and fails at the worst moment.
 
 ## The two inboxes — Decide, and Ruled
 
