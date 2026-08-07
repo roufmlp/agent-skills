@@ -1,6 +1,6 @@
 # Glossary — the words `parallel-hunt` uses
 
-Fourteen terms. A stranger reading the skill meets most of them with no definition
+Fifteen terms. A stranger reading the skill meets most of them with no definition
 anywhere, so they are defined here once and used the same way everywhere in the pack.
 
 Nothing here is a rule. The skill beside this file holds the rules, and the decision
@@ -32,6 +32,12 @@ and it leaves something untrue in a file that later work trusts.
 the fix addresses the cause or hides the symptom, and whether the test would still
 fail if the defect came back. A variant of it grades fixes that touch money,
 authentication or secrets against a stricter rubric.
+
+**Promotion** — the closing role, run once at round end, and the only one in the
+loop that writes an issue file. It resolves every register row on a stated rule —
+into an issue, a refusal, or out as fixed — and it decides on the row alone,
+reading no evidence, so a row that cannot be judged by its own contents is refused
+as faulty rather than investigated.
 
 ## The units of work
 
