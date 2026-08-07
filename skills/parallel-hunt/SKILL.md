@@ -11,7 +11,8 @@ after launch.
 
 Settled design decisions and the incidents behind them live in `decisions.md`,
 next to this file. Read it if you are tempted to change how the round works —
-not to run one.
+not to run one. The terms below — orchestrator, sweep group, claim gate, lead and
+the rest — are defined in `glossary.md`, also next to this file.
 
 ## Who runs what
 

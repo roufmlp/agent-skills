@@ -14,6 +14,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
+| `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
