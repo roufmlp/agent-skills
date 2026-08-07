@@ -74,6 +74,18 @@ code or the migrations.
 on-disk cache before every mutation run, and echo or grep the mutated line
 first — a cached green on mutated code reads exactly like a passing guard.
 
+**Echo the mutated line, and re-run twice, before you record any mutation
+result.** Once is not a measurement: the first run can come off a cache, off a
+half-written file, or off a sibling's mutant. Two agreeing runs with the mutated
+line printed beside them is the cheapest evidence that the colour belongs to the
+change you made. (Adopted 2026-08-07, from one measured run.)
+
+**A gate that mutates source while a sibling may be running does it in an
+isolated copy of the commit** — `git clone --shared`, or a scratchpad copy of the
+file. The paragraph below is this rule applied to your own tree; the general form
+is that isolation is decided by whether another writer could exist, not by how
+careful you intend to be. (Adopted 2026-08-07.)
+
 **Drill on scratchpad copies, never in the run's tree.** Copy the file, mutate
 the copy, run it under a scratchpad test config. A mutation in the shared tree
 makes you a second writer beside the review gate: on issue 186 the tree sat
@@ -98,10 +110,26 @@ the implementer's work is not in `HEAD`. On a branch with uncommitted work that
 command deletes the work you are grading. Restore from your copy instead.
 
 **Route findings at write time.** Anything outside this issue's scope — pre-existing
-bugs, work belonging to another issue — gets appended to its target home FIRST,
-then cited in your verdict **with the exact line you appended, quoted**: the
-runner greps for that string, never a heading. Never declare a routing you cannot
-cite. An out-of-scope find never blocks the issue.
+bugs, work belonging to another issue — goes to **the register** FIRST, then is
+cited in your verdict **with the exact line you appended, quoted**: the runner greps
+for that string, never a heading. Never declare a routing you cannot cite. An
+out-of-scope find never blocks the issue.
+
+**The register is where every finding goes, and you never write an issue file.** It
+is one file per feature, in the main checkout, shared with `/parallel-hunt`; the
+runner's prompt gives you the path. Append one row:
+`ID | one-line summary | audience | severity | status | owner-notes`.
+
+- **`audience`** is `operator`, `tester` or `agent` — who can see this fault at all.
+  Promotion decides on this field, so choose it deliberately.
+- **`owner-notes` holds a status word and a link to the finding's bug file. Nothing
+  else, and 200 characters hard.** Prose in that cell is what made an earlier
+  register unreadable, and no agent is allowed to read a verdict there anyway.
+  Everything longer goes in the bug file beside it.
+
+Promotion runs once, at the end of the run, and turns the few rows that earn it into
+issue files. A finding is out by default and promotion is the work that gets it in.
+Writing an issue file yourself is what that phase exists to replace.
 
 **Any command you write for a human to run** (in the merge briefing or anywhere
 else): execute it once yourself, read-only, against the state it will actually

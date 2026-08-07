@@ -18,7 +18,7 @@ Listed in the order the loop runs.
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
-| `agents/*.md` | `~/.claude/agents/*.md` (15 role definitions the orchestration skills spawn) |
+| `agents/*.md` | `~/.claude/agents/*.md` (16 role definitions the orchestration skills spawn) |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |
 | `skills/designrules/SKILL.md` | `~/.claude/skills/designrules/SKILL.md` (pointer adapted for this repo) |

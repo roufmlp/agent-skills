@@ -25,6 +25,7 @@ Spawn by `subagent_type`; the orchestrator never pastes a brief.
 | Claim gate | `parallel-hunt-claim-gate` | high | one review, then dies |
 | Fix gate | `parallel-hunt-fix-gate` | high | one batch, then dies |
 | Fix gate, critical | `parallel-hunt-fix-gate-critical` | high | one batch, then dies |
+| Promotion | `promotion` | medium | one round end, then dies |
 
 Use the critical fix gate for `severity: critical` entries, or any fix whose diff
 touches money, auth or security.
@@ -35,17 +36,34 @@ batch size. Everything stable already lives in the agent file, where it caches.
 ## The register — all state in files
 
 In **the main checkout**, not any worktree, so every agent reads and writes the
-same absolute path with no git sync:
+same absolute path with no git sync. Four files, split on one test: a thing belongs
+in the register only if another agent must read it to do its own job.
 
 ```
-<main-repo-root>/.scratch/<feature>/register.md   # the index table
-<main-repo-root>/.scratch/<feature>/bugs/<ID>.md  # evidence, reproducer, verdicts
+<main-repo-root>/.scratch/<feature>/register.md      # the index table, live findings only
+<main-repo-root>/.scratch/<feature>/round-brief.md   # this round's brief, scope, sweep groups
+<main-repo-root>/.scratch/<feature>/leads.md         # standing leads and rulings
+<main-repo-root>/.scratch/<feature>/bugs/<ID>.md     # evidence, reproducer, verdicts
 ```
 
-`register.md` is a table: `ID | one-line summary | severity | status | owner-notes`.
+`register.md` is a table:
+`ID | one-line summary | audience | severity | status | owner-notes`.
+
+- **`audience`** is `operator`, `tester` or `agent` — who can see the fault at all.
+  The finder writes it with the row, and promotion reads it.
+- **`owner-notes` holds a status word and a link to `bugs/<ID>.md`. Nothing else,
+  and 200 characters hard.** Both gates refuse a row that breaks it. One round of
+  one project reached 5,212 bytes a row because this cell held whole gate verdicts;
+  the same sixteen rows under the cap cost about 2.4 KB. The structural rule tells a
+  finder what to write and the character count gives a gate something to count.
+
 Per-bug files hold the evidence, the reproducer, the pinning-test path and gate
 verdicts. Agents append to their own section; only the owner of a transition
 touches `status`.
+
+`round-brief.md` holds what this round is about and dies at round close.
+`leads.md` holds what outlives it — leads already examined, and the orchestrator's
+rulings. It never rotates; see "Harvesting the leads file".
 
 Status machine, single writer per transition:
 
@@ -55,21 +73,109 @@ Status machine, single writer per transition:
 - `fix-ready → verified`, or back to `in-fix` with written reasons — fix gate only.
 - `deferred` — orchestrator, at round end, and only from `open`, `in-fix` or
   `fix-ready`. A `candidate` is gated or deleted, never deferred; `retracted` is
-  terminal. **Deferring is a conversion:** write the entry as an issue file in
-  `<main-repo-root>/.scratch/<feature>/issues/` with `Status: ready-for-agent`,
-  carrying its evidence and reproducer as acceptance criteria, and say in the
-  round report that it needs `/harden-issues` before the next batch. A file left
-  in `bugs/` is invisible to `/run-issues`, which resolves scope from `issues/`.
+  terminal. **`deferred` means the row is waiting for promotion, and nothing else.**
+  It writes no issue file. Nothing in this loop writes an issue file except
+  promotion.
+
+**Nothing rotates and nothing is archived.** Three exits bound the register instead.
+Promotion takes a row out and into `issues/`; a refusal takes a row out and leaves it
+out; `fixed` takes out a row the round already verified, writes nothing, and owes no
+reason, because the fix is in the commit and the record is in the bug file. What stays
+is live findings only, so the file's length is the promotion backlog — a number worth
+being able to read. A register that rotates on size or on the round boundary needs a
+guard against firing mid-run; with no rotation there is nothing to guard.
+
+**`fixed` is an exit in its own right and never a kind of refusal.** Split out on
+the human's ruling, 2026-08-06. Before it, a round that fixed thirteen faults
+reported thirteen refusals into the daily brief, where one word would have
+overturned them and minted thirteen issue files for work that had already shipped.
 
 **Retractions clean up after themselves.** The claim gate may touch nothing but
 status and its verdict, and the finder is dead, so the orchestrator deletes the
 finder's regression test file for that bug ID when it records a retraction. A
 deliberately failing test left in the suite poisons every later green judgement.
 
-At round end commit `register.md`, `bugs/` and the finder's regression test
-directory — those paths only. Never commit the whole `.scratch/<feature>/`
-directory: a run's ledger, journal and issue files live there too, and committing
-them mid-run puts half-written run state on main.
+At round end commit `register.md`, `leads.md`, `bugs/` and the finder's regression
+test directory — those paths only — and delete `round-brief.md`. Never commit the
+whole `.scratch/<feature>/` directory: a run's ledger, journal and issue files live
+there too, and committing them mid-run puts half-written run state on main.
+
+## Promotion — the only door into `issues/`
+
+**No role in this loop writes an issue file.** Finders, fixers, gates and the
+orchestrator all write register rows. Promotion is the last phase of the round and
+the only step that creates an issue. `/run-issues` carries the same phase, on the
+same rule and the same register.
+
+A finding is out by default. Promotion is the work that gets it in.
+
+**A fresh `promotion` subagent does the work, never the orchestrator.** Writing issue
+files is repetitive file work arriving at the moment the orchestrator's context is
+most expensive, and the orchestrator would be reading rows it has no other reason to
+hold. It spawns the agent, gets two lists and a count back, and puts them in the
+round report.
+The rule below lives in the agent file too, where it caches.
+
+Promotion runs on that rule and applies its own answer. It never waits. Every row is
+resolved one of three ways:
+
+- **Fixed** — the row is already at `verified`. **Take this exit first, before you
+  look at audience or severity.** Delete the row, write nothing, and report it as a
+  bare count. A fault the round fixed needs no issue: the fix is in the commit and
+  the record is in `bugs/<ID>.md`.
+- **Promoted** — `audience: operator` at any severity, or `audience: tester` at
+  `critical` or `high`. Write the issue file, then delete the row.
+- **Refused** — everything else. `audience: agent` at any severity, and `tester`
+  below `high`. Delete the row and give the reason in the round report.
+
+**`fixed` is never reported as a refusal**, and the ordering above is what enforces
+it. The human overturns a refusal with one word, so a round's thirteen successful
+fixes listed as thirteen refusals put a trap on their only control: one word would
+mint thirteen issue files for work that had already shipped. Ruled 2026-08-06. This
+section still said "two ways" a day after that ruling landed forty lines above it;
+corrected 2026-08-07.
+
+A promoted row becomes an issue file carrying:
+
+- `Status: needs-harden`. A local file has no reporter, so there is nobody to ask
+  for more, and `needs-info` is a dead end there. `/harden-issues` sharpens it from
+  evidence instead.
+- One category role, from the project's own triage set.
+- A link to `bugs/<ID>.md`. Promotion copies no evidence into the issue file.
+
+**The human holds the veto, through `/daily-brief`.** The round report lists every
+promotion and every refusal, and the brief carries both to them. Overturning either
+is one word in the brief. **`fixed` is a count only, and carries no control** — it
+is not a decision and the human is offered none over it. A step they have to invoke
+by hand is a step somebody forgets, and then the register grows in place of the
+issue directory.
+
+**Anything needing the human's hands, rather than their judgement, goes somewhere
+else.** A secret, an env var, an OAuth client, a DNS record at a registrar, a console
+setting — anything the repo cannot do to itself — is written as a numbered action,
+one action per number, with one line of what is blocked on it, to the project's
+pending-actions file, if it keeps one. The round report is history the moment the
+branch merges; that file is the list the human actually reads.
+
+## Harvesting the leads file
+
+`leads.md` never rotates, so it gets emptied by hand. The human runs this every few
+months, or when the file gets long. For each entry, choose one of three actions:
+
+1. **A rule true of a tool in any repository** — of the database, the framework or
+   the test runner the entry names. Move it into your own copy of this skill file
+   as a rule, and delete the entry. Once the skill carries it, no finder needs the
+   list.
+2. **A rule true only of this product** — it names a table, a route or a term this
+   codebase owns. It stays in the leads file. It is not general, whatever it looks
+   like, and promoting it into a published skill would carry the product's
+   internals out with it.
+3. **An entry about one file at one version** — it carries the commit it was judged
+   at. Delete it once that file has moved on, which one `git log` answers.
+
+A skill that tells you to create a file owes you the way to empty it. Without this,
+the pack ships the same fault the split removes: nothing here ever told anybody to
+archive a register, and archived registers piled up on disk anyway.
 
 ## Code ownership — the merge-tax rule
 
@@ -78,7 +184,7 @@ them mid-run puts half-written run state on main.
   existing suites and never touches shipped code, not even to help.
 - **Fixer** owns shipped code, unit fakes and fixtures. It may flip an expectation
   in one of those regression files only when the fix intentionally changes the
-  pinned behaviour, and must say so in the register entry. Unexplained touches are an
+  pinned behaviour, and must say so in `bugs/<ID>.md`. Unexplained touches are an
   automatic reject.
 - Deferred bugs keep their failing test as `test.skip` with the bug ID.
 
@@ -102,15 +208,21 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
 1. **Never read bug-file contents or diffs.** Read `register.md` status lines and
    worker return summaries. Judgement belongs to the gates; the moment the
    orchestrator starts forming opinions about bugs, it stops being thin.
-2. Create the register with the target scope, then spawn finder and fixer
-   concurrently. The fixer idles politely until entries reach `open`.
+2. Write `round-brief.md` with the brief, the target scope and the sweep groups,
+   create an empty `register.md` if the feature has none, then spawn finder and
+   fixer concurrently. The fixer idles politely until entries reach `open`.
 3. On each worker return, spawn the right gate and/or successor.
 4. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
-5. Round end: mark leftovers `deferred`, delete the heartbeat cron, commit the
-   register, and report — verified fixes, rejected fixes, retracted claims,
-   deferred entries. Say plainly what was left undone; a round that reports only
+5. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
+   over every row; delete the heartbeat cron; delete `round-brief.md`; commit. Then
+   report — verified fixes, rejected fixes, retracted claims, and the two lists
+   promotion returned. Say plainly what was left undone; a round that reports only
    its wins is not a report.
+
+   Do not promote rows yourself. Rule 1 holds all the way to the end of the round,
+   and spawning is what keeps it holding: the agent reads the rows, and you read two
+   lists.
 
 ## Auto-resume across usage limits
 
@@ -139,6 +251,12 @@ safe.
   `model: inherit`, so every worker inherits it. Check before spawning anything.
 - The permission allowlist covers the run — test commands, git, the repo paths. A
   worker blocked on a permission prompt stalls silently; fix the allowlist first.
+- **Creating a worktree includes installing dependencies and making the
+  `.env.local` symlink. If either fails, the round refuses to start.** Not a
+  checklist item to remember afterwards — part of what "the tree is ready" means.
+  One shell command, 30 to 60 seconds per worktree, and it saves more than it
+  costs the first time it stops a finder diagnosing a false green that was really
+  a missing environment file. (Adopted 2026-08-07.)
 - If the project keeps its env in a canonical file outside the worktrees, every
   worktree's `.env.local` is a **symlink** to it, never a copy. Replace any copy
   found. Env files are never committed or pushed.

@@ -43,6 +43,7 @@ Spawn by `subagent_type`; the runner never pastes a brief.
 | Review | `run-issues-review-gate` | high |
 | Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high |
 | Coherence finale, once per run | `run-issues-finale` | max |
+| Promotion, once per run | `promotion` | medium |
 
 Spawn prompts carry **only** what varies — issue ID, paths, rejection reasons.
 Everything stable already lives in the agent file, where it caches.
@@ -205,13 +206,24 @@ first, while the window exists.
    correction marker, and nothing else — a fresh context, never a message to a
    live agent. On resume, a `correction` row is re-spawned the same way; it is
    still the one round. One round maximum; the scope is the verdicts' list —
-   anything bigger, or anything a second round would need, is minted as an issue
+   anything bigger, or anything a second round would need, becomes a register row
    instead.
    **While any row shows `correction`, no new implementer spawns** — that status
    is what makes a second writer in the tree unrepresentable. The round closes
    when the runner verifies each item's *named evidence* (the test now exists and
    is green, the mutation now reds), not just that files were touched. Then
    commit and `done`. A correction round is not a strike.
+
+   **A standards-shaped split is a correction, not a retry, on one condition:
+   every gate grades the behaviour correct AND the owed work is enumerated.** The
+   shape is a verdict that splits on how the work is written down rather than on
+   what it does — a missing pin, an unrun mutation, a claim that outruns its
+   evidence. Where the behaviour is agreed and the list is closed, buying a fresh
+   implementer to re-do correct work is waste, and the strike it charges is a
+   strike against a spec fault. If either half fails — any gate doubts the
+   behaviour, or the owed work cannot be enumerated — it is a retry and a strike,
+   as before. (Adopted 2026-08-07 with that condition attached, from a run
+   finale.)
 
    **A rejection on non-executable PROSE is fixed by deleting the claim, never
    restating it.** A fix for an over-claim is itself a new claim with its own
@@ -340,17 +352,27 @@ briefing lists every such entry:
   pending-actions file, if it has one, as a numbered action, with one line of what
   is blocked on it. Code may still complete around it. `/daily-brief` surfaces it;
   the run never waits.
-- Follow-up found mid-issue → a new issue file, or a fold-in section in the next.
-  Minting is **write-only**: the file records evidence already in hand, and
-  nobody investigates further mid-run. The merge briefing lists what was minted.
+- Follow-up found mid-issue → a register row, or a fold-in section in the next
+  issue. Writing a row is **write-only**: it records evidence already in hand, and
+  nobody investigates further mid-run. The merge briefing lists every row written.
 - Gaps tests cannot reach → noted for the post-deploy `/parallel-hunt`.
 - Bugs found **outside** the issue's scope → routed to one of the homes above.
 
 Handoff documents are never the home for any of this.
 
+**Nothing in a run writes an issue file.** Not the runner, not an implementer, not
+a gate. Findings go to the register, and they leave it through promotion, which the
+finale runs once at the end of the run. A finding is out by default; promotion is
+the work that gets it in. The register, the row format and the promotion rule are
+specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — the
+same file for the same feature, in the main checkout, whichever worktree the writer
+is standing in. Two registers for one product rebuilds the problem this closes.
+
 **A ruling that creates work gets its issue number in the same sitting as the
-ruling.** Not "that becomes its own issue" — the number, or the file and line
-where the work now lives. On one batch a ruling settled an open question by
+ruling.** A ruling is a decision, not a finding, so this stays a direct issue file
+and does not go through the register. Not "that becomes its own issue" — the
+number, or the file and line where the work now lives. On one batch a ruling
+settled an open question by
 splitting a road out of scope; nine hours later no issue existed, and the only
 trace of the split was one phrase inside the original issue's own file. A verify
 gate happened to notice, and it was minted then. Nothing was watching for it, so
@@ -362,8 +384,8 @@ told apart from a ruling nobody made (decisions.md).
 Resolution happens after the run closes, and it is a procedure, not an evening
 of improvisation. The human's answer is one word — `merge`, `fix` or `drop`.
 `fix` spawns ONE implementer, under the delete-only prose rule where it applies,
-then ONE narrow gate round maximum, unattended; anything more is minted as an
-issue. The human supervises nothing — they answer, and the machine reports back
+then ONE narrow gate round maximum, unattended; anything more becomes a register
+row. The human supervises nothing — they answer, and the machine reports back
 in the next brief.
 
 ## Branch and human gate
@@ -420,15 +442,40 @@ resumes rather than re-running:
    `finale-judgment`, write the halt block, and revive after reset — never
    downgrade it to save the wait, and never declare the run complete with the
    judgment half unrun.
-3. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
+3. **Promotion — the last phase, and the only door into `issues/`.** Spawn one
+   `promotion` agent over every register row this run wrote. A row already at
+   `verified` exits as `fixed`, before audience is even read, because the run fixed it
+   and the fix is in the commit. Of the rest it promotes a row whose `audience` is
+   `operator` at any severity, or `tester` at `critical` or `high`, and refuses the
+   others. A promoted row becomes an issue file at `Status: needs-harden` with one
+   category role and a link to its bug file. All three exits delete the row, so the
+   register's length stays the promotion backlog and nothing else. The rule lives in
+   the agent file and in `parallel-hunt/SKILL.md`; both skills use the one agent.
+
+   **`fixed` is reported as a count and never as a refusal** (ruled 2026-08-06). A
+   run that fixes work must not report that work under a word the daily brief
+   offers to overturn.
+
+   **The runner never promotes rows itself.** This is the same call as the board in
+   step 4, for the same reason: by run end the runner's context is the most expensive
+   in the pipeline, and writing issue files is repetitive work that has no business
+   in it. The runner spawns, gets two lists back, and appends them to
+   `merge-briefing.md`, one line each. `/daily-brief` carries both to the human, who
+   holds the veto over either direction.
+4. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
    human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
    what and one of why each, ticks persisted in localStorage. Keep the existing
-   styling; send it with SendUserFile. **A fresh cheap subagent renders it** from
-   `merge-briefing.md` plus the old board — never the runner itself, whose context
-   is at its most expensive by run end, and the old board's bytes never enter the
-   runner. `merge-briefing.md` stays the source of truth,
+   styling; send it with SendUserFile. **A fresh subagent renders it, spawned with
+   the cheapest model named explicitly on the spawn call** — from `merge-briefing.md`
+   plus the old board, never the runner itself, whose context is at its most
+   expensive by run end, and the old board's bytes never enter the runner.
+   Naming the model is not optional and "cheap" is not a model: an unnamed spawn
+   inherits the session model, so this step was paying the top tier to convert one
+   markdown file into HTML on the largest input in the pipeline (283 KB, measured
+   2026-08-06). There is no judgement in the render — the briefing already decided
+   what the board says. `merge-briefing.md` stays the source of truth,
    and `/daily-brief` reads that file, never the board.
-4. **Recommend follow-ups; start none.** One exception is mandatory:
+5. **Recommend follow-ups; start none.** One exception is mandatory:
    - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at
      `awaiting-merge` and the brief carries it to the human with the branch head
      SHA they are approving. When they write `merge`, that session merges,
@@ -442,8 +489,8 @@ resumes rather than re-running:
      runs it and reports what it found.
    - Recommended after it: a `/parallel-hunt` round on the live system. It hunts
      the seams between issues and against live external systems — the class of bug
-     per-issue gates cannot see. Its `deferred` entries become the next run's
-     issues.
+     per-issue gates cannot see. Its own promotion phase decides which of its
+     findings become the next run's issues.
    - Only if the finale's findings are structural: an architecture-improvement
      session on a clean tree.
 
@@ -510,10 +557,14 @@ before spawning anything, and recreate the cron.
 
 ## Pre-flight
 
-- **Print one launch line before spawn #1, on every invocation** — issues in
-  order, branch, the resolved session model, and what will NOT happen (no merge,
-  no prod). Not a wait, an interrupt window (an 11.5-hour halt once came from a
-  misread request — decisions.md).
+- **The launch line is a gate, not an announcement. Nothing spawns before it
+  prints.** One line on every invocation — issues in order, branch, the resolved
+  session model, and what will NOT happen (no merge, no prod). It is still not a
+  wait: it prints and the run carries on at once, so the gate costs nothing. What
+  it buys is that the interrupt window exists at all. On one run the line
+  printed after the first implementer had already finished, so there was no
+  window left to interrupt. (Adopted 2026-08-07. The older hazard is the
+  11.5-hour halt from a misread request: decisions.md.)
 - **Re-derive every fact the run will carry into its spawns, from source, and
   name the source beside it.** Carry-forward entries, batch-plan sentences,
   anything a previous session wrote down — none of it is evidence. Read the
@@ -551,16 +602,31 @@ before spawning anything, and recreate the cron.
   **If `all` resolves to nothing, say so and stop.** An empty scope means the
   batch was never hardened, not that there is no work — never treat it as a
   completed run.
-- **Confirm the dependency directory exists before trusting any green.** A
-  fresh worktree of one repo ran its typecheck to exit 0 with `node_modules`
-  absent — the compiler resolved off a global install and never loaded the
-  repo's own types. Install dependencies first, then run the checks; a green
-  produced without dependencies on disk is a false green (decisions.md).
+- **Creating the worktree includes installing dependencies and making the
+  env-file symlink, where the project uses one. If either fails, the runner
+  refuses to start.** Not a check to remember at pre-flight — part of what "the
+  worktree is ready" means. It costs one shell command, a few lines of output and
+  30 to 60 seconds per worktree, and it saves more than that the first time it
+  stops an agent diagnosing a false green caused by a missing environment file.
+  (Adopted 2026-08-07, on the question of what it costs in tokens: it saves them.)
+
+  The failure it closes: a fresh worktree of one repo ran its typecheck to exit 0
+  with `node_modules` absent — the compiler resolved off a global install and
+  never loaded the repo's own types. A green produced without dependencies on
+  disk is a false green (decisions.md).
 - **Verify the allowlist, never assert it.** Enumerate the command classes this
   run will use — typecheck, lint, test, the cold-build delete, git stage and
   commit, any migration script — and dry-run each in no-op form before
   spawn #1. A miss is a launch-time blocker; mid-run it is a worker blocked on a
   prompt, stalling silently. (Coverage has been asserted and wrong before.)
+- **An unattended run may delete only rows it marked as its own, and the scope of
+  the delete is that marker.** Where a run needs to clean up after itself, it
+  stamps a run-owned marker column on every row it writes and deletes on that
+  marker alone. It never widens its database permission to cover deletes in
+  general, and it never deletes a row on an argument that it must have written it.
+  A permission granted once is held for every later run, including the one that
+  reasons badly at 3am; a marker column is scoped to the rows and expires with
+  them. (Adopted 2026-08-07, from a run finale.)
 - **Probe fixture health, read-only** — whatever writable test database or
   seeded state the batch will drive: row counts on the tables the issues touch,
   any counters or sequences, a can-create sanity check. Results go into
@@ -585,5 +651,8 @@ A directive arriving mid-run is **this run only** unless the user says it is
 standing. Record it in Carry-forward with its scope written on it and re-brief it
 from there. Do not write it to a memory file in-session — the test is whether it
 would still be true if this run had never happened. At run close, route "should
-this become standing?" to the finale's `## Decisions inbox`, where `/daily-brief`
-collects it — a chat question at session end dies with the session.
+this become standing?" to the finale's `## Decide` heading, and from there into
+`.scratch/decisions-queue.md`, where `/daily-brief` collects it — a chat question
+at session end dies with the session. It goes under `## Decide` rather than
+`## Ruled` because nobody has answered it. Write it with the run's recommended
+answer, marked `[reversible]` or `[irreversible]`.

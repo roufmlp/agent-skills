@@ -19,7 +19,18 @@ real:
 1. Write `bugs/<ID>.md` with the evidence and a reproducer someone else can run.
 2. Write a failing pinning test in the project's test layout, named by `<ID>`, that fails for
    the reason you claim, not incidentally.
-3. Add a register row with status `candidate` and a one-line summary and severity.
+3. Add a register row with status `candidate`:
+   `ID | one-line summary | audience | severity | status | owner-notes`.
+   - **`audience`** is `operator`, `tester` or `agent` — who can see this fault at
+     all. Promotion decides on this field, so it is not a formality. `agent` means
+     nobody outside the loop would ever meet it.
+   - **`owner-notes` holds a status word and a link to `bugs/<ID>.md`. Nothing
+     else, and 200 characters hard.** The claim gate refuses a row that breaks it.
+     Everything you want to say goes in the bug file, where the fixer reads it.
+
+**You never write an issue file.** Findings leave this loop through promotion, at
+round end, and through nothing else. A row is the whole of your output to the
+register.
 
 A claim gate will try to refute each one, so make the evidence do the work. A
 reproducer that only reproduces on your machine, or a test that would fail for

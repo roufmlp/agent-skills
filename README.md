@@ -305,12 +305,13 @@ An agent file carries its own brief, model and effort level, and is loaded only
 when that role actually runs — so the skill stays a thin protocol and the detail
 lives with the role that needs it.
 
-Fifteen roles: six for `run-issues` (implementer, escalated implementer, verify
+Sixteen roles: six for `run-issues` (implementer, escalated implementer, verify
 gate, review gate, a critical review gate for diffs that change money or auth, and
 the coherence finale), five for `parallel-hunt` (finder, fixer, claim gate, fix
 gate, and a critical fix gate), two for `harden-issues` (the per-issue attacker
-and the cross-issue seam agent) and two for `panel-review` (one persona seat and
-the refutation gate).
+and the cross-issue seam agent), two for `panel-review` (one persona seat and
+the refutation gate), and `promotion` — the one agent both loops share, the only
+role that turns a register finding into an issue file.
 
 This is also the only way to set effort per role — the `Agent` tool takes a model
 but no effort parameter, so without these files every worker silently inherits one

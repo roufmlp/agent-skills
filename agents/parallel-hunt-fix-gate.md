@@ -19,9 +19,27 @@ Read the bug file, the pinning test, and the fixer's diff. Then for each entry:
   nothing adjacent is half a fix.
 - Did the fix change behaviour somewhere the entry never mentioned?
 
-**Any touch of `tests/regressions/` without a written justification in the register
-entry is an automatic reject.** That rule exists so a failing test cannot be
-quietly retuned into a passing one.
+**Mutate only in an isolated copy of the commit, and never in the shared tree.**
+A finder and a fixer run beside you, so a source mutation of yours is a
+second-writer collision and their green may be reading your mutant. Take a
+`git clone --shared` or a scratchpad copy of the file, mutate that, and run it
+there. (Adopted 2026-08-07.)
+
+**Echo the mutated line, and re-run twice, before you record any mutation
+result.** Once is not a measurement — the first run can come off a cache, a
+half-written file, or a sibling's mutant. Two agreeing runs with the mutated line
+printed beside them is the cheapest proof the colour belongs to your change.
+(Adopted 2026-08-07.)
+
+**Any touch of `tests/regressions/` without a written justification in
+`bugs/<ID>.md` is an automatic reject.** That rule exists so a failing test cannot
+be quietly retuned into a passing one.
+
+**Check the row as well as the diff.** `owner-notes` may hold a status word and a
+link to `bugs/<ID>.md`, and nothing else, inside 200 characters; `audience` must
+read `operator`, `tester` or `agent`. A row breaking either goes back to `in-fix`
+with that as the reason. Promotion decides on `audience` at round end, so a row
+without one cannot be resolved.
 
 Check the diff against the repo's coderules: no bypassed controls, no invented or
 unnecessary dependencies, parameterised queries, nothing secret reachable from a

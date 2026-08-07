@@ -37,6 +37,37 @@ them**: invoke the `coderules` skill if the setup registers one, otherwise read 
 repo's own security rules. Your context does not carry them by default. If neither
 exists, say so in your report and judge against the four checks named above.
 
+**The smell baseline.** On top of the repo's own standards, run this fixed list
+over the diff. It restates the code smells in Fowler's _Refactoring_, chapter 3,
+and it applies even where a repo documents nothing. Two rules bind it. The
+patterns record wins: where `docs/patterns.md` endorses a shape this list would
+flag, cite the entry and suppress the smell. And every item is a judgement call
+you label as one — "possible feature envy", never a violation — so skip whatever
+the linter or the type checker already catches.
+
+- Mysterious name — the name does not say what the thing does or holds. Rename it.
+  Where no honest name comes, the design is unclear, and that is the finding.
+- Duplicated code — the same logic shape lands in more than one hunk. Extract it
+  once, call it twice.
+- Feature envy — a function reads another object's data more than its own. Move it
+  onto the data.
+- Data clumps — the same few fields travel together everywhere. They are a type
+  waiting to be named.
+- Primitive obsession — a string or a number stands in for a domain concept. Give
+  the concept its own small type.
+- Repeated switches — the same branch on the same type recurs across the diff.
+  Replace it with one map both sites share, or with polymorphism.
+- Shotgun surgery — one logical change forces edits across many files. Gather what
+  changes together.
+- Divergent change — one file is edited for unrelated reasons. Split it so each
+  part changes for one reason.
+- Speculative generality — a parameter, hook or abstraction for a need the issue
+  does not have. Delete it. The code rules say the same thing.
+- Message chains — the caller walks `a.b().c().d()`. Hide the walk behind one
+  method on the first object.
+- Middle man — a unit that only forwards. Cut it and call the real target.
+- Refused bequest — a subclass ignores most of what it inherits. Use composition.
+
 **Report everything you find.** Include findings you are uncertain about or judge
 low-severity, with a confidence and a severity attached. Do not filter for
 importance at this stage — coverage is your job, and a downstream reader can rank.
@@ -59,6 +90,18 @@ generalising a correct trace across siblings is how a live leak got cleared.
 **Prove a mutation exists before trusting its colour.** Clear the test runner's
 on-disk cache before every mutation run, and echo or grep the mutated line — a
 cached green on mutated code reads exactly like a passing guard.
+
+**Echo the mutated line, and re-run twice, before you record any mutation
+result.** Once is not a measurement: the first run can come off a cache, off a
+half-written file, or off a sibling's mutant. Two agreeing runs with the mutated
+line printed beside them is the cheapest evidence that the colour belongs to the
+change you made. (Adopted 2026-08-07, from one measured run.)
+
+**A gate that mutates source while a sibling may be running does it in an
+isolated copy of the commit** — `git clone --shared`, or a scratchpad copy of the
+file, never the shared tree. This is the same rule as the paragraph below,
+stated as the general one: isolation is decided by whether another writer could
+exist, not by how careful you intend to be. (Adopted 2026-08-07.)
 
 **Every drill runs on a scratchpad copy — you never write the run's tree.** The
 verify gate runs beside you and may be mid-mutation at any instant, so a tree
@@ -91,10 +134,23 @@ rejection.
 **Ground every claim** in something you read in the diff or ran. Do not assert
 behaviour you did not check.
 
-**Route findings at write time.** Append to the target home FIRST, then cite it in
+**Route findings at write time.** Append to **the register** FIRST, then cite it in
 your verdict **with the exact line you appended, quoted**: the runner greps for
 that string, never a heading. Never declare a routing you cannot cite. An
 out-of-scope find never blocks the issue.
+
+**The register is where every finding goes, and you never write an issue file.** It
+is one file per feature, in the main checkout, shared with `/parallel-hunt`; the
+runner's prompt gives you the path. Append one row:
+`ID | one-line summary | audience | severity | status | owner-notes`.
+
+- **`audience`** is `operator`, `tester` or `agent` — who can see this fault at all.
+  Promotion decides on this field, so choose it deliberately.
+- **`owner-notes` holds a status word and a link to the finding's bug file. Nothing
+  else, and 200 characters hard.** Everything longer goes in the bug file beside it.
+
+Promotion runs once, at the end of the run, and turns the few rows that earn it into
+issue files. A finding is out by default and promotion is the work that gets it in.
 
 **Any command you write for a human to run**: execute it once yourself, read-only,
 against the state it will actually meet — or mark it `UNRUN` beside the command.

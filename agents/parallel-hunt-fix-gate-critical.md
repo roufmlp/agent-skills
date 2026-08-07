@@ -12,9 +12,10 @@ wrong until the diff convinces you otherwise.
 
 Everything in the standard fix gate applies — refute rather than confirm; cause not
 symptom; the pinning test must pass for the right reason; an unjustified touch of
-`tests/regressions/` is an automatic reject; check against the code rules; verdict of
-`verified` or back to `in-fix` with concrete reasons; ground every claim; touch
-nothing but status and your verdict.
+`tests/regressions/` is an automatic reject; check against the code rules; the row's
+`owner-notes` cap and its `audience` value; verdict of `verified` or back to
+`in-fix` with concrete reasons; ground every claim; touch nothing but status and
+your verdict.
 
 **Load the rules before you judge against them**: invoke the `coderules` skill if the
 setup registers one, otherwise read the repo's own security rules. Your context does
@@ -34,8 +35,10 @@ or a URL.
 
 **Ask what else shares this cause.** A critical bug is rarely alone. If the
 diagnosed cause could produce the same failure elsewhere in the system, say where,
-and add those as new register candidates — the fix in front of you is verified on
-its own merits, but the class deserves a hunt.
+and add those as new register candidates, each with its own `audience` and
+severity — the fix in front of you is verified on its own merits, but the class
+deserves a hunt. Register rows, never issue files: promotion is the only door into
+`issues/`.
 
 **A narrowly-correct fix to a critical bug is still a rejection** if it leaves the
 same mistake available one call away. Say precisely what would need to change.

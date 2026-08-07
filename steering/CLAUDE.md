@@ -83,6 +83,22 @@ a split, a `wontfix` close, a migration's direction, a money or auth rule, anyth
 that ships data or commits a public contract. `daily-brief` collects the queues and
 carries my answers back out.
 
+## Never cite a bare identifier
+A ticket number, issue number, migration number, commit SHA or file name on its own tells
+me nothing. Every citation carries what the thing IS, in the same sentence: "ticket 05,
+the Resend mail records", not "ticket 05". This is the same rule as the absolute path for
+the pending file, and for the same reason — I should never have to go and look something
+up to understand your sentence.
+
+## Never hand me a manual step you could take yourself
+Before you give me a procedure, check whether you can do it and I only need to decide. If
+so, offer that road first. Hands are yours; judgement is mine. Describe my choice, never
+the tool's design — "the skill expects you to edit this file" is a fact about the skill,
+not a constraint on me. When you split work across sessions or steps, name each job, say
+who does it and where, and give the reason for the split in one line. Where a step
+genuinely must be mine — a registrar, a dashboard, a push — say so and say why it cannot
+be yours.
+
 ## Pending actions on me
 Whenever something is pending from me, or you want me to do something: brief me in simple
 English, numbered steps, one action each. For any external/manual step (Meta/WhatsApp,

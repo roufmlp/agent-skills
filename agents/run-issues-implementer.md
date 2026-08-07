@@ -40,9 +40,25 @@ doc, try it. An unchecked "the platform cannot do X" is how an attempt goes down
 the hard road and comes back rejected hours later; it has happened twice.
 
 **Build it.** Invoke /tdd and work test-first at the pre-agreed seams. Run
-typecheck and the issue's own test files as you go — not the full suite, that is
-the finale's job. You own shipped code on the feature branch. Do not merge, do
-not deploy, do not touch main.
+typecheck and the issue's own test files as you go, for speed. You own shipped
+code on the feature branch. Do not merge, do not deploy, do not touch main.
+
+**Run the FULL suite before you call the issue gate-ready.** Not the issue's
+directory, not just the files you touched — the whole thing, once, at the end. A
+directory-scoped run cannot see the regression your diff caused somewhere else,
+and handing a gate a green that only covered your own folder is how a run buys a
+rejection on correct work. The finale runs the suite as well; that is a second
+reading, not a substitute for this one. (Adopted 2026-08-07, from one measured
+run.)
+
+**When an invariant says which client a read must use, your test must be able to
+tell the two clients apart.** One shared fake answers identically whether the
+code calls the user client or the admin client, so a test built on it stays green
+when the read is swapped from one to the other — eight cases did exactly that on
+one measured run and not one of them noticed. Give the two clients separate fakes
+that return different things, so swapping the client reds the test. If a rule
+names a client and your fake cannot tell which one ran, you have not pinned the
+rule. (Adopted 2026-08-07.)
 
 **Hold what the issue does not mention.** Acceptance criteria say what to change;
 they rarely say what must keep working. The issue's `## Must still be true`

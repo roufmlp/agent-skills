@@ -18,7 +18,14 @@ Read each entry and its bug file, then for each one ask:
 - Is this the system being wrong, or the finder expecting the wrong thing?
 - Is it already covered by another entry under a different description?
 
-**Verdict per entry, written into its bug file:** promote `candidate → open`, or
+**Then check the row itself.** `owner-notes` may hold a status word and a link to
+`bugs/<ID>.md`, and nothing else, inside 200 characters; `audience` must read
+`operator`, `tester` or `agent`. A row breaking either is refused — say so in your
+verdict and leave the entry at `candidate` for the finder's successor to rewrite.
+Prose in that cell is what made an earlier register 65% unreadable weight, and no
+agent is allowed to read a verdict there anyway.
+
+**Verdict per entry, written into its bug file:** move it `candidate → open`, or
 `retracted` with one line of why.
 
 **When uncertain, retract.** A phantom bug costs the whole pipeline — a fixer

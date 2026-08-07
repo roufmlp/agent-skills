@@ -1,7 +1,7 @@
 ---
 name: harden-issues
 description: Attack acceptance criteria at authoring time — a blind-spot pass over issue files that sharpens criteria with evidence, names invariants, and routes open forks to the human. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /harden-issues, or when an upstream issue-drafting pass calls it on freshly drafted slices. Never infer it from wording such as "harden these issues", "pre-batch pass" or "attack the criteria".
-argument-hint: "issue numbers, a range, 'all ready-for-agent', or nothing when invoked on drafts by an upstream tool"
+argument-hint: "a named batch — issue numbers or a range — or nothing when invoked on drafts by an upstream tool"
 ---
 
 # Harden issues
@@ -16,10 +16,16 @@ Two entry points, same pass:
 
 - **From an upstream issue-drafting pass, if the project has one** — runs on the
   drafted slices before the user quiz; the pass's questions join that quiz.
-- **Standalone, pre-batch** — runs over any set of `ready-for-agent` or
-  `needs-harden` issue files before a `/run-issues` batch; questions come back as
-  one numbered list. `needs-harden` is what a run sets when it finds criteria that
-  are wrong or stale, so those issues return here rather than resting.
+- **Standalone, pre-batch** — runs once over **a named batch**, immediately before
+  `/run-issues` takes that same batch; questions come back as one numbered list.
+  `needs-harden` is what a run sets when it finds criteria that are wrong or stale,
+  so those issues return here rather than resting.
+
+  **It takes a batch list, never `all`.** The pass used to gate every issue at the
+  moment it was written, which is how a queue of issues built up that could not run
+  because hardening stops on questions only the human can rule. Hardening is now
+  bought for the issues about to be built, and nothing else. An issue nobody has
+  scheduled does not need sharpening yet.
 
 ## Write authority — the one rule that matters
 
@@ -98,12 +104,36 @@ sharpened (with evidence), question (for the human), or clean.
    including ones routed in by other issues later.
 3. **Vague words.** "Consistent", "bounded", "handled", "a recovery affordance" —
    each criterion must name a fixture and an answer.
+
+   **A criterion may not be graded against a list of instances.** Class 3 catches
+   a criterion that is too loose; this catches the opposite failure — one pinned
+   to the examples instead of to the rule behind them. "These four call sites use
+   the admin client" passes the moment a fifth is added, and the issue ships with
+   its own hole. Write the rule, then name the instances as evidence that the
+   rule bites today. (Adopted 2026-08-07, from a run finale; three implementers
+   warned about this class avoided it three for three.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap.
+
+   **A criterion that names a mutation must have that mutation driven once
+   before the issue ships.** Not described, driven: make the change, watch the
+   test red, put it back, watch it green. An undriven mutation is a guard nobody
+   has proved can fail, which is the class this whole entry exists to close.
+   (Adopted 2026-08-07.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
-   against the real code or data, or flagged.
+   against the real code or data.
+
+   **A negative claim ships with the command that establishes it, or it is
+   deleted.** "Nothing else calls this", "no other table has the grant", "the
+   platform cannot do X" — paste the grep, the query or the doc read that proves
+   it, beside the claim. Flagging is no longer enough for this shape: an
+   impossibility claim with no command behind it comes out of the issue
+   altogether, because a reader cannot tell a checked negative from a guessed one
+   and will act on both. Narrowing it is not the remedy; deleting it is. (Adopted
+   2026-08-07. This edits class 5 deliberately and must never become a class of
+   its own — two homes for impossibility claims is the drift it avoids.)
 6. **Empty or missing hostile data.** Does QA/production hold data that can
    exercise each criterion? If not, say so and name the fixture to create —
    otherwise the gates validate over an empty set.
@@ -148,10 +178,11 @@ than a decision, and stamp — status included, same rule:
 
 `Hardened (provisional): <date> — <n> sharpened, <m> defaults pending.`
 
-A provisionally stamped issue is in scope for `all`, and the merge briefing names
-every one that shipped that way, so the answer arrives after the run instead of
-holding it up. Two things are not defaultable: an `[irreversible]` question, and a
-split — both leave the issue unstamped, and out of `all` until the human rules.
+A provisionally stamped issue is in scope for `/run-issues`' own `all`, and the merge
+briefing names every one that shipped that way, so the answer arrives after the run
+instead of holding it up. Two things are not defaultable: an `[irreversible]`
+question, and a split — both leave the issue unstamped, and out of that scope until
+the human rules. This pass has no `all` of its own; it takes the batch it was given.
 
 Every defaulted question is also appended to `.scratch/decisions-queue.md`, the
 one place every tool upstream of this pass queues decisions, so they reach the
@@ -169,3 +200,17 @@ line for the human, never a gate, never mid-run.
 Issue trackers are per-project — this pack's convention is
 `.scratch/<feature>/issues/`. The pass edits issue files only — never code, never
 the tracker board, never another skill's state.
+
+**The pass never mints.** It sharpens the issues it was given and creates none. This
+rule was already written and the practice ran ahead of it anyway: one pass cleared
+two issues out of `needs-harden` and minted two more into it, leaving the queue
+exactly where it started. Where the pass finds work that belongs in no issue in its
+batch — a gap between two of them, a surface nobody owns — it writes **a register
+row**, the one specified in `parallel-hunt/SKILL.md`, carrying an `audience` of
+`operator`, `tester` or `agent`, a severity, and `owner-notes` inside 200
+characters. Promotion turns the rows that earn it into issues, at the end of the
+next run or hunt. A finding is out by default, and promotion is the work that gets
+it in.
+
+The seam agent is the likeliest source of these, and the same rule binds it: a seam
+finding is a register row, never a new issue file.
