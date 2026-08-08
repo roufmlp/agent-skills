@@ -31,7 +31,8 @@ half-written file, or a sibling's mutant. Two agreeing runs with the mutated lin
 printed beside them is the cheapest proof the colour belongs to your change.
 (Adopted 2026-08-07.)
 
-**Any touch of `tests/regressions/` without a written justification in
+**Any touch of the finder's regressions directory — `tests/regressions/` unless the
+project's test layout puts it elsewhere — without a written justification in
 `bugs/<ID>.md` is an automatic reject.** That rule exists so a failing test cannot
 be quietly retuned into a passing one.
 

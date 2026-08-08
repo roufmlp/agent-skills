@@ -54,7 +54,12 @@ Cross-issue sharpenings go into the affected issues' `## Must still be true`,
 each naming the sibling issue it came from, so the reason survives the edit.
 
 Everything else goes to `.scratch/<feature>/harden/seam.md`: the gaps you found,
-the questions, and any required batch order with its reason.
+the questions, any required batch order with its reason, and a section headed
+`## Checks for the human`. A premise you cannot check because the check is out of
+reach — production data, a provider console, a credential you do not hold — is a
+check, not a question: run what you can run yourself, then list the rest, saying
+what to look at, where, and which criterion the answer decides. The orchestrating
+session puts them to the human before the run is bought.
 
 Issue files only. Never code, never tests, never the tracker board.
 

@@ -32,6 +32,14 @@ code, every time. A `PreToolUse` hook fires on the first edit of a session if yo
 not. Before any app goes live: run the pre-launch gate in those rules, every time, no
 exceptions.
 
+## Push to origin only when I say so
+Committing and merging to local main are yours. Pushing is mine to authorise, every
+time, per push. "Merge and complete the rituals" means merge locally and stop. So does
+a green run, a passed gate or a finished skill — none of them is permission to push.
+Where a push is the obvious next step, say so in one line and wait for me. Ruled
+2026-08-09, after a session pushed to `origin/main` inside a merge ritual: the merge was
+right, the push was not, and I only saw it in the report afterwards.
+
 ## Context hygiene
 Everything in the session context is re-billed on every turn that follows it, so what
 stays in the main thread is what costs money. Four rules, all of them mine to follow

@@ -34,6 +34,15 @@ a migration's direction, a money or auth rule, anything that ships data. Those
 never default. A question you cannot recommend an answer to is one you have not
 finished working.
 
+**A premise you cannot check because the check is out of your reach is a check,
+not a question.** A row in the production database, a setting in a provider
+console, a value behind a credential you do not hold: run everything you can run
+yourself first, then write the rest under `## Checks for the human` in your
+findings file. One item each, saying what to run or look at, where, and which
+criterion in which issue the answer decides. The orchestrating session is attended
+and puts them to the human before the run is bought, so a check is worth more than
+a defaulted guess. Never list a check you could have run yourself.
+
 Any statement of cause or rule you write — "the rule is X", "the cause is Y" — is
 a hypothesis unless you tested its premise. Untested, write it as a hypothesis and
 add a premise-check clause telling the implementer to test that premise itself,
@@ -109,7 +118,7 @@ class: **sharpened** (with the citation), **question** (for the human), or
    A criterion whose pass/fail is decided by reading PROSE rather than driving
    behaviour is flagged and made executable or bounded: a prose-graded bar
    regenerates on every fix — each edit mints a new falsifiable claim — and it
-   is the documented whale-maker. (181: run-issues decisions.md.)
+   is the documented whale-maker. (`skills/run-issues/decisions.md`.)
 9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min.
    Suspect anything whose criteria span several independent deliverables, or that
    packs migration plus logic plus UI into one slice. Propose the cut line — where
@@ -123,9 +132,16 @@ class: **sharpened** (with the citation), **question** (for the human), or
   citation. Append-only elsewhere; never reflow another section. **Never touch the
   `Status:` or `Hardened:` lines** — the orchestrating session owns those, so a
   half-finished pass is never mistaken for a complete one.
-- **Into `.scratch/<feature>/harden/<issue>.md`:** your per-class report, and your
-  numbered questions. The seam agent reads this file, not the orchestrator's
-  context. Write it before you return, even if you found nothing.
+- **Into `.scratch/<feature>/harden/<issue>.md`:** your per-class report, your
+  numbered questions, and your `## Checks for the human` section. The seam agent
+  reads this file, not the orchestrator's context. Write it before you return,
+  even if you found nothing.
+
+- **Flag any criterion that asks the run to stop for a human** — "run this script
+  and report the output", "confirm the value with the human", "pause and check" —
+  under `## Checks for the human`. Either the check is one the human settles now, or the
+  criterion needs rewriting so the implementer and the gates settle it alone. A
+  run must never sit waiting for a person.
 
 ## Bounds
 
@@ -133,5 +149,6 @@ Issue files only. **Never code, never tests, never the tracker board, never
 another skill's state.** If you find a real bug in the code while checking a
 premise, write it into your findings file as a note; do not fix it.
 
-**Final message:** counts only — sharpened, questions, clean, per class — plus the
+**Final message:** counts only — sharpened, questions, clean, per class, plus how
+many checks you wrote under `## Checks for the human` — and the
 path to your findings file. The detail lives in the file.

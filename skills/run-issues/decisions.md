@@ -242,10 +242,10 @@ and inherited ever since, and it was restated as though settled. It was question
 it did not survive the question.
 
 The premise is false for most batches. A 16-issue set queued on 2026-07-26 was
-almost entirely independent: a name-length guard on the vouch road (111) has no
-relationship to empty labels on the deal page (124). Halting fourteen issues
-because a migration hit an unexpected row would have cost most of an unattended
-overnight window for nothing.
+almost entirely independent: a name-length guard on one form (111) has no
+relationship to empty labels on an unrelated detail page (124). Halting
+fourteen issues because a migration hit an unexpected row would have cost most
+of an unattended overnight window for nothing.
 
 **Now:** a blocked issue blocks the issues that declare a dependency on it and
 nothing else. Dependencies are read from the invocation and from the issue files'
@@ -275,8 +275,7 @@ rubric-shaped template (`Status:`, acceptance criteria, `## Must still be true`)
 already in place. This skill's only coupling is the pre-flight stamp check:
 launch-time information, never a gate. Grilled and settled 2026-07-27 from two
 runs' evidence (112, 114, 110, 117, 122, 124, 125, 126 all shipped criteria
-faults through green gates); the design brief lives in a memory file, not
-published here.
+faults through green gates).
 
 ## Cost grill (2026-07-27, after the 111-136 batch)
 
@@ -330,11 +329,11 @@ pass-with-findings verdicts spilled into unmodelled correction rounds.
 4. **The verify gate sweeps every route the diff touches.** On 121 a server
    component importing from a `"use client"` module passed both gates — verify
    drove its acceptance path, review read the diff, and opening the other
-   pages was nobody's job. Three of five production deal pages rendered a
-   21,935-byte error shell until the finale caught it. The sweep is seconds of
-   HTTP against a server already running: fetch each touched route, and a 200
-   wrapping an error shell is a FAIL. The finale's whole-branch sweep stays as
-   backstop.
+   pages was nobody's job. Three of the five production pages in that section
+   rendered a 21,935-byte error shell until the finale caught it. The sweep is
+   seconds of HTTP against a server already running: fetch each touched route,
+   and a 200 wrapping an error shell is a FAIL. The finale's whole-branch sweep
+   stays as backstop.
 
 5. **Mid-run minting stays free, and write-only.** 15 issues minted in a
    14-issue run were real work cheaply captured — 154 alone named a defect
@@ -576,11 +575,13 @@ headings to issue files — harden stamps, status lines, deferred entries — an
 tracker issue body cannot carry that. Upstream authoring now writes files as the
 record; a tracker mirror, if ever wanted, is a read-only view added later.
 
-**The reuse rule is approved verbatim** and lives in coderules under "Reuse
-approved patterns, not unreviewed precedent", closing the drift class where a
-wrong shape written once becomes the house style through the primer. The lint
-half shipped with it in the app repo it was decided on: anchor-without-href,
-placeholder-href and static-element-handler checks at `error`, plus a seeded
+**The reuse rule is approved verbatim** and lives in
+[`steering/coderules.md`](../../steering/coderules.md) as rule 6 under "The
+working rule: AI types, I decide" — "Reuse approved patterns, not unreviewed
+precedent" — closing the drift class where a wrong shape written once becomes
+the house style through the primer. The lint half shipped with it in the app
+repo it was decided on: anchor-without-href, placeholder-href and
+static-element-handler checks at `error`, plus a seeded
 `docs/patterns.md`. One correction to the working doc's claim: that repo did not
 have `eslint-config-next`, and `eslint-plugin-jsx-a11y` caps its peer range below
 the repo's ESLint major — so the checks are hand-rolled `no-restricted-syntax`

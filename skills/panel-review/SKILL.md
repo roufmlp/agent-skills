@@ -148,8 +148,7 @@ and the cost controls:
   may only propose material the artefact already supports, and must name what its
   addition costs.
 - **Never resolve a disagreement by inventing a fact.** Unresolved is an answer.
-- Project constraints travel with every persona verbatim — for career copy, titles and
-  dates literal, and nothing published that is not yet public.
+- Project constraints travel with every persona verbatim.
 - The report follows whatever writing rules the project holds (mine:
   [`steering/writingrules.md`](../../steering/writingrules.md)).
 - **The source artefact is edited only when the human asked for the edit**, not when

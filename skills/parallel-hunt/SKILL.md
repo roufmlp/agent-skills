@@ -183,6 +183,8 @@ archive a register, and archived registers piled up on disk anyway.
 - **Finder** writes the register and NEW test files, one per bug, named by bug id,
   in a regressions directory of the project's own test layout. It never edits
   existing suites and never touches shipped code, not even to help.
+  **Where the project has no test layout of its own, that directory is
+  `tests/regressions/`** — the pack's default, and the path the agent files name.
 - **Fixer** owns shipped code, unit fakes and fixtures. It may flip an expectation
   in one of those regression files only when the fix intentionally changes the
   pinned behaviour, and must say so in `bugs/<ID>.md`. Unexplained touches are an
@@ -216,7 +218,8 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
 4. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
 5. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
-   over every row; delete the heartbeat cron; delete `round-brief.md`; commit. Then
+   over every row, giving it the project's issue directory path and its numbering
+   rule; delete the heartbeat cron; delete `round-brief.md`; commit. Then
    report — verified fixes, rejected fixes, retracted claims, and the two lists
    promotion returned. Say plainly what was left undone; a round that reports only
    its wins is not a report.
@@ -268,7 +271,8 @@ safe.
 
 ## Also fits
 
-Pre-launch security gates (coderules' ten points as register entries),
+Pre-launch security gates (the ten points under "The pre-launch gate" in
+[`steering/coderules.md`](../../steering/coderules.md) as register entries),
 test-coverage campaigns, migration and deprecation sweeps, docs-drift rounds.
 
 **Not** for building one feature — that is a dependency chain. Take an issue file

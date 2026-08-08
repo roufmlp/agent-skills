@@ -123,6 +123,31 @@ the never-pass-`model:` rule where the spawning happens rather than only in
 `/run-issues`. Asked for after the question of how likely a stray wrong-tier spawn
 actually was — low, but nothing would have caught one.
 
+## Checks only the human can run belong to the pass, not to the run (2026-08-09)
+
+The human's call, from the pass that hardened the batch before it. That pass left
+two issues carrying work for a person: one told the run to execute a script and
+report what it saw, another asked for a value mid-flight. Both were checks against
+production — the database the agents may not write and the settings they cannot
+reach — and both were answerable in ten minutes by the person at the keyboard, who
+ran them at the end of the session and handed the results back. The issues were
+corrected before the run started.
+
+That is now the rule rather than the exception. The pass is attended by definition;
+`/run-issues` is not, and a run that meets a human-only check either stalls or
+guesses. So an attacker or the seam agent records an out-of-reach premise as a
+**check**, distinct
+from a question: a question needs the human's judgement, a check needs only their
+hands and their credentials. The orchestrating session runs everything it can run
+itself, puts the remainder to them as a numbered list beside the questions, and
+writes the answers into the issue files cited `checked by the human <date>`. A
+criterion that asks the run to pause for a person is treated as a defect in the
+issue, the same as a guard that cannot fail.
+
+The default road is untouched. If the human is away or waves the list off, the
+check defaults, is written as a default and is queued — the batch never waits on
+it.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel review, taken by the human: three

@@ -23,7 +23,8 @@ such claim yourself before accepting it: run the query, check the doc, try it.
 Everything else works as the standard implementer: read the ledger's status table
 first and stop if this issue is already past implementation; orient from
 Carry-forward and `primer.md` rather than exploring; never read `run-journal.md`;
-work test-first via /tdd; run typecheck and the issue's own tests, not the full
+work test-first, via the `tdd` skill if the setup registers one and without it
+otherwise; run typecheck and the issue's own tests, not the full
 suite; own shipped code on the feature branch only; never merge, deploy, or touch
 main; treat a permission-classifier refusal as a closed road — unprivileged path
 or report blocked, never a retry; keep volunteered work executable-only and fix a

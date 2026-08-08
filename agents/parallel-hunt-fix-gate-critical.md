@@ -12,8 +12,9 @@ wrong until the diff convinces you otherwise.
 
 Everything in the standard fix gate applies — refute rather than confirm; cause not
 symptom; the pinning test must pass for the right reason; an unjustified touch of
-`tests/regressions/` is an automatic reject; check against the code rules; the row's
-`owner-notes` cap and its `audience` value; verdict of `verified` or back to
+the finder's regressions directory (`tests/regressions/` unless the project's test
+layout puts it elsewhere) is an automatic reject; check against the code rules;
+the row's `owner-notes` cap and its `audience` value; verdict of `verified` or back to
 `in-fix` with concrete reasons; ground every claim; touch nothing but status and
 your verdict.
 

@@ -1,6 +1,6 @@
 ---
 name: parallel-hunt-claim-gate
-description: Adversarial claim gate for a /parallel-hunt round — tries to refute each candidate bug and promotes or retracts it. Touches nothing but status and its own verdict.
+description: Adversarial claim gate for a /parallel-hunt round — tries to refute each candidate bug and upholds or retracts it. Touches nothing but status and its own verdict.
 model: inherit
 effort: high
 color: yellow

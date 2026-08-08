@@ -32,7 +32,8 @@ built against the wrong repo list, an apply that stopped halfway. Also the split
 use if this is ever put on a timer: rebuilding is read-mostly and safe to automate,
 while applying can merge to main and deploy, so it stays with the human.
 
-State lives in `~/.claude/daily-brief/`:
+State lives in one directory of its own, outside any repo, so a brief spanning
+several repos has a single home — `~/.claude/daily-brief/`, for example. It holds:
 
 - **`brief.md`** — the file the human reads and edits.
 - **`repos.md`** — one repo path per line. Create it from the invocation's own

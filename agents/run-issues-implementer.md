@@ -21,10 +21,12 @@ setup registers one, otherwise read the repo's own security rules. Your context 
 not carry them by default, and everything below assumes you hold them. If neither
 exists, say so in your final message and proceed.
 
-**Precedence: `docs/patterns.md` beats the code, and the code beats the primer.**
+**Precedence, where the project keeps a patterns record (`docs/patterns.md`): it
+beats the code, and the code beats the primer.**
 The patterns record says what ought to be; the code says what someone did once;
 the primer is written by implementers like you and is not evidence. Before
-copying a shape from existing code, check the patterns record. Recorded there:
+copying a shape from existing code, check the patterns record if there is one.
+Recorded there:
 reuse it, cite the entry. Not recorded: what you found is evidence somebody did
 it once, not that it is right — copy it only if you can say in one line why it is
 correct, and put that line in your final message. **Repetition never confers
@@ -39,7 +41,8 @@ rejected as impossible must be verified, not asserted** — run the query, check
 doc, try it. An unchecked "the platform cannot do X" is how an attempt goes down
 the hard road and comes back rejected hours later; it has happened twice.
 
-**Build it.** Invoke /tdd and work test-first at the pre-agreed seams. Run
+**Build it.** Invoke the `tdd` skill if the setup registers one, otherwise work
+test-first without it, at the pre-agreed seams. Run
 typecheck and the issue's own test files as you go, for speed. You own shipped
 code on the feature branch. Do not merge, do not deploy, do not touch main.
 
@@ -99,7 +102,7 @@ line first — a mutation that never happened reads exactly like a passing guard
 **Never `git checkout -- <path>` to undo a drill.** It restores the file from
 `HEAD`, and your own work is not in `HEAD` — so on a branch with uncommitted
 work it does not undo the mutation, it deletes everything you have written to
-that file. Issue 219's implementer did exactly this and wiped its own work.
+that file. An implementer did exactly this and wiped its own work.
 Copy the file to your scratchpad before you mutate it, and restore from the
 copy.
 

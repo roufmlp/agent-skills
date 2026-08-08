@@ -44,7 +44,7 @@ the browser's cache.
 HTTP every page route whose code the diff touches, directly or through an
 import, and read what came back. A page that returns 200 while rendering an
 error shell — an error boundary, a digest, a blank frame where content belongs —
-is a FAIL (issue 121 — decisions.md).
+is a FAIL (issue 121 — skills/run-issues/decisions.md).
 
 **List what you drove.** End the verdict with a `Drove:` line — every route you
 fetched and the status each returned, and the acceptance steps you performed. The
@@ -88,10 +88,11 @@ careful you intend to be. (Adopted 2026-08-07.)
 
 **Drill on scratchpad copies, never in the run's tree.** Copy the file, mutate
 the copy, run it under a scratchpad test config. A mutation in the shared tree
-makes you a second writer beside the review gate: on issue 186 the tree sat
+makes you a second writer beside the review gate: on one issue the tree sat
 reverted to the pre-fix file for two minutes mid-gate, and a backup taken
-inside that window captured the mutant (decisions.md). If a drill genuinely
-cannot run off a copy, say so in your verdict before you mutate, restore
+inside that window captured the mutant (skills/run-issues/decisions.md,
+"Post-run revisions (2026-08-02)"). If a
+drill genuinely cannot run off a copy, say so in your verdict before you mutate, restore
 byte-for-byte after, and record the file's checksum at gate open and gate
 close. Record those two checksums for every file you graded even when you
 never wrote — the runner re-checks them at staging time.
@@ -99,9 +100,9 @@ never wrote — the runner re-checks them at staging time.
 **Your copy is private, and its path says who you are.** Use a whole-tree copy
 under a directory naming this issue and your role — `verify-<issue>/` — never a
 generic name like `drill`. The review gate is working at the same moment and
-will reach for the same obvious names. On issue 210 both gates chose `drill`,
-and one gate's `rm -rf` destroyed the other's copy mid-run. On 211 both then
-collided inside the run's own tree, where one gate read the other's live mutant
+will reach for the same obvious names. On one issue both gates chose `drill`,
+and one gate's `rm -rf` destroyed the other's copy mid-run. On a later issue
+both then collided inside the run's own tree, where one gate read the other's live mutant
 — a case the open-and-close checksums cannot detect, because the file is back
 before either stamp is taken.
 

@@ -102,6 +102,7 @@ flowchart TD
 
     subgraph CLOSE ["the run closes"]
         FIN["coherence finale<br/>reads the branch as one change"]
+        PROM["promotion<br/>every register row → issue file, refusal or fixed"]
         H["human merge gate<br/>nothing merges without it"]
     end
 
@@ -134,7 +135,8 @@ flowchart TD
     NH --> MORE
     MORE -->|yes| N
     MORE -->|no| FIN
-    FIN --> H
+    FIN --> PROM
+    PROM --> H
 
     classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
     classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
@@ -143,7 +145,7 @@ flowchart TD
     classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
     class N,IMP,ESC,CORR,ANN step
     class FM,G,RC,MORE gate
-    class RT,STR,FIN keep
+    class RT,STR,FIN,PROM keep
     class NH,B,BC,DEP stop
     class H human
     style ATT fill:#FBFCFD,stroke:#CBD5E1,color:#475569
@@ -219,20 +221,22 @@ flowchart TD
     DEFER["deferred<br/>reported at round end, never hidden"]
 
     subgraph ENDR ["round end"]
+        PROM["promotion<br/>every row → issue file, refusal or fixed"]
         COMMIT["register · regression tests · fixes<br/>committed to the branch"]
         HUM["a human reads the branch<br/>the orchestrator never merges to main"]
     end
 
     FIND -->|"candidate"| CG
     CG -->|"retracted"| DEAD
-    CG -->|"promoted → open"| REG
+    CG -->|"upheld → open"| REG
     REG -->|"open → in-fix"| FIX
     FIX -->|"fix-ready"| FG
     FG -->|"sent back · masks a symptom"| FIX
     FG -->|"verified"| REG
     REG -->|"still open when the round ends"| DEFER
-    REG --> COMMIT
-    DEFER --> COMMIT
+    REG --> PROM
+    DEFER --> PROM
+    PROM --> COMMIT
     COMMIT --> HUM
 
     classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
@@ -242,7 +246,7 @@ flowchart TD
     classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
     class FIND,FIX step
     class CG,FG gate
-    class REG,COMMIT keep
+    class REG,COMMIT,PROM keep
     class DEAD,DEFER stop
     class HUM human
     style RUN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
@@ -349,7 +353,9 @@ session runs. Start the session on the model you want the run to use.
 
 **Nothing here needs editing before it runs.** The skills and agent files depend
 on each other and on nothing outside this repo — no personal memory files, no
-project-local skills, no named model. Where a run wants something a project may or
+named model, and no skill they cannot do without: `coderules`, `tdd` and
+`code-review` are each used if your setup registers one and worked around if not.
+Where a run wants something else a project may or
 may not have (a preview deploy, a canonical env file, a skill that drives the
 running app), it is written as a conditional and the run works either way. The
 steering docs are the exception, and deliberately so: they are my taste, published

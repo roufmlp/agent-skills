@@ -78,7 +78,8 @@ In the main checkout, under `.scratch/<feature>/`:
   learns. Exploration is paid once per run. **A new run starts a new primer** —
   rename the old one and never read it. It is written by implementers about
   implementer-written code, so it is orientation, never authority: what ought to
-  be true lives in `docs/patterns.md`, on main, and outranks both the primer and
+  be true lives in the project's patterns record, if the project has one
+  (`docs/patterns.md`, on main), and that record outranks both the primer and
   the code.
 - **`merge-briefing.md`** — the merge-read briefing, built up as the run goes.
   **A new run archives the old briefing at launch** — same rule as the primer.
@@ -362,7 +363,7 @@ Handoff documents are never the home for any of this.
 
 **Nothing in a run writes an issue file.** Not the runner, not an implementer, not
 a gate. Findings go to the register, and they leave it through promotion, which the
-finale runs once at the end of the run. A finding is out by default; promotion is
+runner spawns once at the end of the run. A finding is out by default; promotion is
 the work that gets it in. The register, the row format and the promotion rule are
 specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — the
 same file for the same feature, in the main checkout, whichever worktree the writer
@@ -443,7 +444,8 @@ resumes rather than re-running:
    downgrade it to save the wait, and never declare the run complete with the
    judgment half unrun.
 3. **Promotion — the last phase, and the only door into `issues/`.** Spawn one
-   `promotion` agent over every register row this run wrote. A row already at
+   `promotion` agent over every register row this run wrote, giving it the project's
+   issue directory path and its numbering rule. A row already at
    `verified` exits as `fixed`, before audience is even read, because the run fixed it
    and the fix is in the commit. Of the rest it promotes a row whose `audience` is
    `operator` at any severity, or `tester` at `critical` or `high`, and refuses the

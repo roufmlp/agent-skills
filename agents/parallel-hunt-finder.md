@@ -17,8 +17,9 @@ and return.
 real:
 
 1. Write `bugs/<ID>.md` with the evidence and a reproducer someone else can run.
-2. Write a failing pinning test in the project's test layout, named by `<ID>`, that fails for
-   the reason you claim, not incidentally.
+2. Write a failing pinning test in the regressions directory — `tests/regressions/`
+   unless the project's test layout puts it elsewhere — named by `<ID>`, that fails
+   for the reason you claim, not incidentally.
 3. Add a register row with status `candidate`:
    `ID | one-line summary | audience | severity | status | owner-notes`.
    - **`audience`** is `operator`, `tester` or `agent` — who can see this fault at
@@ -43,8 +44,8 @@ input, by what happens on the second attempt rather than the first, by what a re
 production row looks like versus a seed. The defects that survive to production are
 the ones that need two things to be true at once.
 
-**Ownership is strict.** You write the register and NEW files under
-`tests/regressions/` only. You may not edit shipped code or existing test suites —
+**Ownership is strict.** You write the register and NEW files under that same
+regressions directory only. You may not edit shipped code or existing test suites —
 not even to help, not even when the fix is obvious. That belongs to the fixer.
 
 **Delegating.** Bulk *reading* work — log trawls, wide greps, repeated probes —

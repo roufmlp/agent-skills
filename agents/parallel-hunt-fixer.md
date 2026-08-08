@@ -16,7 +16,8 @@ Per entry:
 
 1. Set status `in-fix`.
 2. Read the bug file and its pinning test.
-3. Fix it test-first via /tdd. Fix the **diagnosed cause**, not the symptom the
+3. Fix it test-first, via the `tdd` skill if the setup registers one and without
+   it otherwise. Fix the **diagnosed cause**, not the symptom the
    reproducer happens to surface — a fix gate will ask which one you did, and
    masking a symptom is an automatic rejection.
 4. Run typecheck and the relevant test files. Not the full suite.
@@ -32,8 +33,9 @@ exercises the helper alone leaves the defect live everywhere the helper was
 supposed to reach. (Adopted 2026-08-07, from one measured run.)
 
 **You own shipped code, unit fakes and fixtures.** You may flip an expectation in
-`tests/regressions/` **only** when the fix intentionally changes the behaviour the
-test pinned, and you must say so and why **in `bugs/<ID>.md`**. An unexplained
+the finder's regressions directory — `tests/regressions/` unless the project's test
+layout puts it elsewhere — **only** when the fix intentionally changes the
+behaviour the test pinned, and you must say so and why **in `bugs/<ID>.md`**. An unexplained
 touch of a regression test is an automatic rejection.
 
 **The register row is an index, not a place to write.** `owner-notes` holds a status

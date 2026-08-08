@@ -9,6 +9,9 @@ argument-hint: "a named batch — issue numbers or a range — or nothing when i
 Attack acceptance criteria before anyone builds to them. An issue whose criteria
 are wrong when written passes every gate — the implementer builds to the bad spec
 and both gates grade against that same bad spec. This pass is the early fix.
+It is also what buys the next run an uninterrupted one: anything the run would
+otherwise stop and ask a human for is settled here, while a human is at the
+keyboard (see "Checks only the human can run happen here, not mid-run").
 Provenance and the incident record live in this directory's `decisions.md`; read
 it when changing this skill, not when running it.
 
@@ -54,8 +57,8 @@ reading every issue plus the attackers' findings files.
 
 Findings go to files, not through this session's context: attackers write
 `.scratch/<feature>/harden/<issue>.md`, the seam agent writes
-`.scratch/<feature>/harden/seam.md`. The pass reads counts and questions, never
-the working.
+`.scratch/<feature>/harden/seam.md`. The pass reads counts, questions and each
+findings file's `## Checks for the human` section, never the working.
 
 **Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
 the tier the session was launched on. A second, differently-tuned model was
@@ -194,6 +197,38 @@ comes back to this pass rather than dying in a status nothing reads.
 
 `/run-issues` lists unstamped scoped issues in its launch message — a launch-time
 line for the human, never a gate, never mid-run.
+
+## Checks only the human can run happen here, not mid-run
+
+A criterion that waits on a value only the human can fetch — a row in the
+production database, a setting in a provider console, anything behind a credential
+the agents do not hold — costs the run an unattended stall if it survives this
+pass. The hardening session is attended. Settle it here.
+
+- **Collect them as you attack.** An attacker that cannot verify a premise because
+  the check is out of its reach records a check, not a question: what to run or look
+  at, where, and which criterion in which issue the answer decides. Both agent types
+  write them under `## Checks for the human` in their findings file, which is where
+  this session reads them.
+- **Run everything you can run yourself first.** A QA environment is usually
+  writable, the code is readable, most premises need nobody. The list the human
+  sees carries only what the repo's rules or the credentials put out of your hands,
+  and each item says in one clause why it is theirs.
+- **Put the list to them at the end of the pass, in the same session as the
+  questions.** Numbered, one action per item, and for any provider console the
+  current official button names, read from the provider's live documentation rather
+  than from memory.
+- **Write their results into the issue files as facts**, cited `checked by the
+  human <date>` with the query or the setting quoted. That citation meets the
+  write-authority bar the same way a file:line does.
+- **No hardened issue may ask the run to stop for a human.** A criterion that tells
+  the implementer to run a script and report the output, or to pause for a value, is
+  a defect in the issue. Either the check happens here and the answer goes into the
+  file, or the criterion is rewritten so the implementer and the gates settle it
+  alone.
+- **If the human is away, or waves the list off**, the default road applies
+  unchanged: take the default, write it as a default, queue it to
+  `.scratch/decisions-queue.md`. A check nobody ran never holds the batch.
 
 ## Scope notes
 
