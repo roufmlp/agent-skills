@@ -104,8 +104,9 @@ there too, and committing them mid-run puts half-written run state on main.
 ## Promotion — the only door into `issues/`
 
 **No role in this loop writes an issue file.** Finders, fixers, gates and the
-orchestrator all write register rows. Promotion is the last phase of the round and
-the only step that creates an issue. `/run-issues` carries the same phase, on the
+orchestrator all write register rows. Promotion is the last phase of the round that
+resolves findings, after the round-end commit above, and the only step that creates
+an issue. `/run-issues` carries the same phase, on the
 same rule and the same register.
 
 A finding is out by default. Promotion is the work that gets it in.

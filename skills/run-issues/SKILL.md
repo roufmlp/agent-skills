@@ -406,8 +406,11 @@ again from main.
 ## Finale — fully automatic
 
 After the last issue, in order, tracked in the ledger as
-`finale-mechanical → finale-judgment → awaiting-merge` so an interrupted finale
-resumes rather than re-running:
+`finale-mechanical → finale-judgment → finale-promotion → finale-board →
+awaiting-merge` so an interrupted finale resumes rather than re-running. Write each
+state before the step it names begins, so a kill inside a step resumes at that step
+rather than past it. Promotion is safe to re-enter — it deletes each row as it
+resolves it — and the board render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
    cache** (delete whatever the project's build cache is — `.next`, `dist`, `target`
@@ -443,7 +446,8 @@ resumes rather than re-running:
    `finale-judgment`, write the halt block, and revive after reset — never
    downgrade it to save the wait, and never declare the run complete with the
    judgment half unrun.
-3. **Promotion — the last phase, and the only door into `issues/`.** Spawn one
+3. **Promotion — the last phase that resolves findings, and the only door into
+   `issues/`.** Spawn one
    `promotion` agent over every register row this run wrote, giving it the project's
    issue directory path and its numbering rule. A row already at
    `verified` exits as `fixed`, before audience is even read, because the run fixed it

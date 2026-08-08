@@ -98,14 +98,34 @@ class: **sharpened** (with the citation), **question** (for the human), or
 3. **Vague words.** "Consistent", "bounded", "handled", "a recovery affordance" —
    each criterion names a fixture and an answer. (122's "internally consistent"
    was satisfied by the bug it described.)
+
+   **A criterion may not be graded against a list of instances.** This class
+   catches a criterion that is too loose; this catches the opposite — one pinned
+   to the examples instead of to the rule behind them. "These four call sites use
+   the admin client" passes the moment a fifth is added. Write the rule, then name
+   the instances as evidence that it bites today. (Adopted 2026-08-07, from a run
+   finale.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap. (Eleven guards that could not fail in fourteen
    issues.)
+
+   **A criterion that names a mutation must have that mutation driven once before
+   the issue ships.** Not described, driven: make the change, watch the test red,
+   put it back, watch it green. Write that drive into the criterion so the
+   implementer owes it. An undriven mutation is a guard nobody has proved can
+   fail. (Adopted 2026-08-07.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
-   against real code or data, or flagged. (114's headline premise was false of the
-   actual database; 116 said two channels, the code had three.)
+   against real code or data. (114's headline premise was false of the actual
+   database; 116 said two channels, the code had three.)
+
+   **A negative claim ships with the command that establishes it, or you delete
+   it.** "Nothing else calls this", "no other table has the grant", "the platform
+   cannot do X" — paste the grep, the query or the doc read beside the claim.
+   Flagging is not enough for this shape: a reader cannot tell a checked negative
+   from a guessed one, and will act on both. Narrowing it is not the remedy;
+   deleting it is. (Adopted 2026-08-07.)
 6. **Empty or missing hostile data.** Does QA or production hold data that can
    exercise each criterion? If not, say so and name the fixture to create.
    Otherwise the gates validate over an empty set. (118: five tables, zero rows.)
