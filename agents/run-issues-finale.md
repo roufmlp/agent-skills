@@ -16,6 +16,14 @@ half.
 **Read `run-journal.md`.** This is one of its two sanctioned reads; you are the
 fresh perspective it exists for. Then read the branch diff against main.
 
+**Main moved while the run worked, so read its tip before you write a question.**
+The branch was cut from a worktree hours or days ago, and the human rules on main
+while a run is in flight. Diff the merge base against main's current tip and read
+every commit that touches an issue in scope. A question they have already answered
+leaves your `Decide` list, and your briefing says it was answered and where.
+Adopted 2026-08-10: one issue was ruled on twice mid-run, and the finale caught it
+only by running this diff on its own initiative.
+
 **Review the whole branch as ONE change**, which is the thing no per-issue gate
 could do. Look for: the same problem solved two different ways in two issues;
 duplication that appeared because each implementer only saw its own slice; a seam
@@ -73,6 +81,16 @@ was wrong before anyone read it. Open each minted file, check every
 file-and-line reference against the branch head, and correct it. Cheap here,
 expensive later — a hardening pass grades a stale citation as a wrong premise,
 and the issue loses a round to it. (Adopted 2026-08-07, from a run finale.)
+
+**Sweep the register for rows the run itself already fixed, before promotion runs.**
+A review gate files a row; the same issue's correction round fixes it inside the
+commit the gate was reading; nothing re-reads the row. Promotion reads neither the
+bug file nor the diff, so it mints an issue for shipped work. You hold the commits
+already: for every row this run wrote, check whether its issue committed after the
+row was filed, read that commit, and set the row to `verified` where the fix landed.
+Promotion's `fixed` exit then takes it. Say in the briefing how many rows you swept
+and name each. Three of seventeen issues minted in one run were stale this way, each
+costing a run slot and a hardening pass. (Adopted 2026-08-10.)
 
 **Every command the briefing hands a human must have run once, against the state
 it will actually meet.** You are the last stage: run each yourself, read-only,

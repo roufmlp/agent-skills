@@ -24,8 +24,20 @@ before regenerating is what stops an answer being overwritten by the next
 collation.
 
 The bare invocation is the daily ritual: the human sits down, runs it, reads what
-comes back, edits it, and runs it again tomorrow. Yesterday's answers go out and
-today's brief comes in, in that order, from one command.
+comes back, and answers. Yesterday's answers go out and today's brief comes in, in
+that order, from one command.
+
+**After the build, offer the walk-through, and it is the default road** (the
+human's standing ask, 2026-08-08). Put section 2's open decisions to them in chat
+one at a time with AskUserQuestion — recommended option first, the deciding facts
+in the descriptions. When they ask for clarity, restate that item's full form in
+plain words in chat, then ask again; never treat a clarity ask as an answer. Apply
+each ruling in session under half one's own answer-type rules, then update
+`brief.md` in place to the ruling table and log to `applied.md`, the same as a
+file apply. The walk-through ends when section 2 holds zero open items or the
+human stops it; whatever they leave is carried, not defaulted harder. The
+file-edit road stays for the days they want to read alone — a brief they edit
+still applies tomorrow, exactly as before.
 
 `build` and `apply` run one half each, for when something needs redoing — a brief
 built against the wrong repo list, an apply that stopped halfway. Also the split to
@@ -116,6 +128,12 @@ words, and the branch stays unmerged.
 
 ## Half two: build
 
+**First, run the production watcher.** In each repo in `repos.md` whose checkout
+holds `scripts/watch-production.mjs`, run `node scripts/watch-production.mjs`
+before reading anything — it writes the register rows and pending actions the rest
+of the build collates. Where the script does not exist, say so in the brief and
+continue.
+
 Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every `run.md`, every
 `merge-briefing.md` for a run at `awaiting-merge`, every feature's `register.md`,
 and the project's pending-actions file, if it has one.
@@ -194,6 +212,23 @@ here.
 quietly; if something keeps returning unanswered, that is information about the
 question, not about the human.
 
+**Test every hold before you report this section empty.** A queued item the human
+has held carries a `Release-when` line naming a condition you can check by reading
+a file. Read it. If the condition is met, the item goes into this section today
+with the evidence beside it, and the hold note is deleted rather than kept. **A
+section 2 that reports nothing open says, in one line, how many holds it tested
+and that none had released.**
+
+A hold carrying no `Release-when` is a bug in whoever wrote it. Do not silently
+obey it: put it in this section and ask the human for the condition.
+
+Ruled 2026-08-09, after two queued items sat held for three days past their own
+release condition. The hold note said "do not re-present until the first run's
+promotion phase has produced output". Two runs met it. Three briefs read the note
+as prose, skipped both items, and reported an empty queue. Nothing was broken and
+nothing was flagged, because no step tested the condition. A hold whose condition
+nothing checks holds for ever.
+
 ### 3. Actions on the human — the last ten
 
 The project's pending-actions items, if there are any, numbered, one action each,
@@ -217,6 +252,12 @@ lives.
 One line at the very top: how many decisions are waiting, how many runs want a
 merge read, and how many actions are on the human. They should know the shape
 before they read a word of detail.
+
+**Above even that line: any `high` register row filed since the last brief**, one
+line per row with the row's `what` text verbatim. `high` is the strongest severity
+the production watcher writes — `critical` is a human's word — so this flag is
+what decides whether today takes the same-day escape hatch instead of the weekly
+run. A brief with none writes nothing; the flag appears only when it fires.
 
 ## Running it
 

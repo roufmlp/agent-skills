@@ -1007,3 +1007,18 @@ rejected twice by both gates. The criteria re-check found the bar it failed on
 had never been written — both attempts met every criterion as written — and
 annulled both strikes. It also refuted the runner's own hypothesis about the
 fix. The re-check earns its cost.
+
+## The twin of a deleted claim (2026-08-11)
+
+**A correction round searches the branch for a twin of every claim it deletes.**
+Four over-claiming sentences were deleted across the four issues of one run, and
+a fifth reached main. The one that escaped was the same sentence as one that had
+just been deleted, sitting one directory away in the route the test guarded. No
+gate reads two files for one claim, and no gate reads two issues at all, so the
+second copy had nobody looking at it. Every one of the five was found by a person
+or a gate reading prose against code; no test caught any of them.
+
+Adopted narrowly, and nothing wider: an authoring-time rule was rejected on the
+ground that the four caught instances cost about two minutes each and no strike,
+so a rule charging attention on every comment in every issue would be the more
+expensive mistake. In `SKILL.md`, step 5, under the delete-only prose rule.

@@ -44,6 +44,16 @@ itself, not a narrow question near it.
 
 ## Fan-out
 
+**A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries the
+forbidden thing AND the permitted one, with an absolute path wherever a path exists. Three
+faults in one `/run-issues` batch shared one shape: "QA is the only WRITABLE
+database" constrained the operation and left production reachable, so a verify gate read
+production with a service-role key; "a probe script needs a directory holding `node_modules`"
+named no home, so three files landed at the shared worktree root; and a brief naming no
+register path sent two gates to the worktree copy instead of the main checkout's. A brief
+that constrains the ACT while leaving the PLACE unnamed gets a different answer from every
+agent. (Adopted 2026-08-09.)
+
 Each role is a registered agent type carrying its own brief, model and effort.
 Spawn by `subagent_type`; the pass never pastes a brief.
 
@@ -124,6 +134,22 @@ sharpened (with evidence), question (for the human), or clean.
    test red, put it back, watch it green. An undriven mutation is a guard nobody
    has proved can fail, which is the class this whole entry exists to close.
    (Adopted 2026-08-07.)
+
+   **A criterion may never ask for evidence to land in the issue file.** Nothing
+   in a run may write an issue file, so a criterion saying "recorded in the
+   issue's notes" cannot be met by the agent it is written for. Send the evidence
+   to a test, a doc comment, the register or the merge briefing — all four
+   survive a run's own write rules. (Adopted 2026-08-10, from a run finale: one
+   issue's criteria asked for mutation drives "recorded in the issue's notes",
+   the spawn brief forbade it, the drives went into test doc comments, and the
+   review gate filed the contradiction. There is no template file to fix — the
+   phrase came from this pass.)
+
+   **A constraint taken from measured data is labelled as one.** Where a criterion
+   or an invariant fixes a number because that is what today's input holds, write
+   it into `## Must still be true` as an assumption a later issue may need to
+   lift, and say the migration header must do the same. (Adopted 2026-08-10, from
+   the same run finale.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
    against the real code or data.
@@ -152,6 +178,30 @@ sharpened (with evidence), question (for the human), or clean.
    as a question for the human; splitting is their call, never the pass's or the
    runner's. `/run-issues` deliberately never splits mid-run — an oversized
    issue that reaches a runner arrives back here.
+
+10. **The database the rows land in.** An issue whose work writes data rows — an
+    import, a seed, a backfill, a migration carrying data — names every database
+    those rows must reach, in `## Target database`: each by project ref, the owner
+    who may write it, the moment it happens, and the route. An issue that changes
+    code only answers `Writes rows: no`.
+
+    **A criterion that counts rows or reads data names its database.** A gate
+    grades one criterion at a time and reaches whichever database it is allowed to
+    write, so "the target database" resolves to that one and reads green wherever
+    it runs. This class adds the ref and nothing else — the count itself stays
+    governed by classes 3 and 4, which keep it derived from its source rather than
+    frozen at today's figure.
+
+    **A criterion may name only work the run can do.** Where a database is
+    reachable by the human alone, that step goes to the project's pending-actions
+    file, if the project keeps one, as a numbered action, and `## Target database`
+    records the intent. Same reason as class 4's rule on evidence in the issue
+    file: an agent cannot meet a criterion aimed at somebody else.
+
+    Unanswered, this defaults: the writable database during the run, then the
+    production database, owner the human, after the deploy — written as a default.
+    Silence is what this class exists to catch, so a pending action nobody needed
+    is the cheap error. (Adopted 2026-08-12; the incident is in `decisions.md`.)
 
 The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only

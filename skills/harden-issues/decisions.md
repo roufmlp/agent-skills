@@ -148,6 +148,27 @@ The default road is untouched. If the human is away or waves the list off, the
 check defaults, is written as a default and is queued — the batch never waits on
 it.
 
+## No issue named the database its rows land in (2026-08-12)
+
+Class 10. An issue loaded a supplier catalogue: 4058 rows across four tables. Both
+gates graded it row by row. It passed nine criteria and ten invariants, and merged.
+
+Every row landed on the QA project. The customer's project held none of them, and
+the release conditions that count those rows count them there.
+
+Nothing failed. The issue's own text opened "the import that fills the four tables
+from the snapshot" and named no database. Its parent ticket named none either. Its
+last criterion read "counting rows on the target database answers release conditions
+1 and 3", and the target database was bound to nothing anywhere in the file. Every
+agent in a run may write one non-production database, correctly, so the implementer
+built the only importer it could build and the gates read the only database they
+could reach. Both gates raised the gap independently, and both were right to stop
+there: a gate reports rather than widens scope, so the sentence arrived in the merge
+briefing after the branch was finished.
+
+The instance closed on a follow-up issue. The shape repeats on anything that writes
+rows rather than code, which is why it became a class instead.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel review, taken by the human: three

@@ -125,10 +125,15 @@ resolved one of three ways:
   look at audience or severity.** Delete the row, write nothing, and report it as a
   bare count. A fault the round fixed needs no issue: the fix is in the commit and
   the record is in `bugs/<ID>.md`.
-- **Promoted** — `audience: operator` at any severity, or `audience: tester` at
-  `critical` or `high`. Write the issue file, then delete the row.
-- **Refused** — everything else. `audience: agent` at any severity, and `tester`
-  below `high`. Delete the row and give the reason in the round report.
+- **Promoted** — the row clears the audience-and-severity thresholds. Write the issue
+  file, then delete the row.
+- **Refused** — everything else. Delete the row and give the reason in the round report.
+
+**The thresholds live in [`agents/promotion.md`](../../agents/promotion.md) and
+nowhere else.** This file and `run-issues/SKILL.md` both carried "operator at any
+severity" for a day after the human set a `medium` floor on `operator` (2026-08-09),
+and a run brief repeated the stale figure. Name the exits here; read the numbers
+there.
 
 **`fixed` is never reported as a refusal**, and the ordering above is what enforces
 it. The human overturns a refusal with one word, so a round's thirteen successful
@@ -206,6 +211,16 @@ Succession needs no handoff document. A successor's brief is the register plus i
 own agent file. **The register is the handoff.**
 
 ## Orchestrator rules
+
+**A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries
+the forbidden thing AND the permitted one, with an absolute path wherever a path
+exists. Three faults in one `/run-issues` batch shared one shape: "QA is the only
+WRITABLE database" constrained the operation and left production reachable, so a
+verify gate read production with a service-role key; "a probe script needs a
+directory holding `node_modules`" named no home, so three files landed at the shared
+worktree root; and a brief naming no register path sent two gates to the worktree
+copy instead of the main checkout's. A brief that constrains the ACT while leaving
+the PLACE unnamed gets a different answer from every agent. (Adopted 2026-08-09.)
 
 Stay thin — the orchestrator's context is the only one that lasts all round.
 

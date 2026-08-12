@@ -113,8 +113,8 @@ learning that lives only in the journal survives only if the runner remembers to
 re-brief it. **Every entry names the issue(s) it serves**, and the runner deletes
 it when its last consumer goes `done` — an unexpired entry is billed to every
 remaining spawn. A human action taken mid-run (a SQL fix, a console change) is
-recorded here with its **observed** effect, not its intended one: one has
-already silently failed to land.
+recorded here with its **observed** effect, not its intended one: one already
+silently failed to land.
 
 ## Shared external quotas
 
@@ -145,6 +145,17 @@ first, while the window exists.
    it executable or bounded before spawn, or send the issue back through
    `/harden-issues`. This, more than difficulty, is what separates a whale from
    a clean issue (decisions.md).
+
+   **A prohibition in a brief names the SYSTEM, not the verb.** Every "do not"
+   carries the forbidden thing AND the permitted one, with an absolute path
+   wherever a path exists. Three faults in one run shared one shape: "the test
+   database is the only WRITABLE database" constrained the operation and left
+   production reachable, so a verify gate read production with a service-role
+   key; "a probe script needs a directory holding `node_modules`" named no home,
+   so three files landed at the shared worktree root; and a brief naming no
+   register path sent two gates to the worktree copy instead of the main
+   checkout's. A brief that constrains the ACT while leaving the PLACE unnamed
+   gets a different answer from every agent. (Adopted 2026-08-09.)
 2. **Read its final message before doing anything else.** If it reports unfinished
    work, the issue is not gate-ready — re-spawn to finish it, or mark `blocked`.
    If it reports the acceptance criteria are *wrong* rather than unmet, spawn a
@@ -236,6 +247,16 @@ first, while the window exists.
    canonical statement per claim — everywhere else cites `file:line` and
    asserts nothing. The same rule governs post-block resolution rounds.
    (decisions.md.)
+
+   **When a round deletes a claim, search the branch for a twin before the round
+   closes.** One grep for a distinctive phrase from the deleted sentence. A claim
+   worth writing once tends to get written twice, and no gate reads two issues,
+   so the second copy ships unread. On one run four such sentences were deleted
+   and a fifth reached main, because its twin sat one directory away in a file
+   the correction never opened. The search costs seconds and costs nothing when
+   it finds nothing. (Adopted 2026-08-11, and narrowly: no authoring-time rule
+   came with it, because the caught instances cost two minutes each rather than
+   a strike. decisions.md.)
 
    **Three rules on what a claim may SAY. They bind every artefact an agent
    writes — issue files, the primer, migration headers, the briefing — not
@@ -342,6 +363,12 @@ Small-issue coalescing: up to two adjacent trivial issues (copy, config, no logi
 may share one implementer spawn and one combined gate spawn. Anything with logic
 is one issue per spawn.
 
+**Say in the merge briefing whether any pair qualified, and whether you coalesced
+them.** A run that found no pair says so in one line. This permission has stood
+since the skill was written and has never fired, and nobody can tell whether it
+is useless or simply unread. Two runs of this count settle it. (Ruled
+2026-08-12.)
+
 ## Nothing finishes vaguely
 
 An issue leaves the ledger as `done` or `blocked`. Never "done, mostly". Anything
@@ -363,7 +390,7 @@ Handoff documents are never the home for any of this.
 
 **Nothing in a run writes an issue file.** Not the runner, not an implementer, not
 a gate. Findings go to the register, and they leave it through promotion, which the
-runner spawns once at the end of the run. A finding is out by default; promotion is
+finale runs once at the end of the run. A finding is out by default; promotion is
 the work that gets it in. The register, the row format and the promotion rule are
 specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — the
 same file for the same feature, in the main checkout, whichever worktree the writer
@@ -371,7 +398,8 @@ is standing in. Two registers for one product rebuilds the problem this closes.
 
 **A ruling that creates work gets its issue number in the same sitting as the
 ruling.** A ruling is a decision, not a finding, so this stays a direct issue file
-and does not go through the register. Not "that becomes its own issue" — the
+and does not go through the register — the same reason upstream issue authoring
+is untouched by any of this. Not "that becomes its own issue" — the
 number, or the file and line where the work now lives. On one batch a ruling
 settled an open question by
 splitting a road out of scope; nine hours later no issue existed, and the only
@@ -433,6 +461,20 @@ resolves it — and the board render is safe to repeat:
    The gate briefs carry the same rule from the author's side; the runner
    re-checks when assembling.
 
+   **A migration says when a constraint came from measured data rather than from
+   a business rule.** A number read off today's input is a fact about one import,
+   not a rule about the business, so the header names it as measured and the
+   issue lists it in `## Must still be true` as an assumption a later issue may
+   lift. (Adopted 2026-08-10, from a run finale: one issue wrote a check
+   constraint capping a rank at 3 because no group in the source workbook held
+   more than three entries; a sibling issue in the same run let a user add a
+   fourth, so an unplanned migration had to lift the ceiling, and the runner's
+   spawn brief had told that implementer "this issue adds no migration" for the
+   same reason. Both gates passed the constraint correctly, because its own
+   criteria never mentioned the case. Cost: one unplanned migration and one
+   wrong brief. The lifting migration's header is the model — it names which
+   sentence in the original was evidence and which was inference.)
+
    **A published checksum expires the moment the file moves.** A correction
    round re-stamps every checksum a gate published for a file it touched, and
    the finale re-runs any that remain before the briefing closes. Anchor diff
@@ -442,21 +484,52 @@ resolves it — and the board render is safe to repeat:
    were correct at gate close and false three hours later, and running them read
    as the exact alarm the gate wrote them to raise (decisions.md).
 
+   **Main moved while you worked. Read it before you write a question.** The run
+   branches from a worktree cut hours or days earlier, so the human's rulings
+   since the cut are invisible to every agent in the pipeline. The finale diffs
+   the merge base against main's current tip and reads every commit touching an
+   issue in scope. Anything already answered leaves the briefing, and the
+   briefing says it was answered. (Adopted 2026-08-10: the human ruled twice on
+   an issue while its run was in flight, and the run came within one `Decide`
+   item of handing back a question closed three hours earlier.)
+
+   **Sweep the register for rows their own issue already fixed.** A review gate
+   files a row, the issue's correction round fixes it inside the commit the gate
+   was reading, and nothing re-reads the row afterwards — so promotion, which
+   reads neither the bug file nor the diff, mints an issue for work that has
+   shipped. The finale already holds the commits, so it does the re-reading: any
+   row whose issue committed after the row was filed is checked against that
+   commit and marked `verified` where the fix landed, which routes it to
+   promotion's `fixed` exit. Three of seventeen issues minted on one run were
+   stale this way, each costing a run slot and a hardening pass. (Remedy chosen
+   2026-08-10.)
+
    If the finale fails on a usage limit, leave the ledger at
    `finale-judgment`, write the halt block, and revive after reset — never
    downgrade it to save the wait, and never declare the run complete with the
    judgment half unrun.
 3. **Promotion — the last phase that resolves findings, and the only door into
    `issues/`.** Spawn one
-   `promotion` agent over every register row this run wrote, giving it the project's
-   issue directory path and its numbering rule. A row already at
+   `promotion` agent over every register row this run wrote, **plus every row
+   anywhere in the register that already reads `verified`**, giving it the
+   project's issue directory path and its numbering rule. A row already at
    `verified` exits as `fixed`, before audience is even read, because the run fixed it
-   and the fix is in the commit. Of the rest it promotes a row whose `audience` is
-   `operator` at any severity, or `tester` at `critical` or `high`, and refuses the
-   others. A promoted row becomes an issue file at `Status: needs-harden` with one
+   and the fix is in the commit. That exit takes no judgement, so widening the
+   scope cannot promote anything wrongly, and it is what sweeps up a `verified`
+   row left by a fix made outside any run — without the sweep those rows belong
+   to no run and accumulate for ever (ruled 2026-08-12). Of the rest it promotes
+   on the audience-and-severity thresholds, and refuses the others. A promoted
+   row becomes an issue file at `Status: needs-harden` with one
    category role and a link to its bug file. All three exits delete the row, so the
-   register's length stays the promotion backlog and nothing else. The rule lives in
-   the agent file and in `parallel-hunt/SKILL.md`; both skills use the one agent.
+   register's length stays the promotion backlog and nothing else.
+
+   **The thresholds live in the `promotion` agent file and nowhere else.** Both
+   skills spawn the one agent, so a run brief that restates a threshold restates
+   a figure it cannot keep current. This file and `parallel-hunt/SKILL.md` both
+   carried "operator at any severity" for a day after the human set a `medium`
+   floor on `operator` (2026-08-09); one run's brief repeated the stale figure
+   and promotion had to overrule its own brief. Name the exits here; read the
+   numbers there.
 
    **`fixed` is reported as a count and never as a refusal** (ruled 2026-08-06). A
    run that fixes work must not report that work under a word the daily brief
