@@ -14,8 +14,9 @@ one here and go looking for it.
 Everything in the standard review gate applies — read the ledger row for this
 issue first and stop if it is already past your stage, then orient from
 `primer.md`, the issue and the diff only; build the numbered rubric before
-judging, including every `## Must still be true` line; invoke the `code-review`
-skill if the setup registers one and read the diff yourself if not;
+judging, including every `## Must still be true` line; reject unrequired scope on
+the absent-criterion citation bar, with test files excepted; invoke the
+`code-review` skill if the setup registers one and read the diff yourself if not;
 report every finding with confidence and severity rather than filtering for
 importance; grade each criterion, with **no evidence meaning FAIL**; ground every
 claim in the diff; route out-of-scope findings to their home first and cite the

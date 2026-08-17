@@ -35,15 +35,63 @@ is the return path: `/harden-issues` takes it as in-scope.
 Each role is a registered agent type carrying its own brief, model and effort.
 Spawn by `subagent_type`; the runner never pastes a brief.
 
-| Stage | Agent type | Effort |
-|---|---|---|
-| Implement | `run-issues-implementer` | high |
-| Third attempt after two rejections | `run-issues-implementer-escalated` | high |
-| Verify | `run-issues-verify-gate` | high |
-| Review | `run-issues-review-gate` | high |
-| Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high |
-| Coherence finale, once per run | `run-issues-finale` | max |
-| Promotion, once per run | `promotion` | medium |
+**Every spawn in this run carries `run_in_background: false`. Name the field on
+the call. Do not take the tool's default.** The runner has nothing to do while a
+worker runs — it cannot open the gates until the implementer returns, and it
+cannot judge until both gates answer — so the spawn tool's own rule applies: pass
+`false` when the next action depends on the result and nothing else could usefully
+happen meanwhile.
+
+**The measurement first recorded here was wrong, and the rule survives on the
+paragraph above alone.** The 2026-08-17 audit of one run blamed eight 17-to-23
+minute stalls, 158 minutes, on background spawns: the runner asleep past finished
+work until the resume cron woke it. The 2026-08-18 re-measure joined every spawn to
+its subagent transcript and refuted that. A task notification woke the runner
+within seconds of every completion, and the eight gaps were the workers' own
+runtimes. Foreground spawning recovers none of them; expect it to save no clock.
+What it buys is not betting the run on notification delivery holding across
+harness versions.
+
+**The cron stays, at its usage-limit interval, and it rescued that run exactly
+once — not from a background spawn.** At 06:34Z the runner wrote that it was
+spawning the next issue, ended its turn, and never made the spawn call; the cron
+caught the 24-minute gap. `run_in_background: false` cannot prevent a call that
+was never made. Shortening the interval buys nothing.
+
+**The field is enforced, not remembered — where the harness supports hooks.** A
+`PreToolUse` hook can refuse any `run-issues-*` spawn whose `run_in_background`
+is not exactly `false`, with a message that says how to reissue; add one to the
+project's settings if you want the field mechanical rather than prose. The two
+gates still run concurrently: spawned in one message, two foreground calls run
+in parallel.
+
+**This is also what the verdict check guards.** A runner that does not block can
+mark an issue done before the work lands. `skills/lib/check_verdict.py` refuses on a gate
+that returned no verdict, and that refusal is load-bearing today rather than
+insurance against a future version.
+
+| Stage | Agent type | Effort | What a wrong answer here costs |
+|---|---|---|---|
+| Implement | `run-issues-implementer` | high | A weak diff is paid for twice, by the gate round that rejects it and by the attempt it burns against the cap |
+| Third attempt after two rejections | `run-issues-implementer-escalated` | high | Two attempts have already failed on this issue, so the next exit is `blocked`: the issue leaves the run and comes back as one of the human's answers |
+| Verify | `run-issues-verify-gate` | high | A wrong pass ships behaviour nobody drove, and the finale is the first thing after it that looks |
+| Review | `run-issues-review-gate` | high | Same: no catcher until the finale, and it is the only reader of the whole diff before then |
+| Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high | A wrong pass is money, auth or a secret, which is the class the variant exists for |
+| Coherence finale, once per run | `run-issues-finale` | max | Once per run, and the last fresh eyes before the merge read |
+| Promotion, once per run | `promotion` | medium | Every exit is recoverable: the row survives a wrong refusal, and the human vetoes either direction in the next brief |
+
+**A role is safe to downgrade where its wrong verdict is recoverable, never
+because the model looks strong enough.** That is the test, and promotion is the
+only role in this table that passes it — it applies thresholds it may not argue
+with, and both of its wrong exits are caught. It is also a measurement waiting to
+be taken rather than a settled value. The two trials that keep getting proposed,
+`xhigh` in place of `max` on the finale and on the panel gate, stay refused for
+the same reason read the other way: each runs once per run, so the saving is one
+spawn, and what it buys is a cheaper last look before a merge.
+
+No value in the effort column was measured against a lower one. What the last
+column states is what a wrong answer costs, because that is the evidence a
+downgrade has to beat.
 
 Spawn prompts carry **only** what varies — issue ID, paths, rejection reasons.
 Everything stable already lives in the agent file, where it caches.
@@ -116,12 +164,58 @@ remaining spawn. A human action taken mid-run (a SQL fix, a console change) is
 recorded here with its **observed** effect, not its intended one: one already
 silently failed to land.
 
+## The full suite runs WITHOUT the canonical env file sourced
+
+A fact, not a duty, in a project that keeps its env in a canonical file outside
+the worktree. Sourcing that file before running the whole suite turns tests red
+that no diff caused, because the live-database suites stop skipping and run
+against whatever the variables point at. It cost one run three red suites in one
+night, each investigated as a regression and each caused by nothing.
+
+Run the full suite clean. Export the live-database variables only when you
+deliberately want the live-database tests, and say so in the ledger when you do.
+(Adopted 2026-08-14; it had never been written down anywhere, which is why three
+agents in one run each discovered it the hard way.)
+
 ## Shared external quotas
 
 Any per-window cap on an external system is run state, owned by the runner.
 Carry-forward holds the last observed status, its timestamp, and who holds the
 window. **Two agents never hold the same quota at once.** Schedule live halves
 first, while the window exists.
+
+## The round header — one block, built once, pasted into every brief
+
+A **round** is the set of agents spawned for one issue: the implementer, then both
+gates, then any retry. Before the first spawn of a round, fill this block. Paste it
+verbatim into every brief in that round. A field you cannot fill stops the spawn —
+you settle it, you do not leave it out.
+
+```
+Browser harness:  <the tool name that PAINTS in this environment>
+Register:         <absolute path>
+Issue file:       <absolute path>
+Merge briefing:   <absolute path>
+Verdict goes to:  <absolute path>
+Private copy:     <absolute path carrying the issue id and the role> + the rsync recipe
+Settlements:      <every settlement this round is working under, verbatim>
+```
+
+**Why a block and not a rule.** The rule that a brief names the place and not only
+the act was adopted on 2026-08-09, restated as a check on 2026-08-14, and failed a
+third time in a run on 2026-08-16. Three faults, one shape, and none of
+them a prohibition: a brief said to drive a production build in a browser and named
+no harness, so the implementer picked the blind one and drove a whole acceptance
+walk in it — one round, on the largest issue in the batch. A settlement went to the
+implementer and the verify gate and not to the review gate, which then rejected on
+clauses the settlement had already answered — one annulled ground, one gate round.
+A gate brief named the register and the issue file, and not the merge briefing, so
+the gate found a file of that name in the main checkout and appended five lines to
+a stale artefact of a merged run.
+
+A third telling would have failed the same way. The block turns naming the place
+into a field you fill and settlement parity into a structural fact: one text, one
+paste, every agent in the round. (Adopted 2026-08-16.)
 
 ## Per-issue loop
 
@@ -130,6 +224,21 @@ first, while the window exists.
    choice — and the roads rejected — in the spawn prompt. Minutes here against
    hours later: 17 minutes versus 3h52m on one measured pair (decisions.md). Then
    spawn `run-issues-implementer`.
+
+   **Every implementer spawn passes the cap first**, this one and the escalated
+   third in step 8. It refuses the fourth attempt and the third criteria reset,
+   and prints the counts it refused on:
+
+   ```bash
+   python3 ~/.claude/skills/run-issues/check_attempt_cap.py --ledger <run.md> --issue <id>
+   ```
+
+   A non-zero exit means the issue is `blocked`: ledger it and go to step 9.
+   **Stamp `attempt <N>` into the issue's row before each spawn** — that marker
+   is the only thing the cap counts. The older `implement …` / `retry 1 …`
+   stamps cannot be counted, because `retry 00:18` is a clock and `retry 10.2`
+   is a duration in minutes, so a row still carrying them is refused until it is
+   restamped.
 
    **Size the issue while settling the road**, and write the estimate in its
    ledger row — an overrun then reads as live signal instead of archaeology.
@@ -155,7 +264,9 @@ first, while the window exists.
    so three files landed at the shared worktree root; and a brief naming no
    register path sent two gates to the worktree copy instead of the main
    checkout's. A brief that constrains the ACT while leaving the PLACE unnamed
-   gets a different answer from every agent. (Adopted 2026-08-09.)
+   gets a different answer from every agent. (Adopted 2026-08-09.) The
+   round header above carries the paths and the harness for every brief; this
+   rule governs the prohibitions the header has no field for.
 2. **Read its final message before doing anything else.** If it reports unfinished
    work, the issue is not gate-ready — re-spawn to finish it, or mark `blocked`.
    If it reports the acceptance criteria are *wrong* rather than unmet, spawn a
@@ -170,7 +281,19 @@ first, while the window exists.
    count). If verify rejects, read the review anyway: its findings still route,
    and its work is already spent.
 
-   **Concurrent gates share a tree but not a pen.** Both gate briefs require
+   **A brief that names a path for a private copy also names the method.** The
+   recipe, measured on one run: `rsync` the tree excluding `node_modules`,
+   `.next` and `.git`, then symlink the real `node_modules` into the copy. 0.8
+   seconds and 66 MB, and module resolution through the symlink was proved by
+   running a test file inside the copy. A gate given a path and no method invented
+   its own — `tar` over all 790 MB including `node_modules` — produced nothing for
+   81 minutes and was killed with no verdict. Every later gate got the recipe and
+   none has hung since. *Honest caveat: nobody re-ran `tar` against a control, so
+   the slow-`tar` diagnosis is untested. What is established is that the
+   replacement is fast.* (Adopted 2026-08-14; a recipe nobody writes down
+   is a recipe every gate reinvents.)
+
+   **Concurrent gates share a tree but not a pen.** Both gate briefs now require
    mutation drills on scratchpad copies; a gate that genuinely must write the
    tree declares it in its verdict, and then it is the only writer — a "touch no
    code" gate that mutates source to prove a test can fail is a writer, whatever
@@ -194,7 +317,50 @@ first, while the window exists.
    road, size it, pre-write the spawn prompt, prune the ledger, run the fixture
    pre-check (below). None of it touches the tree, so single-writer holds; on
    gate-pass only routing-verify, lint and commit remain serial (decisions.md).
-4. Both pass → **verify the routings**: grep each target file for the exact
+
+   **At prep, if a recorded default seeds, deletes or renames a row in a shared
+   database, read the test files this run has already committed on this branch.**
+   One `git diff --name-only <fork-point>..HEAD -- '*.test.ts'`, then read the
+   ones that touch the same tables. A default hardened days ago cannot know about
+   a guard an earlier issue in the same run committed ninety minutes back, and no
+   hardening pass can catch it because that guard did not exist when the issue was
+   hardened. One issue's recorded default would have seeded a second
+   profile-holding workspace on the test database while a sibling issue's
+   freshly committed schema test asserted exactly one existed; the runner
+   caught it by chance. A permanently red test invites a relaxation, and that
+   relaxation disarms a tenancy guard. (Adopted 2026-08-14, narrowed from
+   "shared state" — which nobody could apply — to rows in a shared database,
+   which is mechanical.)
+4. **Before reading either verdict, run the check.** One command per gate,
+   against the issue file in this run's own worktree:
+
+   ```bash
+   python3 ~/.claude/skills/lib/check_verdict.py --file <issue file> --section "## Verify gate"
+   python3 ~/.claude/skills/lib/check_verdict.py --file <issue file> --section "## Review gate"
+   ```
+
+   It exits non-zero when the heading is absent, when nothing sits under it, or
+   when a row still reads `pending`. **A non-zero exit is neither a pass nor a
+   rejection: the gate did not report.** Re-spawn it, or ledger the issue
+   `blocked` with what the check printed. Never let one gate's verdict stand as
+   the round's answer while the other is missing.
+
+   Two adversarial gates died at the weekly usage limit during one workflow
+   audit and wrote nothing at all. Both times a person recovered the
+   work by reading a transcript by hand, and nothing mechanical noticed they had
+   returned empty. A gate that drilled on a private copy can also write its
+   verdict beside the copy instead of beside the branch, and a verdict in the
+   wrong checkout is one careless `rm` from gone: one gate's 175-line verdict was
+   left in the wrong tree on one run and survived only because the finale
+   diffed two checkouts for an unrelated reason. Passing the path in this
+   worktree is what makes that a refusal instead of a silent pass. **This is a
+   check and not a reminder on purpose.** The rule that a brief names the place
+   and not only the act was adopted on 2026-08-09, one of its own worked examples
+   is a brief that sent two gates to the wrong register copy, and this same fault
+   recurred four days later. A second telling would not have worked either.
+   (Adopted 2026-08-14.)
+
+   Both pass → **verify the routings**: grep each target file for the exact
    line the gate quoted as appended — gates end each routed finding with that
    quote, and the runner greps the string, never a heading (a heading-level
    check has false-negatived routings that were present). A declared routing is
@@ -204,6 +370,32 @@ first, while the window exists.
    nothing and catches the shape defects no per-issue gate can see. Then commit,
    staging **explicit paths only** — never `git add -A` or `.`. Glance at
    `git status` and investigate anything unexplained *before* committing.
+
+   **The citation checker runs at every issue's commit, and a citation this run
+   moved becomes a register row before the next implementer spawns.** Where the
+   repo carries the script: before the run's first commit, run
+   `node scripts/check-issue-citations.mjs --all --quiet`
+   once and keep the output as the run's baseline. After each commit, run it again;
+   the delta against the baseline is what this run broke, in its own issue files
+   and in open backlog issues nobody in the run opened. File each new `moved` or
+   `gone` as a register row naming the citation and the commit that moved it, then
+   replace the baseline with the current output. The loop advances to the next
+   issue once every new one is filed.
+
+   The row is the whole remedy, and the run repairs nothing: a run may not edit the
+   specification it is graded against, so the repair belongs to the next
+   `/harden-issues` pass over that issue, which already reads the file and is
+   already allowed to write it (ruled 2026-08-15). The checker holds the same rule
+   in its own code and never writes an issue file.
+
+   (Adopted 2026-08-18, from one run's finale. The fourteen issue
+   files that run built went from 1 broken citation to 251, and twelve open backlog
+   issues nobody opened went from 0 to 28, four of them `ready-for-agent` and
+   takeable in the next batch. The mechanism is not carelessness: one issue's
+   citations were verified correct at 08:50 and a later issue moved the same file
+   at 13:11. Nothing re-read them, because the only stage that looked was the
+   finale, by which time thirteen commits had landed. This trades run time for
+   record accuracy, which is a price only the human may set, and the human set it.)
 
    **The runner commits. An implementer never commits its own work**, and the
    runner says so in every spawn. Two of the first three implementers on one
@@ -246,7 +438,16 @@ first, while the window exists.
    class makes it delete-only and forbids sizing the fix in lines. One
    canonical statement per claim — everywhere else cites `file:line` and
    asserts nothing. The same rule governs post-block resolution rounds.
-   (decisions.md.)
+
+   **A negative conclusion drawn from a grep does not travel without its scope,
+   in the same sentence.** "There is no X" from a single-line grep is a statement
+   about that pattern in those paths, not about the codebase, and it must say so
+   where it is asserted rather than in a paragraph nearby. This was advice here
+   from 2026-08-09 and was broken the same night: a wrong `updated_at` ruling
+   shipped and survived only because an implementer refused it on evidence.
+   Adopted as admissibility 2026-08-14 — a scopeless negative is not
+   passed onward, by a gate, a finale or a runner, and a reader who receives one
+   sends it back rather than acting on it.
 
    **When a round deletes a claim, search the branch for a twin before the round
    closes.** One grep for a distinctive phrase from the deleted sentence. A claim
@@ -335,7 +536,8 @@ first, while the window exists.
    attempt, then `blocked`. Rejection CLASSES are counted across resets —
    strikes reset, the class ledger does not. Without the cap, lawful resets
    compound: one measured issue ran more than twice the promised three attempts
-   (decisions.md).
+   (decisions.md). **This paragraph states the intent; the pre-spawn check in
+   step 1 is what enforces it.**
 
    This is the one case where a hardening pass may touch an issue a live run
    holds, and only because the run has stopped: no implementer is in the tree, and
@@ -359,15 +561,9 @@ first, while the window exists.
    roads side by side — merge-now-fix-later and fix-first — each with what it
    costs and what it risks. The judgement is the human's; the sizing is not.
 
-Small-issue coalescing: up to two adjacent trivial issues (copy, config, no logic)
-may share one implementer spawn and one combined gate spawn. Anything with logic
-is one issue per spawn.
-
-**Say in the merge briefing whether any pair qualified, and whether you coalesced
-them.** A run that found no pair says so in one line. This permission has stood
-since the skill was written and has never fired, and nobody can tell whether it
-is useless or simply unread. Two runs of this count settle it. (Ruled
-2026-08-12.)
+**One issue, one implementer spawn. Always.** Small-issue coalescing was retired
+on 2026-08-15; `decisions.md` holds the measurement. Do not reinvent it,
+and do not report on it in the merge briefing.
 
 ## Nothing finishes vaguely
 
@@ -433,145 +629,15 @@ again from main.
 
 ## Finale — fully automatic
 
-After the last issue, in order, tracked in the ledger as
-`finale-mechanical → finale-judgment → finale-promotion → finale-board →
-awaiting-merge` so an interrupted finale resumes rather than re-running. Write each
-state before the step it names begins, so a kill inside a step resumes at that step
-rather than past it. Promotion is safe to re-enter — it deletes each row as it
-resolves it — and the board render is safe to repeat:
+After the last issue the runner writes `finale-mechanical` into the ledger, and
+**that write is the trigger to read `finale.md`, beside this file, before the
+first finale step runs.** Nothing else starts the finale, and a runner that
+writes the state without reading the file has skipped it.
 
-1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
-   cache** (delete whatever the project's build cache is — `.next`, `dist`, `target`
-   — because a warm cache agrees with whatever it already compiled). Committed run state is build input: the ledger, journal and
-   issue files sit inside the repo, so whatever scans the project scans them too.
-   Confirm the toolchain excludes them, and treat a code fence in a write-up as
-   something the build may try to compile. Failures reopen the offending issue
-   through the per-issue loop.
-   Then a preview deploy, if the project has one. Where a standing decision says
-   to skip it, say so in the briefing; never work around it; never re-litigate it
-   per run.
-2. **Judgment.** Spawn `run-issues-finale`. Its verdicts plus `merge-briefing.md`
-   become the merge briefing.
-
-   **Every command the briefing hands a human runs once first, against the state
-   it will actually meet.** A pre-migration check runs before the migration, on
-   the pre-migration schema. If it cannot run there, it is the wrong check. (On
-   one run a gate wrote the check, the runner copied it, neither ran it — and the
-   human's first instruction errored with `column does not exist`. decisions.md.)
-   The gate briefs carry the same rule from the author's side; the runner
-   re-checks when assembling.
-
-   **A migration says when a constraint came from measured data rather than from
-   a business rule.** A number read off today's input is a fact about one import,
-   not a rule about the business, so the header names it as measured and the
-   issue lists it in `## Must still be true` as an assumption a later issue may
-   lift. (Adopted 2026-08-10, from a run finale: one issue wrote a check
-   constraint capping a rank at 3 because no group in the source workbook held
-   more than three entries; a sibling issue in the same run let a user add a
-   fourth, so an unplanned migration had to lift the ceiling, and the runner's
-   spawn brief had told that implementer "this issue adds no migration" for the
-   same reason. Both gates passed the constraint correctly, because its own
-   criteria never mentioned the case. Cost: one unplanned migration and one
-   wrong brief. The lifting migration's header is the model — it names which
-   sentence in the original was evidence and which was inference.)
-
-   **A published checksum expires the moment the file moves.** A correction
-   round re-stamps every checksum a gate published for a file it touched, and
-   the finale re-runs any that remain before the briefing closes. Anchor diff
-   commands to `main...HEAD`, never the working tree — a worktree diff prints
-   nothing once the work is committed, and an empty print cannot distinguish
-   "fine" from "the fix was reverted and committed". Both checksums on one issue
-   were correct at gate close and false three hours later, and running them read
-   as the exact alarm the gate wrote them to raise (decisions.md).
-
-   **Main moved while you worked. Read it before you write a question.** The run
-   branches from a worktree cut hours or days earlier, so the human's rulings
-   since the cut are invisible to every agent in the pipeline. The finale diffs
-   the merge base against main's current tip and reads every commit touching an
-   issue in scope. Anything already answered leaves the briefing, and the
-   briefing says it was answered. (Adopted 2026-08-10: the human ruled twice on
-   an issue while its run was in flight, and the run came within one `Decide`
-   item of handing back a question closed three hours earlier.)
-
-   **Sweep the register for rows their own issue already fixed.** A review gate
-   files a row, the issue's correction round fixes it inside the commit the gate
-   was reading, and nothing re-reads the row afterwards — so promotion, which
-   reads neither the bug file nor the diff, mints an issue for work that has
-   shipped. The finale already holds the commits, so it does the re-reading: any
-   row whose issue committed after the row was filed is checked against that
-   commit and marked `verified` where the fix landed, which routes it to
-   promotion's `fixed` exit. Three of seventeen issues minted on one run were
-   stale this way, each costing a run slot and a hardening pass. (Remedy chosen
-   2026-08-10.)
-
-   If the finale fails on a usage limit, leave the ledger at
-   `finale-judgment`, write the halt block, and revive after reset — never
-   downgrade it to save the wait, and never declare the run complete with the
-   judgment half unrun.
-3. **Promotion — the last phase that resolves findings, and the only door into
-   `issues/`.** Spawn one
-   `promotion` agent over every register row this run wrote, **plus every row
-   anywhere in the register that already reads `verified`**, giving it the
-   project's issue directory path and its numbering rule. A row already at
-   `verified` exits as `fixed`, before audience is even read, because the run fixed it
-   and the fix is in the commit. That exit takes no judgement, so widening the
-   scope cannot promote anything wrongly, and it is what sweeps up a `verified`
-   row left by a fix made outside any run — without the sweep those rows belong
-   to no run and accumulate for ever (ruled 2026-08-12). Of the rest it promotes
-   on the audience-and-severity thresholds, and refuses the others. A promoted
-   row becomes an issue file at `Status: needs-harden` with one
-   category role and a link to its bug file. All three exits delete the row, so the
-   register's length stays the promotion backlog and nothing else.
-
-   **The thresholds live in the `promotion` agent file and nowhere else.** Both
-   skills spawn the one agent, so a run brief that restates a threshold restates
-   a figure it cannot keep current. This file and `parallel-hunt/SKILL.md` both
-   carried "operator at any severity" for a day after the human set a `medium`
-   floor on `operator` (2026-08-09); one run's brief repeated the stale figure
-   and promotion had to overrule its own brief. Name the exits here; read the
-   numbers there.
-
-   **`fixed` is reported as a count and never as a refusal** (ruled 2026-08-06). A
-   run that fixes work must not report that work under a word the daily brief
-   offers to overturn.
-
-   **The runner never promotes rows itself.** This is the same call as the board in
-   step 4, for the same reason: by run end the runner's context is the most expensive
-   in the pipeline, and writing issue files is repetitive work that has no business
-   in it. The runner spawns, gets two lists back, and appends them to
-   `merge-briefing.md`, one line each. `/daily-brief` carries both to the human, who
-   holds the veto over either direction.
-4. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
-   human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
-   what and one of why each, ticks persisted in localStorage. Keep the existing
-   styling; send it with SendUserFile. **A fresh subagent renders it, spawned with
-   the cheapest model named explicitly on the spawn call** — from `merge-briefing.md`
-   plus the old board, never the runner itself, whose context is at its most
-   expensive by run end, and the old board's bytes never enter the runner.
-   Naming the model is not optional and "cheap" is not a model: an unnamed spawn
-   inherits the session model, so this step was paying the top tier to convert one
-   markdown file into HTML on the largest input in the pipeline (283 KB, measured
-   2026-08-06). There is no judgement in the render — the briefing already decided
-   what the board says. `merge-briefing.md` stays the source of truth,
-   and `/daily-brief` reads that file, never the board.
-5. **Recommend follow-ups; start none.** One exception is mandatory:
-   - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at
-     `awaiting-merge` and the brief carries it to the human with the branch head
-     SHA they are approving. When they write `merge`, that session merges,
-     rewrites the `unmerged` statuses, deploys, and drives a READ-ONLY walk of the
-     **deployed** site on real data before the human walk: every list page and its
-     filters and search, every detail page, the send and receive surfaces as far
-     as read-only allows. Read-only means no permission risk, so there is no
-     reason to skip it.
-     **The walk fires on ANY merge of a run branch, whoever merged** — a merge
-     outside the `/daily-brief` path does not skip it; the next brief session
-     runs it and reports what it found.
-   - Recommended after it: a `/parallel-hunt` round on the live system. It hunts
-     the seams between issues and against live external systems — the class of bug
-     per-issue gates cannot see. Its own promotion phase decides which of its
-     findings become the next run's issues.
-   - Only if the finale's findings are structural: an architecture-improvement
-     session on a clean tree.
+The finale is one full load at the end of a run, so it is not resident here. Its
+five steps, the ledger states after `finale-mechanical`, and what each step may
+not skip are specified there and nowhere else. The run ends at `awaiting-merge`,
+and the merge is the human's.
 
 ## Resume across usage limits
 
@@ -606,33 +672,12 @@ you verified); what is owed, in order, naming the agent type for each, and what
 must NOT be re-spawned because its work is already on disk and green; the
 remaining queue in the order given.
 
-**Find the right ledger before reading any of it.** `resume` with no issue range
-is ambiguous: every worktree carries its own `.scratch/<feature>/run.md`, and the
-most recently *touched* one is routinely the wrong one. Enumerate them all and
-read two lines of each, `Owner:` and `Worktree:`, before opening any of them:
-
-```bash
-for w in $(git worktree list --porcelain | grep ^worktree | cut -d' ' -f2); do for l in "$w"/.scratch/*/run.md; do [ -f "$l" ] && printf '%s\n  %s\n  %s\n' "$l" "$(grep -m1 '^Owner:' "$l" || echo 'NO OWNER LINE')" "$(grep -m1 '^Worktree:' "$l" || echo 'no Worktree: line')"; done; done
-```
-
-**Most of what that prints is the same ledger, not different runs.** Run state is
-committed, so every worktree branched from that commit carries a copy, frozen at
-whatever the ledger said when it branched (one measured repo held twelve copies,
-six claiming the same live owner — decisions.md). The discriminator is the
-`Worktree:` line the ledger writes at launch: **the only real copy is the one
-whose `Worktree:` line names the tree it is sitting in.** Every other copy is a
-snapshot — never resume from one, and never write to one.
-
-Then read that copy's owner line. No owner line, or `none — awaiting-merge`, is
-finished paperwork and not the run. Never pick by timestamp: on the same run the
-freshest ledger was an already-merged run's, and chasing it cost 25 minutes. If
-the rules still leave two live candidates or none, prefer the ledger matching the
-invocation's issue range; failing that, report what you found in the launch
-message and stop — a launch-time stop, before anything is spawned, is not a
-mid-run stall.
-
-Only then: read that ledger, then `run-journal.md` once, then re-run pre-flight
-before spawning anything, and recreate the cron.
+**Pick the ledger before you read one, and `resume.md` beside this file says
+how.** Read it on every `resume` invocation and on every revival from a halt,
+before opening any `run.md`. It holds the script that chooses between the copies
+every worktree carries, what a refusal from that script means, and the reading
+order that follows. Guessing here cost 25 minutes once, which is why the
+procedure is a script and not a judgement.
 
 ## Pre-flight
 
@@ -660,8 +705,10 @@ before spawning anything, and recreate the cron.
   `model:` value on a spawn to override that: the spawn tool's `model` parameter
   beats agent-file frontmatter, so a spawn-time value silently defeats both
   `inherit` and any model an agent file might pin on purpose. No agent file in
-  this pack pins one. Never ask, and never stall — the launch line above is
-  where a wrong tier gets caught, one keystroke before spawn #1.
+  this pack pins one today: `harden-issues-attacker` was the last, and it moved
+  to `inherit` on 2026-08-02 so the tier is chosen at launch. Never ask, and
+  never stall — the launch line above is where a wrong tier gets caught, one
+  keystroke before spawn #1.
 - **Record the session model in the ledger's owner line and in the merge
   briefing.** A run on a tier this pipeline has no evidence for is still a valid
   run, and it is also the first evidence at that tier — so whoever reads its
@@ -693,11 +740,40 @@ before spawning anything, and recreate the cron.
   with `node_modules` absent — the compiler resolved off a global install and
   never loaded the repo's own types. A green produced without dependencies on
   disk is a false green (decisions.md).
-- **Verify the allowlist, never assert it.** Enumerate the command classes this
-  run will use — typecheck, lint, test, the cold-build delete, git stage and
-  commit, any migration script — and dry-run each in no-op form before
-  spawn #1. A miss is a launch-time blocker; mid-run it is a worker blocked on a
-  prompt, stalling silently. (Coverage has been asserted and wrong before.)
+- **Verify the allowlist, never assert it.** Dry-run every command class this run
+  will use, in no-op form, before spawn #1. A miss is a launch-time blocker;
+  mid-run it is a worker blocked on a prompt, stalling silently. (The old text
+  asserted coverage; the actual settings.json refuted it.)
+
+  **Refuse to spawn while any class is refused or unverified.** Never start a run
+  intending to approve a prompt later. The whole value of this check is that it
+  fails while the human is still at the keyboard.
+
+  **Derive the list from the roles this run will spawn, not from this bullet.**
+  What follows is what today's roles need. It is a floor, not a definition. Walk
+  each role the run will spawn and ask what it shells out to.
+
+  - **Implementer** — typecheck, lint, test, the cold-build `rm -rf`, git stage
+    and commit, any migration script.
+  - **Verify gate** — **starting the dev server**, by name, from the repo's
+    `.claude/launch.json`, where the project has one. A verify gate cannot drive
+    an acceptance path without it. **It probes that server through a repo probe
+    script allowed by one prefix rule, if the project has one, never with a bare
+    `curl`.** A raw `curl` gets allowed as an exact string, so the next probe
+    with a different port, path or label prompts again — which is how one run
+    stopped for a permission dialog at the end, unattended. A probe script that
+    refuses any target that is not the local machine is what makes one standing
+    permission safe to grant.
+  - **The runner itself** — the cron-creation tool, for the resume wakeup, on
+    any run that could meet a usage limit.
+
+  **The dev server is named here because leaving it off cost six hours.** On
+  2026-08-14 a verify gate sat on "Allow Claude to start the dev server?" with
+  its own task counter reading 6h 00m 05s. The human found it by looking at the
+  screen. This bullet was already here and it ran correctly: the runner
+  enumerated the six classes the old text named, and dry-ran all six. It read an
+  illustrative list as a complete one. That is the fault this rewrite closes —
+  the list is now derived from roles, and each role names its own tools.
 - **An unattended run may delete only rows it marked as its own, and the scope of
   the delete is that marker.** Where a run needs to clean up after itself, it
   stamps a run-owned marker column on every row it writes and deletes on that
@@ -733,5 +809,6 @@ would still be true if this run had never happened. At run close, route "should
 this become standing?" to the finale's `## Decide` heading, and from there into
 `.scratch/decisions-queue.md`, where `/daily-brief` collects it — a chat question
 at session end dies with the session. It goes under `## Decide` rather than
-`## Ruled` because nobody has answered it. Write it with the run's recommended
-answer, marked `[reversible]` or `[irreversible]`.
+`## Ruled` because nobody has answered it. Write it in the form the project's
+question standard sets, if it has one — with the run's recommended answer,
+marked `[reversible]` or `[irreversible]`.

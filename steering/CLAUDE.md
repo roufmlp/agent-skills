@@ -5,6 +5,11 @@ CLAUDE.md holds pointers and short durable rules only. Never paste long content,
 notes, or memory dumps in here. If a body of guidance runs long, give it its own file and
 `@import` it. A bloated CLAUDE.md is a bug.
 
+**The rule belongs here. The evidence behind it does not.** Every ruling below was made on
+a measurement, and those measurements live in `~/.claude/rulings.md`. Nothing loads that
+file by default, which is correct: an agent needs the rule, not the history. Read it
+before you propose changing a rule, never to obey one.
+
 ## Writing
 
 ### Reports to me: ASD-STE100 only
@@ -36,9 +41,8 @@ exceptions.
 Committing and merging to local main are yours. Pushing is mine to authorise, every
 time, per push. "Merge and complete the rituals" means merge locally and stop. So does
 a green run, a passed gate or a finished skill — none of them is permission to push.
-Where a push is the obvious next step, say so in one line and wait for me. Ruled
-2026-08-09, after a session pushed to `origin/main` inside a merge ritual: the merge was
-right, the push was not, and I only saw it in the report afterwards.
+Where a push is the obvious next step, say so in one line and wait for me.
+Ruled 2026-08-09.
 
 ## The direct road
 Some fixes never enter the chain. A wording change, a missing banner: work whose issue
@@ -65,25 +69,15 @@ I start one by naming it: **"direct road, issue NN"**. Then, in order:
 3. `/tdd` for the failing test and the fix, then typecheck, then the full suite, then
    `/code-review` on the diff. Every one of these an agent may invoke, so a single
    instruction from me carries the road from the front gate to the merge.
-   **`/implement` is deliberately not on this road.** It is
-   `disable-model-invocation: true`, so it would stop the road mid-session and ask for
-   my hands a second time. An agent never substitutes for it either — it works from
-   `/tdd` and `/code-review`, which are its own to use.
+   **`/implement` is deliberately not on this road**: it is
+   `disable-model-invocation: true` and would stop the road to ask for my hands a second
+   time. An agent works from `/tdd` and `/code-review` instead.
 4. Write both records, before the merge: a register row at `verified`, prefix `df-NN`,
    never reused; and `bugs/df-NN.md`, about fifteen lines, saying what changed and why.
    The row routes the fix and dies at the next promotion; the bug file is what survives.
-5. Merge to local main. The push is still mine to authorise, every time.
+5. Merge to local main. The push stays mine.
 
-Ruled 2026-08-12, the fixed weight every fix carries. The measurement behind it: four
-changes took this road in the days before and none left a trace the chain could read,
-including a landing-page prerender that stopped `/` rendering for every visitor. Steps
-added the same day: the first draft named no trigger phrase and no working skill, which
-is how small-issue coalescing died — a permission nobody knows how to fire never fires.
-Step 3 was rewritten on the road's first run: it named `/implement`, and the tool
-refused the agent's call on the `disable-model-invocation` flag. I chose the agent
-driving through to the merge over keeping that skill. The lesson is the rule, not the
-skill — **a road an agent cannot walk end to end is not a road, and only walking it
-finds that out.**
+Ruled 2026-08-12.
 
 ## Context hygiene
 Everything in the session context is re-billed on every turn that follows it, so what
@@ -106,6 +100,18 @@ without being asked:
   memory) — then the handoff expires. A new issue starts from its issue file, the
   primer, and CONTEXT.md/ADRs, not from another session's diary.
 
+## Refuse, or state a fact. Never ask an agent to remember.
+Every proposal to change a skill, an agent brief, a workflow or a convention gets
+sorted into three classes before I will look at it, and the class decides the answer:
+
+- **Can it refuse?** Build it. A check, a guard, a test, a denylist, a flag — anything
+  that stops the work rather than advising it.
+- **Is it a fact nobody wrote down?** Write it. An agent cannot comply with something it
+  does not know, and facts are cheap. This class is easy to miss, because it looks like
+  a rule and is not one.
+- **Is it asking an agent to remember?** It will not work. Make it mechanical, or let it
+  go. Do not answer a failed reminder with a second reminder.
+
 ## The three heavy skills start on my command, never on my phrasing
 `run-issues`, `parallel-hunt` and `harden-issues` are expensive multi-agent runs.
 Start one only when I type its command: `/run-issues`, `/parallel-hunt`,
@@ -115,7 +121,7 @@ work in the session and, in one line, tell me the command exists if you think th
 full machinery would pay. The one exception is an upstream issue-drafting pass
 calling `harden-issues` on its own drafts, which that pass already authorises.
 
-Two guards survive the change. Never improvise a multi-agent run by hand: if I
+Two guards hold whatever I type. Never improvise a multi-agent run by hand: if I
 have not typed `/parallel-hunt`, do not spawn concurrent finders and fixers
 yourself. And a long implement session still carries tdd + verify + review in one
 context, which is worse work — say so when you see me heading there.
@@ -136,20 +142,15 @@ a split, a `wontfix` close, a migration's direction, a money or auth rule, anyth
 that ships data or commits a public contract. `daily-brief` collects the queues and
 carries my answers back out.
 
-**An attended session sweeps its own queue at close** (ruled 2026-08-08). When a
-session with me at the keyboard — a grilling, a planning ticket, ordinary work —
-has queued decisions, offer to walk them before the session ends: one
-AskUserQuestion per item, recommendation first, the full form restated on a
-clarity ask, each answer applied in session under the daily-brief apply rules
-(decision into the issue file, item out of the queue, ruling into
-`decisions-log.md`). Whatever I wave off stays queued for the brief. Mid-run
-nothing changes, and `/run-issues` and `/parallel-hunt` stay untouched end to end.
+**An attended session sweeps its own queue at close** (ruled 2026-08-08). Where I am at
+the keyboard and decisions are queued, offer to walk them before the session ends, under
+the `daily-brief` apply rules. Whatever I wave off stays queued for the brief. Mid-run
+nothing changes: `/run-issues` and `/parallel-hunt` stay untouched end to end.
 
 ## Never cite a bare identifier
 A ticket number, issue number, migration number, commit SHA or file name on its own tells
 me nothing. Every citation carries what the thing IS, in the same sentence: "ticket 05,
-the Resend mail records", not "ticket 05". This is the same rule as the absolute path for
-the pending file, and for the same reason — I should never have to go and look something
+the Resend mail records", not "ticket 05". I should never have to go and look something
 up to understand your sentence.
 
 ## Never hand me a manual step you could take yourself
@@ -173,8 +174,4 @@ issue chain goes to the pending-actions file in that project's memory directory,
 which `daily-brief` surfaces in section 3 every day.
 
 **That file is never copied into a repo, and every citation of it gives the absolute
-path in full.** Ruled 2026-08-04, after a merge briefing cited it by bare filename and
-sent me looking in the tree for it. Two files with one name drift within a week; the
-memory copy is the one every session updates at close; and it carries UUIDs, project
-refs and account ids that have no business in git history. Repeating a long path is
-cheaper than a pointer that resolves nowhere.
+path in full.** Ruled 2026-08-04.

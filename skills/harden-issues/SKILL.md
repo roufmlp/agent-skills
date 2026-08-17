@@ -11,9 +11,9 @@ are wrong when written passes every gate — the implementer builds to the bad s
 and both gates grade against that same bad spec. This pass is the early fix.
 It is also what buys the next run an uninterrupted one: anything the run would
 otherwise stop and ask a human for is settled here, while a human is at the
-keyboard (see "Checks only the human can run happen here, not mid-run").
-Provenance and the incident record live in this directory's `decisions.md`; read
-it when changing this skill, not when running it.
+keyboard (see "Checks only the human can run"). Provenance and the incident
+record live in this directory's `decisions.md`; read it when changing this
+skill, not when running it.
 
 Two entry points, same pass:
 
@@ -70,12 +70,30 @@ Findings go to files, not through this session's context: attackers write
 `.scratch/<feature>/harden/seam.md`. The pass reads counts, questions and each
 findings file's `## Checks for the human` section, never the working.
 
+**On each attacker return, check the file exists and holds something — before
+the seam agent spawns, and before anything is stamped:**
+
+```bash
+python3 ~/.claude/skills/lib/check_verdict.py --file .scratch/<feature>/harden/<issue>.md
+```
+
+A non-zero exit means that attacker produced nothing, whatever its final message
+said, so the issue was not hardened. Re-spawn it, or leave the issue unstamped
+and name it as unattacked. **An issue nobody attacked is never stamped
+`ready-for-agent`**: the stamp is what puts it in the next run's scope, so a
+silent gap here ships exactly the bad spec this pass exists to catch. A missing
+file also narrows the seam agent's input without saying so.
+
+Two adversarial gates died at the weekly usage limit during one workflow audit
+and wrote nothing at all. Nothing mechanical noticed either time.
+
 **Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
 the tier the session was launched on. A second, differently-tuned model was
 pinned here once, for blind-spot hunting; the pin is gone because it hid the
-choice inside an agent file. To harden on a different model, launch the session
-on it. Effort stays `high`, not `max`: the checklist is enumeration against a
-file, and enumeration is recall rather than chained reasoning.
+choice inside an agent file and it was credit-gated. To harden on a different
+model, launch the session on it. Effort stays `high`, not `max`: the checklist
+is enumeration against a file, and enumeration is recall rather than chained
+reasoning.
 
 **Print one launch line before spawn #1, on every invocation** — the resolved
 session model, the issues in scope, and how many attackers are about to spawn.
@@ -125,6 +143,25 @@ sharpened (with evidence), question (for the human), or clean.
    its own hole. Write the rule, then name the instances as evidence that the
    rule bites today. (Adopted 2026-08-07, from a run finale; three implementers
    warned about this class avoided it three for three.)
+
+   **A criterion that moves security-relevant code pins the property, not the
+   count of surviving tests.** The surviving tests are one more list of instances,
+   and "the existing tests keep passing" grades the move against that list rather
+   than against the rule the moved code holds. Name the property the code must
+   still hold — "a caller-supplied needle deletes only what it literally matches" —
+   and name a hostile input and an over-long input the criterion covers. (Adopted
+   2026-08-18, from one run. One issue moved the auth failure sanitiser into a
+   shared module so the unauthenticated confirm route could use it. Its
+   criterion graded the move by the surviving tests. The implementer replaced a
+   literal sanitiser with a pattern built per character, and all 69 tests passed.
+   The critical review gate then drove two live defects on that route: a needle
+   of about 1000 characters built a regex V8 refuses to
+   compile, so the route returned HTTP 500 **and logged nothing**, because its own
+   `catch` called the throwing function again; and the separator tolerance let a
+   crafted `token_hash` delete the real message out of the log line. Strike 1, one
+   retry, 89 minutes against an estimate of 30 to 45. The 21-item verify pass
+   missed both, and the gate said why: a permissive-regex swap satisfies "the
+   existing tests keep passing" while changing behaviour.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap.
@@ -135,21 +172,31 @@ sharpened (with evidence), question (for the human), or clean.
    has proved can fail, which is the class this whole entry exists to close.
    (Adopted 2026-08-07.)
 
-   **A criterion may never ask for evidence to land in the issue file.** Nothing
-   in a run may write an issue file, so a criterion saying "recorded in the
-   issue's notes" cannot be met by the agent it is written for. Send the evidence
-   to a test, a doc comment, the register or the merge briefing — all four
-   survive a run's own write rules. (Adopted 2026-08-10, from a run finale: one
-   issue's criteria asked for mutation drives "recorded in the issue's notes",
-   the spawn brief forbade it, the drives went into test doc comments, and the
-   review gate filed the contradiction. There is no template file to fix — the
-   phrase came from this pass.)
+   **A criterion may never ask for evidence to land somewhere the party it names
+   cannot write.** Read the clause, name its writer, and check that writer's
+   pen. Two homes fail today: an implementer writes neither the issue file nor
+   the commit message. Send the evidence to a test, a doc comment, the register
+   or the merge briefing — all four survive a run's own write rules. Where the
+   evidence genuinely belongs in one of the closed homes, address the clause to
+   the party that holds that pen, which for a commit message is the runner and
+   for a verdict is the gate.
+
+   The check is mechanical, because the clause names its own writer. Refuse it
+   here, at authoring time. (Adopted 2026-08-10 for the issue file, from a run
+   finale: one issue's criteria asked for mutation drives "recorded in the
+   issue's notes", the spawn brief forbade it, the drives went into test doc
+   comments, and the review gate filed the contradiction. **Widened 2026-08-16
+   to any closed home, after a later run:** five of its nine issues carried a
+   clause aimed at the implementer, and the commit-message half fell outside
+   the 2026-08-10 wording. One issue's review gate rejected the work partly
+   because those clauses were unmet, and the runner had to annul the ground.
+   One annulled rejection and one wasted gate round, in one batch.)
 
    **A constraint taken from measured data is labelled as one.** Where a criterion
    or an invariant fixes a number because that is what today's input holds, write
    it into `## Must still be true` as an assumption a later issue may need to
    lift, and say the migration header must do the same. (Adopted 2026-08-10, from
-   the same run finale.)
+   the same run finale. The run-issues copy carries the incident.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
    against the real code or data.
@@ -207,13 +254,39 @@ The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only
 because of something a sibling issue deletes).
 
+## Repair the stale citations first, before anybody attacks the file
+
+A citation that moved reads as a wrong premise, and an attacker spends a round
+on it. Where the repo carries the script, run it over each issue in scope before
+the attackers spawn:
+
+```
+node scripts/check-issue-citations.mjs --quiet <each issue file>
+```
+
+Correct every `moved` row to the line it reports. Read every `gone` row rather
+than deleting it — the line may have been rewritten, or the citation may always
+have been wrong, and those are different repairs. `unknown` means the check
+could not run and is not a fault.
+
+**This pass is where the repair happens (ruled 2026-08-15).** A run may not
+write an issue file, so `/run-issues` reports these and leaves them; one run
+left eight. You already read the whole file and you are already allowed to
+write it, so the fix costs nothing extra here and costs a round everywhere
+else. A `holds` is not proof: the check compares against the commit that last
+touched the citation's own line, so a citation rewritten without re-checking
+its number can read `holds` and still be wrong.
+
 ## Output and the stamp
 
 - Evidence-backed sharpenings are edited into `## Acceptance criteria` and
   `## Must still be true` directly, each carrying its citation.
+- **Say how many citations were repaired** in the stamp line below, so a reader
+  can tell a quiet pass from one that found nothing.
 - **Every question ships with the pass's recommended answer**, and is marked
-  `[reversible]` or `[irreversible]`. A question with no default is a question the
-  pass has not finished thinking about.
+  `[reversible]` or `[irreversible]` — per the project's question standard, if
+  it keeps one. A question with no default is a question the pass has not
+  finished thinking about.
 - Questions go to the human: into the upstream drafting tool's quiz, if there is
   one, or as the standalone numbered list. Apply their answers to the files.
 - Then stamp the issue, one line under `Status:`:

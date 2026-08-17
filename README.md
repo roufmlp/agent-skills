@@ -67,6 +67,21 @@ flowchart TD
     style SPAWN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
 ```
 
+## Where a reminder failed, a script refuses
+
+An audit in August 2026 read the loop's transcripts against its own rules and kept
+score: rules written as reminders kept failing, rules built as checks did not. So the
+weakest reminders are now small scripts the skills invoke as they run.
+[`check_verdict.py`](skills/lib/check_verdict.py) refuses to accept an adversarial
+agent's return when its verdict file is missing or empty,
+[`check_attempt_cap.py`](skills/run-issues/check_attempt_cap.py) refuses a spawn past
+the attempt cap, [`find_live_ledger.py`](skills/run-issues/find_live_ledger.py) picks
+the one ledger a resume may read, and
+[`move_closed_sections.py`](skills/daily-brief/move_closed_sections.py) archives what
+the brief has closed instead of trusting a session to. Tests sit beside each script,
+and some grade the skill text itself, so an edit that drops an invocation fails the
+suite.
+
 ## The orchestration skills
 
 ### [run-issues](skills/run-issues/SKILL.md)

@@ -71,8 +71,29 @@ Each file carries:
 - **A link to the finding's bug file, and nothing else from it.** Copy no evidence,
   no reproducer, no verdict. The bug file already holds them and hardening will read
   it there.
+- **Re-derive the citations in the row you are minting from, before you write the
+  file.** Only that row — not every row you judged. Open each file and line the row
+  cites and check the fact is still there. A row is written mid-run and the code moves
+  under it: one row cited a call by file and line, a later issue moved that call a
+  hundred lines down after the row was filed, and promotion ran next. An issue whose
+  first cited fact is wrong reaches a hardening pass and then an implementer with
+  nobody between. Where a citation has moved, correct it in the issue file and say so
+  in one line. (Adopted 2026-08-14, narrowed at the same time from "every register
+  row" to the rows that actually become issues — one or two per run instead of
+  fifty-eight.)
 - **`Direct-road: candidate` or `Direct-road: no`**, on its own line under `Status:`,
   where the project keeps a direct road — see below.
+- **`Owed: unsorted`, where the project holds a `milestones.md`.** Always that value,
+  never a milestone you picked. You decide on a register row, and a row carries
+  `audience` and `severity` and nothing that says which date the work is bound to.
+  `unsorted` is the explicit null: present, so nobody can tell it from a field
+  somebody forgot, and not a milestone, so the project's read-back keeps listing it
+  until a human sorts it. The session that composes a batch sets the real value,
+  because choosing the batch is the date decision. A project with no `milestones.md`
+  does not carry this field at all. (Ruled 2026-08-13.) The first draft of that rule
+  had promotion write `after-pilot` as the null, and it was withdrawn in the grilling:
+  a null that reads as a judgement hides the work, which is the fault the rule exists
+  to close.
 - **A `## Target database` section.** `Writes rows: no` where the work changes code
   only; otherwise the project's default databases, each written as a default. This is
   the same judgement the direct-road stamp already asks of you, recorded where
@@ -109,6 +130,15 @@ than an unread diff.
 Delete the row. Record the ID, the audience, the severity and the reason in your
 return. Nothing else — the bug file survives as the record, and a refused finding is
 meant to be out.
+
+**One exception, and it is narrow: a row the production watcher filed.** Those ids
+carry the `pw-` prefix. For those, also append the id, the date and the reason to the
+watcher's ledger, `production-watch.md`, beside that repo's register. The watcher
+needs to know it was refused so an error that goes quiet and then fires again months
+later can be filed a second time; nothing else in the loop writes that fact anywhere
+a script can read, and a rule that cannot observe its own trigger never fires.
+(Ruled 2026-08-12.) Repos without a watcher have no `pw-` rows and no ledger, so this
+clause never fires there.
 
 **The reason carries what an overturn needs.** A refusal is a decision the human can
 overturn with one word, so it must be readable on its own. Most refusals take one

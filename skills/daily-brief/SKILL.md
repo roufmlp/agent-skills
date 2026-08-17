@@ -91,6 +91,18 @@ Then, per answer type:
 
 Log every write to `applied.md`, including the skips.
 
+**Last, if the project has a pending-actions file, move its closed sections out.**
+Run `python3 ~/.claude/skills/daily-brief/move_closed_sections.py` on it, with the
+file's path as the argument. It appends every `#` or `##` section carrying a dated
+`DONE`, `STRUCK`, `CLOSED` or `SUPERSEDED` to a `-closed.md` archive beside the
+live file, and only then removes it. Nothing is deleted. It refuses mixed blocks —
+a heading that reads `DONE` and still names open work in the same line — and
+prints what it refused. **Put that refused list in tomorrow's brief.** Each entry
+is a section whose heading claims closure and holds an ask, which is the defect
+the whole archive exists to stop, and only the human can split one. Run it after
+every other apply write, so a section the human closed this morning goes out the
+same day.
+
 ## The merge answer
 
 `merge` in a file is an approval made hours before the machine acts on it, so it
@@ -133,6 +145,17 @@ holds `scripts/watch-production.mjs`, run `node scripts/watch-production.mjs`
 before reading anything — it writes the register rows and pending actions the rest
 of the build collates. Where the script does not exist, say so in the brief and
 continue.
+
+**Second, run the owed read-back.** In each repo whose checkout holds
+`scripts/what-is-owed.mjs`, run `node scripts/what-is-owed.mjs`. It reads that
+repo's `.scratch/milestones.md`, every `.scratch/*/issues/` directory and the
+decisions queue, and returns five things: the open issues stamped against each
+future milestone in date order; **anything stamped with a milestone whose date has
+passed**; the `unsorted` list and the count of issues carrying no `Owed:` line at
+all; any `Owed:` value the milestones file does not list; and any map ticket whose
+own issues all read `done` while its `Status:` does not read `closed`. A repo with
+no `milestones.md` has nothing to read back — say so once and continue. Where the
+file exists and the script does not, say so and continue.
 
 Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every `run.md`, every
 `merge-briefing.md` for a run at `awaiting-merge`, every feature's `register.md`,
@@ -208,6 +231,14 @@ human stays silent.
 blocking: an issue is out of scope for `all` until the human rules. Splits live
 here.
 
+**`Owed:` is the second sort key, inside that order.** A queued item may carry an
+`Owed:` line using the repo's own milestone vocabulary, and an item owed before a
+future milestone shows the milestone and the days left beside it. It sorts above
+the undated items at its own reversibility level, and it never jumps above
+`[irreversible]`. This is one line on an existing item and no new section: one
+batch waited on the human's yes for days while reading like a reversible default,
+because nothing in the queue said which date that yes was holding up.
+
 **Age every item.** An item on its third brief is marked `3rd time`. Nothing rots
 quietly; if something keeps returning unanswered, that is information about the
 question, not about the human.
@@ -240,6 +271,18 @@ For any external or manual step, fetch the provider's current official docs firs
 and give today's actual button and menu names, with the source. Never a remembered
 UI.
 
+**An action that waits on an event carries a `Release-when` line, and this section
+tests it.** Most actions here wait on something rather than on a date: a load that
+can only reach the production database after a deploy, a workflow that can only be
+dispatched once an issue has shipped. Those already get written as prose — "after
+the deploy", "after the issue has shipped" — and nothing checks them, which is the
+same fault that let two queued items sit held past their own release condition for
+three days. So the rule the queue already runs on applies here too: **the condition
+must be checkable by reading a file, not remembered.** Test every one before you
+report this section, and show the evidence beside any action whose condition has
+released. An action bound to a date carries `Owed:` instead; one bound to both
+carries both.
+
 ## Keep it to thirty minutes
 
 If the brief cannot be read in thirty minutes it has failed, and the failure is
@@ -251,7 +294,18 @@ lives.
 
 One line at the very top: how many decisions are waiting, how many runs want a
 merge read, and how many actions are on the human. They should know the shape
-before they read a word of detail.
+before they read a word of detail. **That line ends with the next milestone, the
+days left to it, and how many open issues are owed against it** — "7 days to 20
+August, 4 owed". Where the read-back returned nothing to say, the clause is left
+off rather than written as a zero.
+
+**The owed read-back gets a section only when something is wrong.** Anything
+overdue — an open issue stamped with a milestone whose date has passed — joins the
+flag line above the top line, one line per issue. An unknown `Owed:` value, a stale
+map ticket, or an `unsorted` list that has grown since yesterday takes a short
+block after section 1b. A clean read-back writes nothing beyond the top-line
+clause. This brief has been measured as needing to get shorter, so a permanent
+section for a mechanism that is usually quiet would cost more than it returns.
 
 **Above even that line: any `high` register row filed since the last brief**, one
 line per row with the row's `what` text verbatim. `high` is the strongest severity

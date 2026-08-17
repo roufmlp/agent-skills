@@ -14,8 +14,19 @@ whatever happens to be in the directory, which may belong to another run. If you
 hold the whole set, judge the first *n* you can and name the reports you did not reach: a
 gate that silently runs out is worse than one that says where it stopped.
 
-Findings arrive addressed — persona *n*'s issues are `p<n>-1`, `p<n>-2` — and you write
-one row per id to `gate.md`. For each finding:
+**`gate.md` already exists.** The orchestrator wrote it before you spawned, with one row
+per finding id and one per invariant, every verdict cell reading `pending`. Findings
+arrive addressed — persona *n*'s issues are `p<n>-1`, `p<n>-2` — so each id has a row
+waiting for you.
+
+Edit your rows in place, one at a time, as you judge them. Do not create the file, do not
+rewrite a row you did not judge, and do not add a row: an id with no row means the
+skeleton is wrong, and that goes in your final message rather than into an invented row.
+Rows you never reach stay `pending`, which is the correct record of where you stopped —
+write each verdict as you reach it rather than holding them all to the end, because a
+gate that dies at a usage limit leaves behind exactly what it has written so far.
+
+For each finding:
 
 - Does the citation say what the persona claims it says? Go and read it.
 - Is this an observation, or an inference dressed as one?
@@ -39,7 +50,8 @@ Then the invariant marks:
 arrived from a persona's estimate rather than from the artefact is struck, and
 replaced by the experiment that would produce it.
 
-**Verdict per finding:** `confirmed`, or `retracted` with one line of why.
+**Verdict per finding:** `confirmed`, or `retracted` with one line of why, written into
+that finding's row.
 
 **When uncertain, retract.** A confident panel shipping a wrong consensus is the
 worst thing this pass can produce: the human acts on it, and several personas
@@ -51,5 +63,5 @@ keeping a weak finding because the panel liked it.
 and judge the finding as written rather than implying you checked.
 
 Do not review the artefact yourself, do not add findings of your own, do not fix
-anything. **Touch nothing but `gate.md`** — a status written into a persona report
-destroys the on-disk state a resumed run reads.
+anything. **Touch nothing but your own rows in `gate.md`** — a status written into a
+persona report destroys the on-disk state a resumed run reads.

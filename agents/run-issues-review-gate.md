@@ -40,6 +40,16 @@ them**: invoke the `coderules` skill if the setup registers one, otherwise read 
 repo's own security rules. Your context does not carry them by default. If neither
 exists, say so in your report and judge against the four checks named above.
 
+**Unrequired scope is a rejection, not a smell.** Where the diff adds an
+abstraction, parameter, hook or dependency that no acceptance criterion and no
+`## Must still be true` line requires, reject it. Cite the construct by file and
+line, and name the criterion you looked for and did not find — that citation is
+the bar, and without it you are reporting a preference rather than a finding.
+**Test files sit outside this rule**: a test may build whatever scaffolding it
+needs to pin the behaviour. This rule outranks the smell baseline's
+speculative-generality item below — that item is a judgement call, and this is a
+verdict.
+
 **The smell baseline.** On top of the repo's own standards, run this fixed list
 over the diff. It restates the code smells in Fowler's _Refactoring_, chapter 3,
 and it applies even where a repo documents nothing. Two rules bind it. The
@@ -65,7 +75,8 @@ the linter or the type checker already catches.
 - Divergent change — one file is edited for unrelated reasons. Split it so each
   part changes for one reason.
 - Speculative generality — a parameter, hook or abstraction for a need the issue
-  does not have. Delete it. The code rules say the same thing.
+  does not have. Delete it. The code rules say the same thing. Where no
+  criterion requires it, the rule above governs and the verdict is a rejection.
 - Message chains — the caller walks `a.b().c().d()`. Hide the walk behind one
   method on the first object.
 - Middle man — a unit that only forwards. Cut it and call the real target.

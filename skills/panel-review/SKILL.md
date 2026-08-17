@@ -48,9 +48,22 @@ at step 5.
    and invariant tally, written by the session that spawned it — or `failed`, and none
    saw another's output.
 
-5. **Gate the findings** (`deep` only).
-   *Done when* every finding carries `confirmed` or `retracted`, and every invariant
-   mark has been re-checked against its citation.
+5. **Gate the findings** (`deep` only). **Write `gate.md` before the gate spawns** — one
+   row per finding id, one per invariant, every verdict cell reading `pending`. The gate
+   edits its own rows and creates nothing.
+   When the gate returns, read the skeleton back before step 6 touches anything:
+
+   ```bash
+   python3 ~/.claude/skills/lib/check_verdict.py --file <run dir>/gate.md
+   ```
+
+   *Done when* that exits zero — no row still reads `pending`, every finding carries
+   `confirmed` or `retracted`, and every invariant mark has been re-checked against
+   its citation. A non-zero exit names the rows nobody judged. Re-spawn a gate for
+   those, or carry them into the report as ungated and say so in the verdict line;
+   never let step 6 read an unjudged row as a confirmed finding. A gate that dies
+   part-way leaves what it judged and marks the rest, which is what the skeleton is
+   for.
 
 6. **Synthesise and report.**
    *Done when* every surviving finding sits in exactly one of agreed, decided

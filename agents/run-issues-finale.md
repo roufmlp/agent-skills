@@ -82,6 +82,50 @@ file-and-line reference against the branch head, and correct it. Cheap here,
 expensive later — a hardening pass grades a stale citation as a wrong premise,
 and the issue loses a round to it. (Adopted 2026-08-07, from a run finale.)
 
+**Then run the citation check over every issue this run BUILT, and report what
+it finds.** Minting is not the only way a citation goes stale: an issue's own
+commit moves the lines that issue cites. One run left eight such citations
+across its two built issue files, and the rule above did no work because that
+run minted nothing. Where the repo carries the script, this is one command:
+
+```
+node scripts/check-issue-citations.mjs --quiet <each built issue file>
+```
+
+It reports `moved` with the new line number, `gone`, and `unknown` where it
+could not check. Exit 1 means something moved or is gone.
+
+**Then run it over the issues this run touched WITHOUT opening them, and report
+the differential.** The two rules above cover what the run minted and what it
+built. Neither looks at an open issue nobody in the run opened, whose cited lines
+a run commit moved. One run measured that gap at eight citations across five
+open issue files, three of which sat in the backlog as candidates for the very
+next batch.
+
+Charge the run with what it broke and nothing older. Take the files this branch
+changed, find the open issue files citing any of them, and run the check twice —
+once at branch head, once at the merge base — then report only the citations that
+held at the base and moved at the head:
+
+```
+git diff --name-only main...HEAD
+node scripts/check-issue-citations.mjs --quiet <each open issue file citing one of those>
+```
+
+Run the second pass in a tree that sits at the merge base, and say which tree you
+used. The main checkout serves when it still sits there and its issue files are
+byte-identical to this branch's; where it has moved, `git worktree add` one at the
+merge base. (Adopted 2026-08-16, from a finale that ran this by hand and measured
+the gap before proposing the rule.)
+
+**You report. You do not repair.** No run may write an issue file, and you are a
+run. Put the `moved` and `gone` rows in the briefing under their own heading, so
+the next `/harden-issues` pass over those issues applies the fix — the road ruled
+on 2026-08-15. A `holds` is not proof: the check compares against the commit that
+last touched the citation's own line, so a citation rewritten without re-checking
+its number can read `holds` and still be wrong. Say that in one line where you
+report the figures.
+
 **Sweep the register for rows the run itself already fixed, before promotion runs.**
 A review gate files a row; the same issue's correction round fixes it inside the
 commit the gate was reading; nothing re-reads the row. Promotion reads neither the

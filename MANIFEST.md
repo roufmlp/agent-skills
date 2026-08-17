@@ -12,10 +12,19 @@ Listed in the order the loop runs.
 | `skills/harden-issues/decisions.md` | `~/.claude/skills/harden-issues/decisions.md` |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
+| `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |
+| `skills/run-issues/resume.md` | `~/.claude/skills/run-issues/resume.md` |
+| `skills/run-issues/check_attempt_cap.py` | `~/.claude/skills/run-issues/check_attempt_cap.py` |
+| `skills/run-issues/find_live_ledger.py` | `~/.claude/skills/run-issues/find_live_ledger.py` |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (4 tests grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
+| `skills/daily-brief/move_closed_sections.py` | `~/.claude/skills/daily-brief/move_closed_sections.py` |
+| `skills/daily-brief/test_move_closed_sections.py` | `~/.claude/skills/daily-brief/test_move_closed_sections.py` |
+| `skills/lib/check_verdict.py` | `~/.claude/skills/lib/check_verdict.py` (shared by the four skills that spawn adversarial agents) |
+| `skills/lib/test_check_verdict.py` | `~/.claude/skills/lib/test_check_verdict.py` |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -34,6 +43,10 @@ Two parts of `~/.claude/CLAUDE.md` never ship:
   and rule 1 below covers it.
 - The `triage` parenthetical under `## The chain, and where to start`. It publishes
   what my repos do not have. No rule reaches it, so it is named here.
+
+One more class never ships: session records inside the live skill directories —
+panel-review transcripts, workflow-redesign notes, `__pycache__`. A skill directory
+publishes its instruction files, its scripts and its tests, nothing it accumulated.
 
 ## Scrub rules (run on every sync)
 
@@ -60,6 +73,12 @@ The four skills here are one loop: `harden-issues` sharpens the criteria,
 `run-issues` builds to them, `parallel-hunt` hunts what per-issue gates cannot see,
 `daily-brief` is the single place a human answers what the loop could not decide.
 They reference each other, so they ship together or the references dangle.
+
+The scripts ship for the same reason. A 2026-08 audit of the loop replaced its
+weakest reminders with refusals — small Python checks the skills now invoke — and a
+`SKILL.md` that calls a script it does not ship breaks rule 3. So the scripts and
+the tests beside them are part of the pack, and every one of them gets the same
+scrub as the prose.
 
 Two upstream skills are deliberately **not** published: `to-issues` and `to-prd`.
 My copies are modified forks of Matt Pocock's skills, and republishing a fork is an

@@ -231,9 +231,26 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    create an empty `register.md` if the feature has none, then spawn finder and
    fixer concurrently. The fixer idles politely until entries reach `open`.
 3. On each worker return, spawn the right gate and/or successor.
-4. Loop until the finder returns dry twice **and** no entries remain `open`,
+4. **On each gate return, check it wrote a verdict, before you act on the
+   status.** One command against the bug file in the main checkout:
+
+   ```bash
+   python3 ~/.claude/skills/lib/check_verdict.py --file <bugs/ID.md> --section "## Claim gate"
+   python3 ~/.claude/skills/lib/check_verdict.py --file <bugs/ID.md> --section "## Fix gate"
+   ```
+
+   It exits non-zero when the heading is absent, when nothing sits under it, or
+   when a row still reads `pending`. A non-zero exit means the gate died or wrote
+   somewhere else, so the entry keeps its old status and the gate is re-spawned.
+   **A gate that returned empty has not retracted anything and has not verified
+   anything** — two adversarial gates died at the weekly usage limit during one
+   workflow audit and wrote nothing, and nothing mechanical noticed.
+
+   This does not break rule 1. The check reads the file; you read an exit code
+   and one line.
+5. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
-5. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
+6. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
    over every row, giving it the project's issue directory path and its numbering
    rule; delete the heartbeat cron; delete `round-brief.md`; commit. Then
    report — verified fixes, rejected fixes, retracted claims, and the two lists

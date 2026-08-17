@@ -5,3 +5,7 @@
 
 # OS noise
 .DS_Store
+
+# Python bytecode from running the pack's test suites
+__pycache__/
+*.pyc

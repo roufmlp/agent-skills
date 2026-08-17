@@ -1022,3 +1022,38 @@ Adopted narrowly, and nothing wider: an authoring-time rule was rejected on the
 ground that the four caught instances cost about two minutes each and no strike,
 so a rule charging attention on every comment in every issue would be the more
 expensive mistake. In `SKILL.md`, step 5, under the delete-only prose rule.
+
+## Small-issue coalescing is retired (2026-08-15)
+
+**The permission is gone from `SKILL.md`. Do not bring it back without new
+evidence, and the evidence would have to be a batch, not an argument.**
+
+What it was: up to two adjacent trivial issues (copy, config, no logic) could
+share one implementer spawn and one combined gate spawn. It was in the skill from
+the day it was written and it never once fired.
+
+On 2026-08-12 a ruling asked for two runs to record the decision, then a verdict.
+**Four runs recorded it and the count never reached two.** Two of them
+independently call themselves "run one of the two" in their merge briefings;
+none calls itself run two. Nothing durable held the count, so each run re-derived
+"run one" from the ruling's text. That is the ask-an-agent-to-remember failure
+mode in the wild: the instruction asked an agent to remember a total across
+sessions, and remembering does not work.
+
+What the four runs did show, which is why the substance was answered instead of
+building the counter: **a qualifying pair existed twice and qualified zero
+times**, always because at least one issue in the batch carried logic. One run
+had the cleanest pair yet — one issue was a single `if`, some cases and an
+`.env.example` block — and it failed on its sibling, a thirteen-file whale.
+
+The mechanism that starves it is structural and postdates it: a lighter
+single-session road for trivial pre-specified fixes, adopted outside this skill
+on 2026-08-12, takes exactly that class of work, so trivial issues no longer
+queue for a run at all. The permission was neither useless nor unread. It was
+unreachable.
+
+The fact that would reopen it: a real batch of pure copy or configuration fixes
+reaching `/run-issues`. Some still can, because the lighter road needs an issue
+naming a test that fails today and a pure copy change often has none. If such a
+batch appears, the cheap answer is to make the count durable, not a fresh
+permission written from memory.
