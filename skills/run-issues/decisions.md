@@ -478,7 +478,7 @@ lived only in a session context, so an abandoned or rate-limited session lost th
 whole artefact with no record it had been attempted.
 
 **Grilling is now conditional on there being someone to grill.** The triage tool
-runs `/grilling` only where a real reporter exists. Against a local `.scratch/`
+runs a grilling pass only where a real reporter exists. Against a local `.scratch/`
 issue file the loop cannot terminate — nobody answers — so it routes to
 `needs-harden` instead. This is the same root cause as the old `needs-info` dead
 end: triage is built for a public tracker with reporters, used here on files that
