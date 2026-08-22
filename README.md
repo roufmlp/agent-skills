@@ -82,6 +82,19 @@ the brief has closed instead of trusting a session to. Tests sit beside each scr
 and some grade the skill text itself, so an edit that drops an invocation fails the
 suite.
 
+Two of those checks are not scripts a skill calls. They are hooks the harness runs, and
+they refuse a tool call outright, before it happens.
+[`run-issues-foreground-gate.py`](hooks/run-issues-foreground-gate.py) refuses a
+`run-issues-*` spawn that does not set `run_in_background: false`, and
+[`coderules-gate.py`](hooks/coderules-gate.py) refuses the first code edit of a context
+until the code rules have been read. Both ship here.
+
+**Neither does anything until you register it**, and this pack cannot register them for
+you: a hook runs only when an entry in your `settings.json` points at it. The exact
+block to paste, the event each hook matches, and what you still lose if you skip one are
+in [hooks/README.md](hooks/README.md). Copying the two files and stopping there leaves
+you with the reminders the hooks replaced.
+
 ## The orchestration skills
 
 ### [run-issues](skills/run-issues/SKILL.md)

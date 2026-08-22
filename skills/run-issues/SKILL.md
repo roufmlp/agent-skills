@@ -58,12 +58,13 @@ spawning the next issue, ended its turn, and never made the spawn call; the cron
 caught the 24-minute gap. `run_in_background: false` cannot prevent a call that
 was never made. Shortening the interval buys nothing.
 
-**The field is enforced, not remembered — where the harness supports hooks.** A
-`PreToolUse` hook can refuse any `run-issues-*` spawn whose `run_in_background`
-is not exactly `false`, with a message that says how to reissue; add one to the
-project's settings if you want the field mechanical rather than prose. The two
-gates still run concurrently: spawned in one message, two foreground calls run
-in parallel.
+**The field is enforced, not remembered.** `hooks/run-issues-foreground-gate.py`
+in this pack is a `PreToolUse` hook on `Agent|Task`. It refuses any `run-issues-*`
+spawn whose `run_in_background` is not exactly `false`, and its message says how to
+reissue. It refuses nothing else, so no other skill meets it. Register it before the
+first run — a hook the harness has not been pointed at never runs, and
+`hooks/README.md` carries the `settings.json` block. The two gates still run
+concurrently: spawned in one message, two foreground calls run in parallel.
 
 **This is also what the verdict check guards.** A runner that does not block can
 mark an issue done before the work lands. `skills/lib/check_verdict.py` refuses on a gate

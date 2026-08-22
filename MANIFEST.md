@@ -61,6 +61,54 @@ decision like publishing one; this is where it gets written down:
 ~/.claude/skills/run-issues/workflow-redesign-*.md
 ```
 
+## The hooks
+
+A hook is not a skill, and this class exists because the difference decides what may
+ship. A skill is read by a model that can notice a wrong line and work around it. A
+hook is executed by the harness, and it refuses: a wrong path inside one does not get
+worked around, it blocks a stranger's edit with a message about a machine that is not
+theirs. So the rows below are held to `### Scrub rules for a hook`, which is stricter
+than the four that govern everything else here.
+
+| Published | Live source |
+|-----------|-------------|
+| `hooks/run-issues-foreground-gate.py` | `~/.claude/hooks/run-issues-foreground-gate.py` |
+| `hooks/coderules-gate.py` | `~/.claude/hooks/coderules-gate.py` |
+| `hooks/README.md` | written for this repo; no live source (the install note) |
+
+**A hook does nothing until a reader registers it, and a skill pack cannot register it
+for them.** That is the whole reason `hooks/README.md` exists: it carries the exact
+`settings.json` block, names the event each hook registers on, and says what a reader
+who copies the file and skips the block still loses. Publish no hook without a line in
+it.
+
+**Neither hook ships with a test, because neither has one.** Measured 2026-08-23: the
+four `test_*.py` files in the live hooks directory cover `machine-preflight.py`,
+`worktree-register-guard.py`, `worktree-snapshot-notice.py` and the `settings.json`
+`env` block, and not one of them imports either hook published here. Every other script
+in this pack ships its tests beside it. These two do not. That is a gap in the live
+tree, not a scrub decision, and it is written here rather than left for a reader to
+discover by grepping.
+
+The rest of the live hooks directory stays unpublished. Each withheld file carries
+state that is true of one machine or one repo and false everywhere else — a disk and
+swap threshold, a CLI version pin, a worktree layout, a per-day browser budget. A
+stranger who installed them would be refused by a description of a machine they do not
+have, which is worse than having no hook:
+
+```withheld
+~/.claude/hooks/machine-preflight.py
+~/.claude/hooks/test_machine_preflight.py
+~/.claude/hooks/heavy-run-version.pin
+~/.claude/hooks/browser-budget.py
+~/.claude/hooks/worktree-register-guard.py
+~/.claude/hooks/test_worktree_register_guard.py
+~/.claude/hooks/worktree-snapshot-notice.py
+~/.claude/hooks/test_worktree_snapshot_notice.py
+~/.claude/hooks/test_settings_env.py
+~/.claude/hooks/TOOL-SET-PROBE.md
+```
+
 ## The coverage check
 
 ```
@@ -108,6 +156,18 @@ next one with no cheap measurement, and the 47-lead sweep is what it falls back 
 The convention began at `synced-2026-08-22`. Read `git -C ~/.claude/skills tag -n99 -l
 "synced-*"` for the sync history and what each one published.
 
+**The hooks are not in that repository, and one tag does not reach them.** `~/.claude/skills`
+is its own checkout; the hooks are tracked by the checkout at `~/.claude`. So a sync that
+publishes a hook tags both, and reads hook drift off the second one:
+
+```
+git -C ~/.claude diff synced-<date>.. -- hooks/
+```
+
+Written down because the skills tag looks like it covers everything under `~/.claude` and
+does not. A hook edited after a sync that only tagged `~/.claude/skills` is invisible to
+every measurement on this page except the coverage check, which sees new files only.
+
 ## Scrub rules (run on every sync)
 
 1. Remove personal housekeeping lines: master-copy locations, sync notes, and any
@@ -126,6 +186,44 @@ The convention began at `synced-2026-08-22`. Read `git -C ~/.claude/skills tag -
    replaced rather than adopted.
 4. Re-read every changed file end to end before pushing. Publishing is a
    decision, not a side effect.
+
+### Scrub rules for a hook
+
+These are additional to rules 1-4, and where they disagree with them, these win. A hook
+earns stricter rules because of what it is: executed rather than read, and read by a
+human only at the moment it has just blocked their work. A skill with a stale line
+costs a reader a raised eyebrow. A hook with a stale line costs them a refusal they
+cannot act on.
+
+- **H1. No absolute path survives, in code or in prose.** `~/.claude/…` stays: that is
+  the reader's own tool directory and resolves on their machine as it does on mine.
+  Anything under `/Users/`, `/home/`, or a named project checkout goes. Where the hook
+  genuinely needs a real path, it computes one (`os.path.expanduser`) or reads it from
+  the environment with a documented default — it never carries mine as a literal.
+- **H2. The refusal message names no repo, run id, issue number or person.** That
+  message is the only part of a hook most readers will ever see, and it arrives at the
+  moment their work is blocked. A message citing a run or a repository they do not have
+  reads as a broken install, and a reader who concludes the hook is broken removes it.
+- **H3. Every claim in the docstring is true of the PUBLISHED file.** A drill that names
+  fixtures the file does not carry, or a companion document this pack does not ship, is
+  rewritten to what the published copy can actually do, or cut. Recorded because
+  `run-issues-foreground-gate.py` carried both on 2026-08-23: a drill naming payloads in
+  a `__main__` block that holds none, and `docs/patterns.md` in a repo no reader has.
+- **H4. The docstring states the blast radius before anything else**: the event it
+  registers on, what it matches, what it refuses, and what it deliberately lets past. A
+  hook that cannot say what it will *not* block does not ship, because a reader cannot
+  consent to a control whose reach is unstated.
+- **H5. It fails open on input it cannot read.** Every published hook returns 0 on a
+  payload that will not parse. A hook that raises takes the reader's tool call with it,
+  and a stack trace at a `PreToolUse` boundary is a fault this pack introduced into
+  somebody else's session.
+- **H6. It writes nothing outside a temporary directory, and nothing that outlives the
+  machine's next restart.** A published hook that creates or edits a file in a reader's
+  repository is doing more than refusing.
+- **H7. Rule 4, twice.** Read the published copy end to end, then run it: feed it a
+  payload that must pass and one that must be refused, and check both exit codes. A hook
+  is the one class here where reading the diff is not enough, because the harness will
+  execute it verbatim.
 
 ## What ships, and what does not
 
