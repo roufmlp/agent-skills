@@ -81,6 +81,33 @@ file is listed nowhere, so it never fired: `check_finale_stage.py` and
 `orchestrator_cost.py` were both written live on 2026-08-21 and were still unpublished
 on 2026-08-22, when a panel review found them by hand.
 
+## Measuring what changed since the last sync
+
+The coverage check finds new files. It says nothing about a rule that changed inside a
+file that already has a row, so content drift needs its own instrument.
+
+**Never diff the two trees against each other to find it.** They differ by design, and
+the differences are mostly the scrub doing its job. Diffing them on 2026-08-22 raised 47
+differences; 44 were the scrub and 3 were real. Reading 47 judgements to find 3 facts is
+what this avoids.
+
+The live skills directory is a git repository. Each sync tags it at the commit it
+published, so the next sync reads the drift straight off that tag:
+
+```
+git -C ~/.claude/skills diff synced-<date>.. -- <the directories the table above lists>
+```
+
+Whatever that prints is unpublished, in full, with no judgement needed. Nothing else is.
+
+**The sync session moves the tag when it finishes, and that is what keeps this true.**
+In order: commit the live work, publish here, then tag the live commit with today's date
+and name the public commits in the tag message. A sync that skips the tag leaves the
+next one with no cheap measurement, and the 47-lead sweep is what it falls back to.
+
+The convention began at `synced-2026-08-22`. Read `git -C ~/.claude/skills tag -n99 -l
+"synced-*"` for the sync history and what each one published.
+
 ## Scrub rules (run on every sync)
 
 1. Remove personal housekeeping lines: master-copy locations, sync notes, and any
