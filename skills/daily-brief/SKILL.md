@@ -149,13 +149,19 @@ continue.
 **Second, run the owed read-back.** In each repo whose checkout holds
 `scripts/what-is-owed.mjs`, run `node scripts/what-is-owed.mjs`. It reads that
 repo's `.scratch/milestones.md`, every `.scratch/*/issues/` directory and the
-decisions queue, and returns five things: the open issues stamped against each
+decisions queue, and returns six things: the open issues stamped against each
 future milestone in date order; **anything stamped with a milestone whose date has
 passed**; the `unsorted` list and the count of issues carrying no `Owed:` line at
-all; any `Owed:` value the milestones file does not list; and any map ticket whose
-own issues all read `done` while its `Status:` does not read `closed`. A repo with
-no `milestones.md` has nothing to read back — say so once and continue. Where the
-file exists and the script does not, say so and continue.
+all; any `Owed:` value the milestones file does not list; any map ticket whose own
+issues all read `done` while its `Status:` does not read `closed`; and every open
+issue carrying an uncleared `Re-check:` line, under the heading "Open issues
+carrying an uncleared `Re-check:`:", one line per issue giving the directory, the
+file and the value cut at 80 characters. That last block prints nothing at all when
+every marker has been answered, and a line whose first word is `cleared` counts as
+answered whatever its case. The counts line at the foot carries four numbers: open,
+done, closed another way, unreadable. A repo with no `milestones.md` has nothing to
+read back — say so once and continue. Where the file exists and the script does
+not, say so and continue.
 
 Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every `run.md`, every
 `merge-briefing.md` for a run at `awaiting-merge`, every feature's `register.md`,
@@ -238,6 +244,28 @@ the undated items at its own reversibility level, and it never jumps above
 `[irreversible]`. This is one line on an existing item and no new section: one
 batch waited on the human's yes for days while reading like a reversible default,
 because nothing in the queue said which date that yes was holding up.
+
+**An item under a heading that records a ruling is CLOSED, whatever the item's own
+text still says. Read the section heading and its opening lines before you read the
+item.** A queue section whose header says `RULED`, `ANSWERED`, `ACCEPTED`, `ADOPTED`
+or `nothing open` has already been answered, and every item beneath it is a stale
+open form that nobody collapsed. Do not put one to the human. Collapse it to a stub
+naming the ruling and where it was recorded, and say in the brief how many you
+collapsed.
+
+This is a refusal, not a reminder: an item that fails this check never reaches
+section 2, so nothing depends on noticing it. Where the header and the item
+genuinely disagree — the header claims a ruling the issue file does not carry —
+that is the one case worth the human's time, and it goes in section 2 as a question
+about the contradiction rather than as the original fork.
+
+(Adopted 2026-08-19, after a brief walk put two settled questions to the human.
+Both had been ruled on two days earlier and both rulings had reached their issue
+files. Only the queue was left stale: the sub-headings kept their full eight-part
+open form under a section header whose FIRST LINE read "ALL FIVE ITEMS RULED". The
+build read the sub-headings. They answered both a second time, identically, so
+nothing in the record was wrong — it cost two questions and aged two closed items
+as though they were rotting.)
 
 **Age every item.** An item on its third brief is marked `3rd time`. Nothing rots
 quietly; if something keeps returning unanswered, that is information about the

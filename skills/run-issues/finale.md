@@ -13,8 +13,22 @@ After the last issue, in order, tracked in the ledger as
 `finale-mechanical → finale-judgment → finale-promotion → finale-board →
 awaiting-merge` so an interrupted finale resumes rather than re-running. Write each
 state before the step it names begins, so a kill inside a step resumes at that step
-rather than past it. Promotion is safe to re-enter — it deletes each row as it
-resolves it — and the board render is safe to repeat:
+rather than past it.
+
+**Run the guard before every one of those writes, and do not write if it refuses:**
+
+```
+python3 ~/.claude/skills/run-issues/check_finale_stage.py --ledger <run.md> --to <stage>
+```
+
+It permits the next stage in the chain and a repeat of the current one, and refuses a
+jump, a reversal and a ledger with no state. **This exists because the finale wrote
+`awaiting-merge` with promotion and the board still unrun in three consecutive runs** —
+on the third the runner put the state back by hand. Promotion is what turns register
+rows into issue files, so a resume that skips it loses them. Adopted 2026-08-21.
+
+Promotion is safe to re-enter — it deletes each row as it resolves it — and the board
+render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
    cache** (delete whatever the project's build cache is — `.next`, `dist`, `target`

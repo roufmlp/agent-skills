@@ -92,7 +92,7 @@ class SelectLedger(unittest.TestCase):
         await_ = "Owner: none — awaiting-merge 2026-08-16 13:45."
         return [
             cand(MAIN, dc, merged),
-            cand(f"{WT}/bridge-cse_01HR34FKMcAhVdKHerCGmRmd", t17, await_),
+            cand(f"{WT}/resumed-session-3c1f0b", t17, await_),
             cand(f"{WT}/daily-brief-291c77", dc, await_),
             cand(f"{WT}/harden-issues-360-357-346-574d90", dc, await_),
             cand(f"{WT}/last-run-completion-prod-1e7c27", t17, await_),
@@ -180,3 +180,66 @@ class SelectLedger(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# 2026-08-19: the rule and the convention had drifted apart. `SKILL.md` puts
+# the ledger in the MAIN checkout, and its `Worktree:` line names the run's own
+# tree, so "the copy that names the tree it sits in" matched nothing and a live
+# run refused to resume. The `Worktree:` line still says which run owns the
+# ledger; it stopped saying where the ledger lives. Both shapes are live now.
+
+def main_cand(worktree_line, owner_line, scope=""):
+    """The live copy as runs write it today: in the main checkout."""
+    return Candidate(
+        path=f"{MAIN}/.scratch/example-feature/run.md",
+        tree=MAIN,
+        worktree_line=worktree_line,
+        owner_line=owner_line,
+        scope_text=scope,
+        is_main=True,
+    )
+
+
+MERGED = "Owner: none — MERGED to local main 2026-08-18 by `/daily-brief`."
+LIVE = "Owner: run-issues session (0a1b2c)"
+
+
+class MainCheckoutCopy(unittest.TestCase):
+    def test_selects_the_main_checkout_copy_that_names_the_run_worktree(self):
+        candidates = [
+            main_cand(f"Worktree: `{WT}/run-issues-batch-b3f7a1`", LIVE),
+            cand(f"{WT}/run-issues-batch-b3f7a1",
+                 f"Worktree: `{WT}/previous-run-7b21ac`", MERGED),
+            cand(f"{WT}/daily-brief-b2d0c6",
+                 f"Worktree: `{WT}/previous-run-7b21ac`", MERGED),
+        ]
+        path, reason = select_ledger(candidates)
+        self.assertIsNone(reason)
+        self.assertEqual(path, f"{MAIN}/.scratch/example-feature/run.md")
+
+    def test_a_merged_main_checkout_copy_is_finished_paperwork(self):
+        candidates = [main_cand(f"Worktree: `{WT}/previous-run-7b21ac`", MERGED)]
+        path, reason = select_ledger(candidates)
+        self.assertIsNone(path)
+        self.assertIn("No live ledger", reason)
+
+    def test_a_copy_naming_its_own_tree_is_still_live(self):
+        candidates = [
+            main_cand(f"Worktree: `{WT}/previous-run-7b21ac`", MERGED),
+            cand(f"{WT}/run-issues-batch-b3f7a1",
+                 f"Worktree: `{WT}/run-issues-batch-b3f7a1`", LIVE),
+        ]
+        path, reason = select_ledger(candidates)
+        self.assertIsNone(reason)
+        self.assertEqual(
+            path, f"{WT}/run-issues-batch-b3f7a1/.scratch/example-feature/run.md")
+
+    def test_two_live_copies_still_need_a_human(self):
+        candidates = [
+            main_cand(f"Worktree: `{WT}/run-issues-batch-b3f7a1`", LIVE),
+            cand(f"{WT}/other-run-aaaaaa",
+                 f"Worktree: `{WT}/other-run-aaaaaa`", LIVE),
+        ]
+        path, reason = select_ledger(candidates)
+        self.assertIsNone(path)
+        self.assertIn("2 live ledgers", reason)

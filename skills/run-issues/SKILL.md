@@ -714,6 +714,25 @@ procedure is a script and not a judgement.
   run, and it is also the first evidence at that tier — so whoever reads its
   verdicts later has to know which tier produced them. Say it once, where the
   verdicts live.
+- **Orchestrator cost, stated at launch.** Run
+
+  ```
+  python3 ~/.claude/skills/run-issues/orchestrator_cost.py --days 7 --issues <count>
+  ```
+
+  and paste its table into the launch message. It reads the last week's run transcripts
+  and prints what the orchestrator cost at each batch size already run.
+
+  **This states a fact. It refuses nothing, and it recommends no size.** There is no
+  ceiling on how many issues a run may take, and the reading must come from inside the
+  last week: a workflow that changes weekly makes an older figure a description of a
+  system that no longer exists. If the window is empty the script says so and prints
+  nothing else. Do not go looking for an older number.
+
+  What five runs measured, and why the column matters: the orchestrator is the single
+  session that holds the whole run, and every turn re-reads the conversation before it.
+  Four issues cost it 0.96M weighted tokens per issue, nine cost 1.44M to 1.67M, and
+  thirteen cost 2.45M. Nothing else in the audit moved a number this far.
 - **Hardening stamp.** List every scoped issue whose file lacks a `Hardened:`
   line in the launch message, naming `/harden-issues` as the fix **for the next
   run**. Never run it against issues this run holds. Launch-time information for

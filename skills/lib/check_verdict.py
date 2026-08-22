@@ -17,11 +17,21 @@ background by default, so an orchestrator that no longer blocks could mark an
 issue resolved before its gate has judged and read green. A step that refuses to
 move without a verdict is correct under both behaviours.
 
-Three refusals, and that is the whole of it:
+Four refusals, and that is the whole of it:
 
     absent   the file is not there, or the named heading is not in it
     empty    the file, or the section under that heading, holds nothing
     pending  a row still reads `pending`, so the gate never judged it
+    stale    the section sits above the newest `Implementation record,
+             attempt N` heading, so it grades an earlier diff
+
+`stale` is the 2026-08-19 fault. One issue's attempt-2 gates died with their
+session before writing, the file still held attempt 1's two rejections under the
+same two headings, and this check passed both. Taking the LAST matching heading
+is not enough on its own: when the new attempt's gate writes nothing, the last
+heading is still the old one. Measured over one project's issue files the morning
+after: 194 files carry gate sections and no attempt record, 4 carry both with the
+gates written last, and only one carries the record last.
 
 **Name the section wherever the file has one.** A `/parallel-hunt` bug file
 already carries the finder's evidence before any gate writes, and a
@@ -125,6 +135,32 @@ def _matches(title, wanted):
     return not rest or not rest[0].isalpha()
 
 
+ATTEMPT_RECORD = re.compile(r"^implementation record\b.*\battempt\s*(\d+)")
+
+
+def locate_section(text, section):
+    """The (line index, depth) of the LAST heading matching `section`."""
+    wanted = _flatten(section.lstrip("#"))
+    found = None
+    for index, depth, title in _headings(text):
+        if _matches(title, wanted):
+            found = (index, depth)
+    return found
+
+
+def latest_attempt(text):
+    """The (line index, number) of the newest implementation record, or None.
+
+    None is the common case and means the order check does not apply.
+    """
+    found = None
+    for index, _depth, title in _headings(text):
+        match = ATTEMPT_RECORD.match(_flatten(title))
+        if match:
+            found = (index, int(match.group(1)))
+    return found
+
+
 def read_section(text, section):
     """The body under this heading, or None when the heading is absent.
 
@@ -137,18 +173,13 @@ def read_section(text, section):
     at the same level or higher, so a gate that writes `### Rubric` under its
     own heading keeps it.
     """
-    wanted = _flatten(section.lstrip("#"))
-    lines = text.splitlines()
-    headings = list(_headings(text))
-
-    start = level = None
-    for index, depth, title in headings:
-        if _matches(title, wanted):
-            start, level = index, depth
-    if start is None:
+    located = locate_section(text, section)
+    if located is None:
         return None
+    start, level = located
+    lines = text.splitlines()
 
-    for index, depth, _title in headings:
+    for index, depth, _title in _headings(text):
         if index > start and depth <= level:
             return "\n".join(lines[start + 1:index])
     return "\n".join(lines[start + 1:])
@@ -206,6 +237,20 @@ def decide(text, section=None):
                     f"anything. Check the path is the one in this run's own "
                     f"worktree — a gate that drilled on a private copy can "
                     f"leave its verdict beside the copy — then re-spawn it."
+                ),
+            )
+
+        record = latest_attempt(text)
+        located = locate_section(text, section)
+        if record and located and record[0] > located[0]:
+            return Decision(
+                allowed=False,
+                reason=(
+                    f"Refused: {where} sits above `Implementation record, "
+                    f"attempt {record[1]}`, so it grades an earlier diff. This "
+                    f"attempt's gate wrote nothing — it died before writing, or "
+                    f"it wrote in another checkout. Re-spawn it. A verdict that "
+                    f"has not read the current diff is not a pass."
                 ),
             )
 

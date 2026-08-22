@@ -331,3 +331,65 @@ class Main(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# A gate section can also be STALE rather than absent: the file carries last
+# attempt's verdict under the same heading, and this attempt's gate died before
+# writing. Measured over one project's issue files on 2026-08-20: 194 files
+# carry gate sections and no attempt record at all, 4 carry both with the gates
+# last, and 1 — whose two attempt-2 gates died with their session — carries
+# the record last. The order is the discriminator, so the order is what is read.
+
+ISSUE_ATTEMPT_TWO_UNGRADED = """# Issue 390a — the item reader
+
+## Implementation record, attempt 1, 2026-08-19
+
+Built the reader.
+
+## Review gate
+
+| id | verdict |
+|---|---|
+| rev-01 | reject |
+
+## Verify gate
+
+| id | verdict |
+|---|---|
+| ver-01 | reject |
+
+## Implementation record, attempt 2, 2026-08-19
+
+Rebuilt on both gates' ground. No gate has read this diff.
+"""
+
+ISSUE_ATTEMPT_TWO_GRADED = ISSUE_ATTEMPT_TWO_UNGRADED + """
+## Review gate — attempt 2
+
+| id | verdict |
+|---|---|
+| rev-01 | pass |
+
+## Verify gate — attempt 2
+
+| id | verdict |
+|---|---|
+| ver-01 | pass |
+"""
+
+
+class StaleSection(unittest.TestCase):
+    def test_refuses_a_gate_section_older_than_the_newest_attempt_record(self):
+        for section in ("## Verify gate", "## Review gate"):
+            with self.subTest(section=section):
+                decision = decide(ISSUE_ATTEMPT_TWO_UNGRADED, section)
+                self.assertFalse(decision.allowed)
+                self.assertIn("attempt 2", decision.reason)
+
+    def test_allows_a_gate_section_written_after_the_newest_record(self):
+        for section in ("## Verify gate", "## Review gate"):
+            with self.subTest(section=section):
+                self.assertTrue(decide(ISSUE_ATTEMPT_TWO_GRADED, section).allowed)
+
+    def test_a_file_with_no_attempt_record_is_unaffected(self):
+        self.assertTrue(decide(ISSUE_BOTH_GATES, "## Verify gate").allowed)

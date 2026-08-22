@@ -172,6 +172,30 @@ sharpened (with evidence), question (for the human), or clean.
    has proved can fail, which is the class this whole entry exists to close.
    (Adopted 2026-08-07.)
 
+   **Grade the drill, not only the criterion. A drill must name the red it
+   produces AND a wrong reason it could go red.** Where a criterion carries a
+   mutation or a drill, refuse it here unless it answers both. A drill that only
+   states "this reds when the guard is removed" is compatible with a guard that
+   tests nothing, because a drill inherits its author's model of the system: if
+   the author is wrong about what the code receives, the fixture is wrong the same
+   way and the two agree with each other while agreeing with nothing real. Naming
+   the wrong-reason road is what separates a drill that proves a property from one
+   that proves an author is self-consistent.
+
+   This is an authoring-time refusal and it costs no run time. Do not answer this
+   class by asking an implementer to check their own drill harder — that is the
+   reminder that already failed. (Adopted 2026-08-19, from a run finale. **Ten
+   guards in one batch were green while proving nothing**, and a pattern note in
+   the project's own docs already forbade exactly that, written four days earlier
+   after an earlier run lost four correction rounds to it. Every implementer
+   followed it and every drill passed. One issue drilled its leak guard against a
+   fixture built from the same wrong idea of the error reporter's payload that the
+   guard held, so 54 tests could not see it. In all ten the catch came from an
+   adversarial gate designing its own drill. Mutation testing was weighed as the
+   mechanical alternative and refused the same day: it runs the suite per mutant,
+   and against a suite of some 6,000 tests it would have been the most expensive
+   rule in the system, per run, for ever.)
+
    **A criterion may never ask for evidence to land somewhere the party it names
    cannot write.** Read the clause, name its writer, and check that writer's
    pen. Two homes fail today: an implementer writes neither the issue file nor
