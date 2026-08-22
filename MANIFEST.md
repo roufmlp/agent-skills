@@ -31,6 +31,8 @@ Listed in the order the loop runs.
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
 | `agents/*.md` | `~/.claude/agents/*.md` (16 role definitions the orchestration skills spawn) |
+| `check_manifest_coverage.py` | written for this repo; no live source |
+| `test_check_manifest_coverage.py` | written for this repo; no live source |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |
 | `skills/designrules/SKILL.md` | `~/.claude/skills/designrules/SKILL.md` (pointer adapted for this repo) |
@@ -49,6 +51,35 @@ Two parts of `~/.claude/CLAUDE.md` never ship:
 One more class never ships: session records inside the live skill directories —
 panel-review transcripts, workflow-redesign notes, `__pycache__`. A skill directory
 publishes its instruction files, its scripts and its tests, nothing it accumulated.
+
+Those records are listed here, not just described, because `check_manifest_coverage.py`
+refuses every live file that no row and no line below names. Withholding a file is a
+decision like publishing one; this is where it gets written down:
+
+```withheld
+~/.claude/skills/run-issues/panel-review-*.md
+~/.claude/skills/run-issues/workflow-redesign-*.md
+```
+
+## The coverage check
+
+```
+python3 check_manifest_coverage.py
+```
+
+Run it before every sync. It refuses three disagreements between this map and the two
+trees: a live file no row names (`unlisted`), a row whose live source has gone
+(`dead-source`), and a row whose published file has gone (`dead-publication`).
+
+It reads presence only, never content. The two copies differ by design — the scrub
+rules rewrite names, paths and run ids on every sync — so a content check would alarm
+on every file for ever and be switched off within a day.
+
+It exists because the reminder it replaces had a hole the shape of the fault. That
+reminder fires "after editing any file listed in its MANIFEST.md", and a brand-new live
+file is listed nowhere, so it never fired: `check_finale_stage.py` and
+`orchestrator_cost.py` were both written live on 2026-08-21 and were still unpublished
+on 2026-08-22, when a panel review found them by hand.
 
 ## Scrub rules (run on every sync)
 
