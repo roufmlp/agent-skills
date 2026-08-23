@@ -33,6 +33,8 @@ Listed in the order the loop runs.
 | `agents/*.md` | `~/.claude/agents/*.md` (16 role definitions the orchestration skills spawn) |
 | `check_manifest_coverage.py` | written for this repo; no live source |
 | `test_check_manifest_coverage.py` | written for this repo; no live source |
+| `check_skill_drift.py` | written for this repo; no live source |
+| `test_check_skill_drift.py` | written for this repo; no live source |
 | `docs/model-and-effort-choices.md` | written for this repo; no live source |
 | `docs/case-study-five-issue-run.md` | written for this repo; no live source |
 | `skills/designrules/SKILL.md` | `~/.claude/skills/designrules/SKILL.md` (pointer adapted for this repo) |
