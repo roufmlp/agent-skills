@@ -156,7 +156,15 @@ render is safe to repeat:
    Naming the model is not optional and "cheap" is not a model: an unnamed spawn
    inherits the session model, so this step was paying the top tier to convert one
    markdown file into HTML on the largest input in the pipeline (283 KB, measured
-   2026-08-06). There is no judgement in the render — the briefing already decided
+   2026-08-06).
+
+   **This is the one spawn `SKILL.md`'s "never pass a `model:` value" rule does not
+   cover, and the two do not conflict.** That rule is scoped to roles that HAVE an
+   agent file, because there a spawn-time value silently defeats the file's
+   `model: inherit`. The board renderer has no agent file, so there is nothing to
+   defeat and nothing to inherit from but the session. (Scoped 2026-08-22.)
+
+   There is no judgement in the render — the briefing already decided
    what the board says. `merge-briefing.md` stays the source of truth,
    and `/daily-brief` reads that file, never the board.
 5. **Recommend follow-ups; start none.** One exception is mandatory:

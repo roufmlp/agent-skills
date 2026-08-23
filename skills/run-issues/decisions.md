@@ -990,7 +990,7 @@ Pre-flight.
 
 **6. Every citation carries its repo-relative path in full, every time.** A
 cross-session sweep found nine ambiguous citations across six issues. The worst
-used a bare `review.ts` eleven times where the tree holds two files by that
+used a bare filename eleven times where the tree holds two files by that
 name; the wrong one resolves to plausible code, so the reader finds a defect
 that is not there and an implementer can lose a strike to it. Now the third of
 the claim rules in `SKILL.md` step 5.
@@ -1057,3 +1057,228 @@ reaching `/run-issues`. Some still can, because the lighter road needs an issue
 naming a test that fails today and a pure copy change often has none. If such a
 batch appears, the cheap answer is to make the count durable, not a fresh
 permission written from memory.
+
+## The class-(a) slim — evidence moved out of SKILL.md (2026-08-23)
+
+A review walked `SKILL.md` for passages that are pure history and mapped them.
+Eighteen of them moved here. Every rule they illustrated stayed in the skill, and
+`test_skill_structure.py` asserts both halves: the anchor still loaded, the story
+no longer loaded.
+
+Read this section when you want to know why a rule is worded the way it is. Do
+not read it to run anything.
+
+**The full suite runs without the canonical env file.** Sourcing it cost one run
+three red suites in one night, each investigated as a regression and each caused
+by nothing. It had never been written down anywhere, which is why three agents in
+one run each discovered it the hard way.
+
+**The round header, and why it is a block rather than a rule.** The rule that a
+brief names the place and not only the act failed a third time on 2026-08-16.
+Three faults, one shape, and none of them a prohibition: a brief said to drive a
+production build in a browser and named no harness, so the implementer picked the
+blind one and drove a whole acceptance walk in it — one round, on the largest
+issue in the batch. A settlement went to the implementer and the verify gate and
+not to the review gate, which then rejected on clauses the settlement had already
+answered — one annulled ground, one gate round. A gate brief named the register
+and the issue file, and not the merge briefing, so the gate found a file of that
+name in the main checkout and appended five lines to a stale artefact of a merged
+run.
+
+**A prohibition names the system, not the verb: the other two faults.** One run's
+three faults shared one shape. The one kept in the skill is the writable-database
+example. The other two: "a probe script needs a directory holding `node_modules`"
+named no home, so three files landed at the shared worktree root; and a brief
+naming no register path sent two gates to the worktree copy instead of the main
+checkout's.
+
+**Why the verdict check is a check and not a reminder.** Two adversarial gates
+died at the weekly usage limit during one workflow audit and wrote nothing at all.
+Both times a person recovered the work by reading a transcript by hand, and
+nothing mechanical noticed they had returned empty. Separately, one gate's
+175-line verdict was left in the wrong tree and survived only because the finale
+diffed two checkouts for an unrelated reason. The place-not-only-the-act rule was
+adopted on 2026-08-09, one of its own worked examples is a brief that sent two
+gates to the wrong register copy, and the same fault recurred four days later. A
+second telling would not have worked either.
+
+**The citation pass, and what it is worth.** The fourteen issue files one run
+built went from 1 broken citation to 251, and twelve open backlog issues nobody
+opened went from 0 to 28, four of them takeable in the next batch. The mechanism
+is not carelessness: one issue's citations were verified correct at 08:50 and
+another issue moved the same file at 13:11. Nothing re-read them, because the only
+stage that looked was the finale, by which time thirteen commits had landed.
+
+**A self-commit does no visible harm.** Two of the first three implementers on
+one batch committed before either gate had opened. Neither did harm, which is what
+makes the class hard to see.
+
+**The scopeless negative that shipped.** The rule was advice in the skill from
+2026-08-09 and was broken the same night: a wrong ruling shipped and survived only
+because an implementer refused it on evidence.
+
+**Searching the branch for a twin.** On one run four deleted claims had twins and
+a fifth reached main, because its twin sat one directory away in a file the
+correction never opened. The search was adopted narrowly: no authoring-time rule
+came with it, because the four caught instances cost two minutes each rather than
+a strike.
+
+**The three claim rules, illustrated.** One primer asserted an issue file was the
+only copy of a measured record while three others existed — and that sentence was
+written as the REPAIR for a stale-prose defect, by an agent following the deletion
+rule. The same primer recorded that a package import succeeds "when node is
+launched from the worktree root", having watched it succeed there; the cause was a
+`node_modules` symlink, so the import succeeds from any cwd that has one and fails
+from every cwd that does not. And a cross-session sweep of one batch found nine
+ambiguous citations across six issues, the worst a bare filename used eleven times
+where the tree holds two files by that name.
+
+**The three runner errors of one run.** A transcribed figure off by 960; a
+refutation from a grep that missed the call one directory over; and hand-written
+timestamps an hour ahead of the clock.
+
+**What uncapped criteria resets cost.** 7 attempts and 14 gate runs where the
+skill promises three.
+
+**The ruling that had no issue number.** A ruling settled an open question by
+splitting a road out of scope; nine hours later no issue existed, and the only
+trace of the split was one phrase inside the original issue's own file. A verify
+gate happened to notice, and it was minted then. Nothing was watching for it, so
+nothing would have caught it a day later.
+
+**Why staleness is the file's mtime.** The handwritten `heartbeat <HH:MM>` field
+failed twice in one run, on a runner who had already diagnosed the failure mode.
+
+**The launch line that printed too late.** On one run the line printed at 22:22,
+after the first implementer had already finished, so there was no window left to
+interrupt.
+
+**The carried fact that was never re-derived.** One run's plan file said a helper
+"answers null when the count is not one"; it actually ordered its rows by creation
+time and returned the OLDEST, answering null only at zero. The runner repeated it
+for nine hours across many spawns before a gate refuted it from the migration
+file.
+
+**No agent file pins a model.** `harden-issues-attacker` was the last, and it
+moved to `inherit` on 2026-08-02, so the tier is chosen at launch.
+
+**What worktree readiness costs, and the green it closes.** Adopted on 2026-08-07
+on the question of what it costs in tokens: it saves them. The failure it closes
+was measured — a fresh worktree ran its typecheck to exit 0 with `node_modules`
+absent, because the compiler resolved off a global install and never loaded the
+repo's own types.
+
+**The six hours the allowlist bullet cost.** On 2026-08-14 a verify gate sat on a
+dialog asking to start the dev server, with its own task counter reading
+6h 00m 05s. A person found it by looking at the screen. The bullet was already
+there and ran correctly: the runner enumerated the classes the old text named and
+dry-ran all of them. It read an illustrative list as a complete one.
+
+## Three experiments, pre-registered 2026-08-23 (arms and thresholds, before any run)
+
+Written before any of them ran. The effort trial that closed on 2026-08-23 worked
+because its threshold was fixed in advance and the rule was taken as written when
+the reading went against the hypothesis. These three get the same treatment. A
+threshold argued after the number arrives is not a threshold.
+
+Order: the medium-rung validation first, because it costs a scratch session rather
+than a run. Then slim-then-measure on the next real batch. Compaction last,
+because its arms need a run each.
+
+### 1. Medium-rung validation
+
+**The question.** Is `medium` a distinct effort rung at all, or does it resolve to
+something else? Nothing has established this. The trial that just closed ran a
+whole batch at `medium` and read 1.22M weighted tokens per issue, and that number
+is consistent with `medium` being a real rung, with it resolving silently to
+`high`, and with it resolving to nothing. Agent frontmatter accepts `effort:
+banana` without complaint, so an unrecognised value is known to load quietly.
+
+**Design.** The interleaved experiment recorded above, repeated. Identical agents
+on one enumeration task, differing only in the effort line, runs interleaved so
+drift in the service hits every arm equally. Five runs per arm.
+
+**Arms.** `low`, `medium`, `high`, `xhigh`, plus two that exist to grade the
+measurement rather than the dial:
+
+- A second `high`, under a different agent name. This is the noise floor. Two arms
+  that are the same thing must land together, or the threshold below is
+  meaningless.
+- `effort: banana`. Where nonsense lands tells us what happens to a value the
+  loader does not recognise, which is the failure mode `medium` might already be
+  in.
+
+**Measured.** Mean wall-clock and mean output words per arm, as in the table
+above.
+
+**The threshold, fixed now.** `medium` is a distinct rung if its mean wall-clock
+differs from `high` by 10 per cent or more, and the two `high` arms differ from
+each other by less than 10 per cent. Both conditions, or the answer is "not
+established", which is not the same as "identical" and must not be written up as
+one. If the two `high` arms differ by 10 per cent or more, the task is too noisy
+to grade effort and the experiment reports that instead of a rung.
+
+**What a result buys.** A confirmed rung makes a per-seat effort trial worth
+running. An unconfirmed one retires `medium` from every future proposal, which is
+the cheaper outcome and the more likely one.
+
+### 2. Slim-then-measure
+
+**The question.** Did the class-(a) slim change what a run costs?
+
+**Design.** Per-issue weighted tokens from `orchestrator_cost.py --days 7`, on
+comparable batches before and after the slim, inside one seven-day window. Same
+session effort on both sides, `high`. Comparable means a similar issue count; the
+readings already on file are four issues and five issues.
+
+**The honest answer is written before the run, because it will be tempting to
+claim otherwise.** The slim took `SKILL.md` from 902 lines to 858. That is 5 per
+cent of one file. Against it, the two batches already measured at `high` read
+0.96M and 1.51M weighted tokens per issue, a spread of 57 per cent driven by issue
+mix alone. One batch after the slim cannot separate a 5 per cent input change from
+that. So:
+
+**The threshold, fixed now.** The slim is recorded as having no measurable effect
+unless the post-slim reading falls outside the 0.96M to 1.51M band already
+observed at `high`. Inside the band, the entry reads "no measurable effect at this
+sample size" and nobody writes that the slim saved tokens. Outside it, the reading
+is interesting and still not attributable to the slim without a second batch.
+
+**Why measure at all, then.** To catch the opposite result. A slim that moved a
+rule somewhere the orchestrator no longer reads it costs correction rounds, and
+those show up as a higher number, not a lower one.
+
+### 3. Compaction
+
+**The question.** Does compacting at an issue boundary cost less than carrying the
+context, and does it cost less than halting and resuming?
+
+**Arms.** Three, one run each:
+
+- Boundary compact by hand, typed by the human at each issue boundary. It is
+  manual because it has to be: no skill, hook or tool in this harness can trigger
+  compaction, established by walking the tool inventory. Adopting this arm means
+  adopting a standing manual step, and that cost belongs in the decision.
+- Deliberate halt-and-resume at each issue boundary, through the existing halt
+  block.
+- Control. Neither, as runs work today.
+
+**Measured.** `orchestrator_cost.py --days 7`, per-issue weighted tokens, plus the
+runner-error count at finale for each arm. A cheaper run that makes more mistakes
+is not cheaper.
+
+**Preconditions, both before arm one starts.** The citation baseline written to a
+file under `.scratch/<feature>/`, and the road choice written into the issue's
+ledger row so a later reader can tell which arm produced which number. The effort
+trial nearly died on exactly this: its first launch printed `high` when the picker
+said `medium`, and only the stamp rule caught it.
+
+**The standing rule this experiment may not contradict.** Post-compact equals
+resume: a compacted context is treated as a fresh session that must re-read the
+ledger, and the compaction summary is not evidence of anything. An arm that reads
+its own summary instead of the ledger has measured a different thing.
+
+**The threshold, fixed now.** An arm is adopted if it cuts per-issue weighted
+tokens by 15 per cent or more against the control, with no increase in runner
+errors at the finale. Under 15 per cent, the manual step is not worth a person's
+attention and the answer is no.

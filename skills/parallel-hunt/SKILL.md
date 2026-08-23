@@ -96,6 +96,21 @@ status and its verdict, and the finder is dead, so the orchestrator deletes the
 finder's regression test file for that bug ID when it records a retraction. A
 deliberately failing test left in the suite poisons every later green judgement.
 
+**A fix rejection on non-executable PROSE is fixed by deleting the claim, never by
+restating it.** A fix for an over-claim is itself a new claim with its own
+falsifiable surface, so on this class more precise and more likely wrong move
+together. Second rejection → delete down to the minimal sentence the gate cannot
+falsify; re-assert only by making the claim executable. **The claim is part of the
+deliverable**, so a bug file's diff summary and its recommended-fix prose are
+graded like the diff. One canonical statement per claim — everywhere else cites
+`file:line` and asserts nothing. `/run-issues` carries the same rule, at its
+"One canonical statement per claim" paragraph in `run-issues/SKILL.md`.
+
+One round is the measurement: four fix rejections across sixteen entries and four
+assigned tasks, and **not one was a wrong diff**. All four were prose, and three of
+them were caught only because a gate re-measured a sentence nobody had asked it to
+check (`decisions.md`).
+
 At round end commit `register.md`, `leads.md`, `bugs/` and the finder's regression
 test directory — those paths only — and delete `round-brief.md`. Never commit the
 whole `.scratch/<feature>/` directory: a run's ledger, journal and issue files live
@@ -239,9 +254,14 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    python3 ~/.claude/skills/lib/check_verdict.py --file <bugs/ID.md> --section "## Fix gate"
    ```
 
-   It exits non-zero when the heading is absent, when nothing sits under it, or
-   when a row still reads `pending`. A non-zero exit means the gate died or wrote
-   somewhere else, so the entry keeps its old status and the gate is re-spawned.
+   **It has four refusals, not three.** It exits non-zero when the heading is
+   absent, when nothing sits under it, when a row still reads `pending`, and when
+   the section sits above the newest `Implementation record, attempt N` heading —
+   `stale`, meaning the section grades an earlier diff. `stale` closes a measured
+   fault: one entry's second-attempt gates died before writing, the file still held
+   the first attempt's rejections under the same headings, and the check passed
+   both. A non-zero exit means the gate died, wrote somewhere else, or judged an
+   older attempt, so the entry keeps its old status and the gate is re-spawned.
    **A gate that returned empty has not retracted anything and has not verified
    anything** — two adversarial gates died at the weekly usage limit during one
    workflow audit and wrote nothing, and nothing mechanical noticed.
@@ -263,12 +283,27 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
 
 ## Auto-resume across usage limits
 
-At launch create a repeating wakeup (CronCreate, every ~30 min): "If
-`<register path>` shows an active round with no worker progress since the last
-firing, resume from register state; otherwise do nothing." Firings that land while
-rate-limited simply fail; the first after the reset revives the round. Delete it at
-round end. Remind the user once that the machine must stay awake
-(on macOS, `caffeinate -dimsu`).
+**The register resumes a round. The cron only saves short waits** — it reaches no
+further than a five-hour window the same session sits through. A weekly limit
+resetting days out is resumed by a human re-invoking `/parallel-hunt resume`.
+
+**Staleness is a FILE's mtime, never worker progress.** Every status transition
+writes `register.md`, so its mtime moves whenever the round moves and nobody can
+forget to write it. A long finder sweep, or a long fix, moves no status line for an
+hour — so "no worker progress" cannot mean "dead", and only a stale mtime can.
+`/run-issues` refuted the handwritten alternative twice in one run, on a runner who
+had already diagnosed the failure mode (`run-issues/SKILL.md`, the paragraph
+beginning "The ledger carries an owner line").
+
+Create the wakeup anyway at launch (CronCreate, every ~30 min): "Check that
+`<main-repo-root>/.scratch/<feature>/round-brief.md` exists, and read the mtime of
+`<main-repo-root>/.scratch/<feature>/register.md` — do not read the rest of either
+file. If the brief is there and the register's mtime is over 60 minutes old, resume
+from register state; otherwise do nothing." `round-brief.md` is the marker because
+it is written at launch and deleted at round end, so its presence is what "a round
+is open" means. Firings that land while rate-limited simply fail; the first after
+the reset revives the round. Delete the cron at round end. Remind the user once
+that the machine must stay awake (on macOS, `caffeinate -dimsu`).
 
 Every agent file opens with its own idempotency check — read the register first,
 stop if the assigned work is already past this stage — which is what makes resume
@@ -284,10 +319,53 @@ safe.
   `hunt/<scope>`, cut at launch. A second worktree hides the finder's pinning
   tests from the fixer. Exactly one finder and one fixer live at a time. The
   branch goes to the human at round end; the orchestrator never merges to main.
-- **The session is on the model the whole round should use.** Agent files use
-  `model: inherit`, so every worker inherits it. Check before spawning anything.
-- The permission allowlist covers the run — test commands, git, the repo paths. A
-  worker blocked on a permission prompt stalls silently; fix the allowlist first.
+- **Record the session model in the register, and check it before spawning.**
+  Agent files use `model: inherit`, so every worker inherits the session's tier.
+  A round on any tier is a valid round, and it is also the first evidence at that
+  tier. **A null result — "no bugs found" — from a tier with no track record is
+  not evidence of absence, and may not be reported as one.** This loop has no
+  downstream check on a finder's miss: a weak finder and a clean codebase produce
+  the same empty register, which is why the tier is recorded and the null result
+  qualified. (Generalised 2026-08-23. This bullet used to name one model — a
+  pinned model name goes stale the day a new model ships, and a stale pin gets
+  edited away with the caution inside it. `run-issues/SKILL.md` carries the same
+  rule for a run.)
+- **Verify the allowlist, never assert it.** Dry-run every command class this
+  round will use, in no-op form, before spawn #1. A miss is a launch-time blocker;
+  mid-round it is a worker blocked on a prompt, stalling silently. (The text this
+  replaces asserted coverage — "the permission allowlist covers the run" followed
+  by an illustrative list. Both halves are the fault. `/fewer-permission-prompts`
+  writes the rules; this bullet proves they hold.)
+
+  **Refuse to spawn while any class is refused or unverified.** Never start a
+  round intending to approve a prompt later. The whole value of this check is that
+  it fails while the human is still at the keyboard.
+
+  **Derive the list from the roles THIS round spawns, not from this bullet.** What
+  follows is what today's roles need. It is a floor, not a definition. Walk each
+  role the round will spawn and ask what it shells out to.
+
+  - **Finder** — the test runner on single files, wide greps, and **starting the
+    dev server** by name from the repo's `.claude/launch.json`, where the project
+    has one, because it hunts the live system rather than the code's intentions.
+    **It probes that server through a repo probe script allowed by one prefix
+    rule, if the project has one, never with a bare `curl`.**
+  - **Fixer** — typecheck, lint, the relevant test files, git stage and commit.
+  - **Claim gate** — whatever the reproducers it runs need, plus
+    `git clone --shared` into the session scratchpad.
+  - **Fix gate, and fix gate critical** — `git clone --shared` into the
+    scratchpad, the test runner inside that copy, and a code review.
+  - **The orchestrator itself** — the cron-creation tool, for the resume wakeup.
+
+  **Two measurements, both paid by `/run-issues`, and both would repeat here.** On
+  2026-08-14 a verify gate sat on a dialog asking to start the dev server, with its
+  own task counter reading 6h 00m 05s, and a person found it by looking at the
+  screen. A bullet was already present and the runner ran it correctly: it
+  enumerated the classes the old text named and dry-ran every one. It read an
+  illustrative list as a complete one. Separately, one run stopped for a permission
+  dialog at the end, unattended, because a raw `curl` is allowed as an exact string
+  and the next probe used a different port. The list is derived from roles for
+  those two reasons, and each role names its own tools.
 - **Creating a worktree includes installing dependencies and making the
   `.env.local` symlink. If either fails, the round refuses to start.** Not a
   checklist item to remember afterwards — part of what "the tree is ready" means.

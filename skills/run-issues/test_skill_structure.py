@@ -30,6 +30,7 @@ SKILLS = RUN_ISSUES.parent
 
 SKILL = RUN_ISSUES / "SKILL.md"
 FINALE = RUN_ISSUES / "finale.md"
+DECISIONS = RUN_ISSUES / "decisions.md"
 RESUME = RUN_ISSUES / "resume.md"
 
 # Sentences that live inside the finale block and nowhere else. Every one is
@@ -56,6 +57,77 @@ RESUME_MARKS = [
     "recreate the cron",
 ]
 
+# --- The class-(a) slim -------------------------------------------------------
+#
+# A review walked SKILL.md for passages that are pure history and mapped them,
+# with a warning attached: six other passages read as history and are rules
+# wearing narrative clothes, and moving one of those deletes a live rule. Nothing
+# refused a move that took the rule away with the story.
+#
+# These two lists are that refusal.
+#
+#   SKILL_MARKS      the rule sentence each move must LEAVE BEHIND. Asserted
+#                    present in SKILL.md. If a move takes the anchor with the
+#                    story, this goes red.
+#   DECISIONS_MARKS  the story each move took. Asserted present in decisions.md
+#                    AND absent from SKILL.md — the FINALE_MARKS shape above.
+#
+# **The two lists were written at different times, deliberately.** Every anchor
+# went in before one line moved, so the anchor test was already green and already
+# watching while the edits happened. A story joined the second list only once it
+# had landed in decisions.md. A passage in neither list is one nobody has moved
+# yet, not one exempt from the rule.
+#
+# The target shape for every move is the sentence at "Small-issue coalescing was
+# retired": rule loaded, evidence moved, prohibition intact.
+SKILL_MARKS = [
+    "The launch line is a gate, not an announcement.",
+    "Export the live-database variables only when you",
+    "A field you cannot fill stops the spawn",
+    "**A prohibition in a brief names the SYSTEM, not the verb.**",
+    "is what makes that a refusal instead of a silent pass",
+    "the repair belongs to the next",
+    "a scopeless negative is not",
+    "One grep for a distinctive phrase from the deleted sentence.",
+    "*Never write that something is the only copy.*",
+    "*A recorded cause is tested against a control, never merely observed.*",
+    "*Every citation carries its repo-relative path in full, every time.*",
+    # No terminal full stop: the move turned this sentence's period into a colon
+    # introducing the pointer. The clause is the rule; the punctuation is not.
+    "The class survives its own cure",
+    "Ledger actuals derive from commit times, full stop.",
+    "This paragraph",
+    "A ruling that creates work gets its issue number in the same sitting",
+    "staleness is the FILE's mtime",
+    "Re-derive every fact the run will carry into its spawns, from source",
+    "Never pass a",
+    "A green produced without dependencies on disk is",
+    "It is a floor, not a definition.",
+]
+
+DECISIONS_MARKS = [
+    "three red suites in one night",
+    "picked the blind one and drove a whole acceptance",
+    "three files landed at the shared worktree root",
+    "175-line verdict",
+    "went from 1 broken citation to 251",
+    "Two of the first three implementers on",
+    "was broken the same night",
+    "its twin sat one",
+    "asserted an issue file was the only copy",
+    "having watched it succeed there",
+    "a bare filename used eleven times",
+    "transcribed figure off by 960",
+    "7 attempts and 14 gate runs where the skill promises three",
+    "it was minted then",
+    "failed twice in one run, on a runner",
+    "the line printed at 22:22",
+    "answers null when the count is not one",
+    "it moved to `inherit` on 2026-08-02",
+    "resolved off a global install",
+    "task counter reading 6h 00m 05s",
+]
+
 EFFORT_ROLES = [
     "run-issues-implementer",
     "run-issues-implementer-escalated",
@@ -69,6 +141,23 @@ EFFORT_ROLES = [
 
 def read(path):
     return path.read_text(encoding="utf-8")
+
+
+def squash(text):
+    """Collapse every run of whitespace to one space.
+
+    The slim's marks are compared against this rather than the raw file. These
+    are hard-wrapped markdown documents, so a sentence that fits on one line
+    today sits across two the moment anything before it grows by a word — and
+    the very edits this test polices are the ones that reflow paragraphs. The
+    first move of the slim proved it: the rule sentence survived intact, the line
+    break inside it moved, and the raw-substring check called that a deleted
+    rule. A guard that goes red on a reflow is a guard somebody switches off.
+
+    FINALE_MARKS and RESUME_MARKS predate this and cope by choosing marks short
+    enough to fit one line; they are left alone rather than churned.
+    """
+    return " ".join(text.split())
 
 
 class TestFinaleIsOffTheCommonPath(unittest.TestCase):
@@ -138,6 +227,85 @@ class TestResumeProcedureIsOffTheCommonPath(unittest.TestCase):
     def test_the_script_it_names_is_on_disk(self):
         """The invocation moved citation, not location."""
         self.assertTrue((RUN_ISSUES / "find_live_ledger.py").is_file())
+
+
+class TestTheSlimLeftEveryRuleBehind(unittest.TestCase):
+    """The class-(a) slim: no relocated rule loses its enforcement point."""
+
+    def test_every_anchor_is_still_in_the_skill(self):
+        """The refusal that matters. A move that carried its rule out with the
+        story goes red here, and only here — a reader would not notice."""
+        skill = squash(read(SKILL))
+        for mark in SKILL_MARKS:
+            with self.subTest(mark=mark):
+                self.assertIn(
+                    squash(mark),
+                    skill,
+                    "a class-(a) move took its rule anchor with it",
+                )
+
+    def test_every_moved_story_landed_in_decisions(self):
+        decisions = squash(read(DECISIONS))
+        for mark in DECISIONS_MARKS:
+            with self.subTest(mark=mark):
+                self.assertIn(squash(mark), decisions)
+
+    def test_no_moved_story_is_still_resident_in_the_skill(self):
+        """A move that copies rather than moves saves nothing and doubles the
+        maintenance surface."""
+        skill = squash(read(SKILL))
+        for mark in DECISIONS_MARKS:
+            with self.subTest(mark=mark):
+                self.assertNotIn(squash(mark), skill)
+
+    def test_the_anchor_list_is_not_empty(self):
+        """An empty catalogue is a green that means no work was done."""
+        self.assertTrue(SKILL_MARKS)
+
+    def test_no_story_is_listed_as_its_own_anchor(self):
+        """The two lists must not intersect: one string cannot be required to be
+        present in and absent from the same file."""
+        self.assertEqual(set(SKILL_MARKS) & set(DECISIONS_MARKS), set())
+
+    def test_the_model_sentence_is_still_the_model(self):
+        """Every move copies this shape, so a later edit that deletes it takes
+        the pattern with it."""
+        skill = read(SKILL)
+        self.assertIn("Small-issue coalescing was retired", skill)
+        self.assertIn("`decisions.md` holds the measurement", skill)
+
+
+class TestTheClassBPassagesWereNotTouched(unittest.TestCase):
+    """The six passages marked "moving this deletes a rule".
+
+    They are not anchors of a move — nothing was moved near them. They are listed
+    because the slim is the exact edit that would take them, and the next editor
+    reading the class-(a) list may not read the warning beside it.
+    """
+
+    CLASS_B = [
+        # The cron's own justification.
+        "cannot prevent a call that was never made",
+        # The recoverability test and the standing refusal of the top-tier trials.
+        "No value in the effort column was measured against a lower one",
+        # The self-commit contingency, stated nowhere else.
+        "The runner commits. An implementer never commits its own work",
+        "do not revert it — record it and give the gates the range",
+        # The orchestrator-cost ruling.
+        "Do not go looking for an older number",
+        # The halt block as the only resume document.
+        "a second copy goes stale",
+    ]
+
+    def test_every_class_b_passage_is_still_loaded(self):
+        skill = squash(read(SKILL))
+        for mark in self.CLASS_B:
+            with self.subTest(mark=mark):
+                self.assertIn(
+                    squash(mark),
+                    skill,
+                    "this reads as history and is a live rule",
+                )
 
 
 class TestEffortTableCarriesItsEvidence(unittest.TestCase):

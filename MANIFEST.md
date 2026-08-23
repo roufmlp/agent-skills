@@ -16,9 +16,10 @@ Listed in the order the loop runs.
 | `skills/run-issues/resume.md` | `~/.claude/skills/run-issues/resume.md` |
 | `skills/run-issues/check_attempt_cap.py` | `~/.claude/skills/run-issues/check_attempt_cap.py` |
 | `skills/run-issues/check_finale_stage.py` | `~/.claude/skills/run-issues/check_finale_stage.py` |
+| `skills/run-issues/check_diff_coverage.py` | `~/.claude/skills/run-issues/check_diff_coverage.py` |
 | `skills/run-issues/find_live_ledger.py` | `~/.claude/skills/run-issues/find_live_ledger.py` |
 | `skills/run-issues/orchestrator_cost.py` | `~/.claude/skills/run-issues/orchestrator_cost.py` |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (5 tests grading the skill text and its scripts) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (6 tests grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -75,6 +76,8 @@ than the four that govern everything else here.
 | Published | Live source |
 |-----------|-------------|
 | `hooks/run-issues-foreground-gate.py` | `~/.claude/hooks/run-issues-foreground-gate.py` |
+| `hooks/run-issues-evidence-gate.py` | `~/.claude/hooks/run-issues-evidence-gate.py` |
+| `hooks/test_run_issues_evidence_gate.py` | `~/.claude/hooks/test_run_issues_evidence_gate.py` |
 | `hooks/coderules-gate.py` | `~/.claude/hooks/coderules-gate.py` |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 

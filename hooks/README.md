@@ -8,7 +8,8 @@ So the install is two steps, and the second one is the step that matters.
 
 ```
 mkdir -p ~/.claude/hooks
-cp hooks/run-issues-foreground-gate.py hooks/coderules-gate.py ~/.claude/hooks/
+cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
+   hooks/coderules-gate.py ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
@@ -18,8 +19,8 @@ control.
 ## 2. Register them
 
 Merge this into `~/.claude/settings.json` and replace `/ABSOLUTE/PATH/TO` with
-where you put the files. If you already have a `hooks` key, add these two objects
-to its `PreToolUse` array rather than replacing the array.
+where you put the files. If you already have a `hooks` key, add these objects to
+its `PreToolUse` array rather than replacing the array.
 
 ```json
 {
@@ -31,6 +32,10 @@ to its `PreToolUse` array rather than replacing the array.
           {
             "type": "command",
             "command": "python3 /ABSOLUTE/PATH/TO/run-issues-foreground-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/run-issues-evidence-gate.py"
           }
         ]
       },
@@ -48,10 +53,11 @@ to its `PreToolUse` array rather than replacing the array.
 }
 ```
 
-Both are `PreToolUse` hooks, so both run before the tool call they match and can
-stop it. Exit 2 blocks that one call and feeds the hook's stderr back to the
-model, which then fixes the call and reissues it. Exit 0 lets the call through.
-Neither hook needs a timeout: both read one JSON payload from stdin and return.
+All three are `PreToolUse` hooks, so each runs before the tool call it matches
+and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
+the model, which then fixes the call and reissues it. Exit 0 lets the call
+through. None of them needs a timeout: each reads one JSON payload from stdin
+and returns.
 
 Put the block in `~/.claude/settings.json` to cover every project, or in a
 repository's `.claude/settings.json` to cover one.
@@ -74,6 +80,26 @@ It cannot catch a turn that ends without spawning at all. Nothing at
 `PreToolUse` can, because there is no call to inspect. Cover that class with a
 resume cron.
 
+## run-issues-evidence-gate.py, on `Agent|Task`
+
+It refuses a verify-gate or review-gate spawn unless the issue file named in the
+prompt already holds an implementation record, and unless that record is newer
+than the last verdict of the kind now being spawned. Implementer spawns and every
+other agent type pass untouched.
+
+**It needs one file from this pack: `skills/lib/check_verdict.py`.** The hook
+imports that module's heading matcher rather than growing a second one, because
+issue files write the record heading five different ways and one matcher already
+handles all of them. It looks in `~/.claude/skills/lib` by default; set
+`RUN_ISSUES_LIB` if you keep the pack elsewhere. If the import fails the hook
+refuses every gate spawn rather than passing them, on the grounds that a guard
+which switches itself off silently is worse than no guard.
+
+Skip it and a gate can be spawned over an issue file nobody has implemented. It
+will produce a verdict, and that verdict will pass `check_verdict.py`, because
+that script grades a verdict's shape and this fault is upstream of it. What you
+lose is the guarantee that a gate had something to judge.
+
 ## coderules-gate.py, on `Edit|Write|NotebookEdit`
 
 It blocks the first edit of a code file in each context and tells the model to
@@ -93,7 +119,14 @@ lose.
 
 ## Check it worked
 
-Neither hook ships a test, because neither has one in the tree it came from.
+`run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
+Run it from this directory:
+
+```
+RUN_ISSUES_LIB=../skills/lib python3 test_run_issues_evidence_gate.py
+```
+
+The other two ship no test, because neither has one in the tree it came from.
 Each carries a drill in its docstring instead: pipe a JSON payload on stdin and
 read the exit code. The four payloads at the top of
 `run-issues-foreground-gate.py` take a second to run and cover both directions,
