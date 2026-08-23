@@ -319,6 +319,24 @@ paste, every agent in the round. (Adopted 2026-08-16.)
    pre-check (below). None of it touches the tree, so single-writer holds; on
    gate-pass only routing-verify, lint and commit remain serial (decisions.md).
 
+   **The coverage check runs in that same window, never before the gates.** Start
+   it when the gate spawns go out and read it at the commit step, which is already
+   serial. Produce the report with whatever the project's test runner uses, then:
+
+   ```bash
+   python3 ~/.claude/skills/run-issues/check_diff_coverage.py \
+     --repo . --diff-range <fork-point>..HEAD --coverage coverage/coverage-final.json
+   ```
+
+   It refuses a diff that changes source and changes no test, and a diff whose
+   changed lines the report shows unexecuted. It also refuses when it cannot
+   grade — no report, an unreadable one, or one older than the code — because a
+   check that cannot see its input must not pass. **Ordering it before the verify
+   spawn would add its whole runtime to every issue's critical path**, and the
+   window above costs nothing. Measured on one repo of 640 test files: the suite
+   takes 31s clean and 40s with coverage, so the check adds about 9 seconds of work
+   to a window that already holds minutes of gate time.
+
    **At prep, if a recorded default seeds, deletes or renames a row in a shared
    database, read the test files this run has already committed on this branch.**
    One `git diff --name-only <fork-point>..HEAD -- '*.test.ts'`, then read the
