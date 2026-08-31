@@ -42,7 +42,8 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_verdict.py` | `~/.claude/skills/lib/test_check_verdict.py` |
 | `skills/lib/check_decision_ledger.py` | `~/.claude/skills/lib/check_decision_ledger.py` (refuses a decision walk that ends without a costed ledger) |
 | `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
-| `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (fails when a superseded sentence survives in a steering file; seed it with your own) |
+| `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
+| `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -122,6 +123,8 @@ than the four that govern everything else here.
 | `hooks/run-issues-evidence-gate.py` | `~/.claude/hooks/run-issues-evidence-gate.py` |
 | `hooks/test_run_issues_evidence_gate.py` | `~/.claude/hooks/test_run_issues_evidence_gate.py` |
 | `hooks/coderules-gate.py` | `~/.claude/hooks/coderules-gate.py` |
+| `hooks/retired-phrases-gate.py` | `~/.claude/hooks/retired-phrases-gate.py` (refuses a write that puts retired wording into a steering file) |
+| `hooks/test_retired_phrases_gate.py` | `~/.claude/hooks/test_retired_phrases_gate.py` |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **A hook does nothing until a reader registers it, and a skill pack cannot register it

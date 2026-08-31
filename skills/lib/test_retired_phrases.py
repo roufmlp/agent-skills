@@ -14,12 +14,7 @@ its `decisions.md` holds incidents, `~/.claude/questionrules.md` holds question
 rules, CLAUDE.md holds pointers. What was missing was the refusal. This is it.
 
 **The whole maintenance contract is one sentence: when a ruling retires wording,
-its phrase joins RETIRED below.** Nothing else is asked of anybody.
-
-**The five seeds below are one author's own retired wording, kept as worked
-examples of the shape.** They will not match anything in your tree. Replace them
-with sentences your own rulings have retired — until you do, this guard is a
-green that polices nothing, which is the failure its own docstring names. That is
+its phrase joins RETIRED below.** Nothing else is asked of anybody. That is
 deliberate — by the human's own three-class test a proposal must refuse something or
 state a fact nobody wrote down, and "remember to sweep the citing files" is the
 class that has already failed repeatedly in this system.
@@ -42,100 +37,19 @@ The scan set below is rules-only for that reason.
 Run: python3 test_retired_phrases.py
 """
 
+import sys
 import unittest
 from pathlib import Path
 
-CLAUDE_HOME = Path.home() / ".claude"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# The rules-only scan set. `decisions.md`, and every other provenance file, is
-# outside it by construction rather than by exclusion — this lists the files
-# that TELL AN AGENT WHAT TO DO, and nothing else.
-STEERING_FILES = [
-    CLAUDE_HOME / "CLAUDE.md",
-    CLAUDE_HOME / "questionrules.md",
-]
-SKILL_GLOB = (CLAUDE_HOME / "skills", "*/SKILL.md")
-AGENT_GLOB = (CLAUDE_HOME / "agents", "*.md")
-
-
-# Each entry: the retired phrase, what superseded it, and where that ruling is
-# recorded. All five seeds come from one 2026-08-29 sweep that repaired eighteen
-# instances of this defect by hand, and every one was confirmed absent from the
-# scan set on the day the guard was built.
-RETIRED = [
-    (
-        "splitting is his call",
-        "A split the session can cut, harden and stamp itself is the session's "
-        "to make; only a split it cannot complete that way goes to the human. "
-        "Ruled 2026-08-29; routing table in ~/.claude/questionrules.md.",
-    ),
-    (
-        "Splitting is the human's call",
-        "Same ruling as above, 2026-08-29. The session settles a split it can "
-        "complete; ~/.claude/questionrules.md's routing table decides.",
-    ),
-    (
-        "a split, which stays the human's alone",
-        "Same ruling as above, 2026-08-29. Global CLAUDE.md's chain paragraph "
-        "now qualifies this to a split the session cannot cut, harden and "
-        "stamp itself.",
-    ),
-    (
-        "Only a seam that commits a public contract",
-        "The seven-item irreversible list was replaced by the four routing-table "
-        "classes on 2026-08-29 — major architectural change, deleting production "
-        "rows, money, and authentication. Narrowing seam questions to public "
-        "contracts alone meant a money seam never waited.",
-    ),
-    (
-        "a write to `.out-of-scope/`, a transition on an issue a run holds",
-        "The distinctive span of the retired seven-item irreversible list "
-        "(2026-07-27), superseded 2026-08-29 by the four routing-table classes "
-        "in ~/.claude/questionrules.md.",
-    ),
-]
-
-
-def squash(text):
-    """Collapse every run of whitespace to one space.
-
-    These are hard-wrapped markdown documents. A retired sentence reintroduced
-    across a line break is the same regression as one reintroduced on a single
-    line, and a guard that only catches the second is a guard with a hole in it
-    that nobody can see.
-    """
-    return " ".join(text.split())
-
-
-def scan_set():
-    """Every file the guard reads, or an explanation of why it cannot.
-
-    Returns (files, problems). A caller that ignores `problems` gets a green
-    from an empty scan, which is the failure mode the citation checker was
-    caught in: silence reading as a clean pass.
-    """
-    files, problems = [], []
-
-    for path in STEERING_FILES:
-        if path.is_file():
-            files.append(path)
-        else:
-            problems.append(f"named steering file is missing: {path}")
-
-    for root, pattern in (SKILL_GLOB, AGENT_GLOB):
-        if not root.is_dir():
-            problems.append(f"steering directory is missing: {root}")
-            continue
-        found = sorted(root.glob(pattern))
-        if not found:
-            problems.append(f"no files matched {pattern} under {root}")
-        files.extend(found)
-
-    return files, problems
-
-
-def hits_in(text, phrase):
-    return squash(phrase).lower() in squash(text).lower()
+from retired_phrases import (  # the one home; see that module's docstring
+    CLAUDE_HOME,
+    RETIRED,
+    contains as hits_in,
+    scan_set,
+    squash,
+)
 
 
 class TestNoRetiredPhraseSurvives(unittest.TestCase):

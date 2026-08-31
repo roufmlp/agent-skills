@@ -10,6 +10,7 @@ So the install is two steps, and the second one is the step that matters.
 mkdir -p ~/.claude/hooks
 cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/coderules-gate.py ~/.claude/hooks/
+   hooks/retired-phrases-gate.py ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
@@ -47,13 +48,22 @@ its `PreToolUse` array rather than replacing the array.
             "command": "python3 /ABSOLUTE/PATH/TO/coderules-gate.py"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/retired-phrases-gate.py"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-All three are `PreToolUse` hooks, so each runs before the tool call it matches
+All four are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -117,6 +127,33 @@ Skip it and the rules load only when a session remembers to invoke the skill.
 Remembering is the failure the hook exists for; that is the whole of what you
 lose.
 
+## retired-phrases-gate.py, on `Edit|Write|NotebookEdit`
+
+It refuses a write that puts a superseded sentence into a steering file, and it
+names what replaced it rather than only what is wrong.
+
+The problem it solves is drift between files that all tell an agent what to do.
+A rule gets re-ruled in one place, another file keeps the old wording, and the
+old wording wins locally, because the agent reading it cannot know a newer
+ruling exists. One sweep of a real tree found eighteen of those, all repaired by
+hand, with nothing to stop the nineteenth.
+
+The denylist is `skills/lib/retired_phrases.py`, and it is the only copy — the
+hook and `skills/lib/test_retired_phrases.py` both read it. **Its five entries
+are the author's own retired wording, kept as worked examples. Replace them with
+yours or the hook polices nothing.** Point it elsewhere with the
+`RETIRED_PHRASES_LIB` environment variable.
+
+Scope is four path classes under `~/.claude`: `CLAUDE.md`, `questionrules.md`,
+`skills/<name>/SKILL.md` and `agents/<name>.md`. It deliberately lets past every
+`decisions.md`, every project file, a repository's own `CLAUDE.md`, and every
+Bash command. The `decisions.md` exemption is load-bearing: a provenance file
+quotes dead wording on purpose, and a guard that fought that would be switched
+off within a week.
+
+Skip it and you keep the reporting test, which finds the same drift after it has
+already reached the file.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -125,6 +162,9 @@ Run it from this directory:
 ```
 RUN_ISSUES_LIB=../skills/lib python3 test_run_issues_evidence_gate.py
 ```
+
+`retired-phrases-gate.py` ships its test too, `test_retired_phrases_gate.py`,
+which runs from this directory with no environment set.
 
 The other two ship no test, because neither has one in the tree it came from.
 Each carries a drill in its docstring instead: pipe a JSON payload on stdin and
