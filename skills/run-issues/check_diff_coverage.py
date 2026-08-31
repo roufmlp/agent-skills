@@ -45,15 +45,50 @@ carries a statement map, and a statement counts as its START line, which is what
 istanbul's own line metric does. No third format is supported, and a report this
 cannot parse is a refusal, never a pass.
 
-**Producing the report is the caller's job, and the project may not be able to
-yet.** vitest 4, for one, ships no coverage provider: the report comes from a
-separate `@vitest/coverage-v8` package. Where that is missing the `uncovered`
-half cannot run, and this script refuses rather than inventing a number. The
-`untested` half runs today against any repository with git.
+**A standalone script is not graded, and the output SAYS SO.** Added
+2026-08-30, closing register row `rn483-01` and the two before it,
+`run412-02` and `rev421a-03`. Measured on a real repo:
 
-Drill: `test_check_diff_coverage.py` breaks each refusal in front of a temporary
-repository built for it. A guard nobody has watched go red is a claim, not a
-check.
+    issue 483   18 of 268 changed lines (6.7%)  — 250 of them one seed script
+    issue 412   148 of 153 uncovered lines charged to one fixture generator
+    issue 421a  `scripts/verify-rls.mjs: absent from the report, 11 lines`
+
+None of these says anything about the diff. `scripts/seed-buy-side-money-483.mjs`
+builds a service-role client and performs all three writes at MODULE scope with
+a `process.exit(1)`: a test that imported it would kill the test process or
+write live to QA. Both of 483's gates read it and agreed, and the threshold was
+correctly NOT lowered — the run recorded the reason in prose instead, which is
+where a reason goes to die.
+
+A file is excluded only when all three hold, and any one failing puts it back
+under the full bar: it sits at the TOP LEVEL of a `scripts/` directory, nothing
+in the repository imports it, and the coverage report does not mention it.
+`scripts/lib/…` is library code and stays graded. So does a script the moment a
+test imports it.
+
+**The `untested` half is untouched, deliberately.** A script CAN carry a test —
+`scripts/seed-supplier-brands.test.mjs` and
+`scripts/import-delivered-brands.test.mjs` both drive their script through
+`spawnSync`, which is a real test and still invisible to an in-process
+instrument. So a diff adding a script and no test is refused exactly as before.
+What changed is only this: a number the tool cannot measure is no longer
+reported as a number it measured.
+
+**Producing the report is the caller's job.** vitest 4 ships no coverage
+provider; the report comes from `@vitest/coverage-v8`.
+
+**That dependency WAS installed on the repo measured, and this paragraph said
+the opposite for a week.** It read "which the repo does not have as of
+2026-08-23", and a commit installed it after that line was written.
+Measured 2026-08-30: `node_modules/@vitest/coverage-v8` at 4.1.11, and run
+`414a-483-286335` produced a full report at 05:54 UTC. A session then quoted the
+stale line to the human as a live fact and told them a free dependency was still
+missing. **Probe the tree, never this paragraph** — the same rule a project's
+`CLAUDE.md` should carry for anything it cannot see, and for the same reason.
+
+Drill: `test_check_diff_coverage.py` breaks each refusal in front of a
+temporary repository built for it. A guard
+nobody has watched go red is a claim, not a check.
 
 Exit codes: 0 graded and passed, 1 graded and refused, 2 could not grade.
 
@@ -86,6 +121,10 @@ TEST_MARKS = (
     re.compile(r"(^|/)test_[^/]+\.py$"),
     re.compile(r"[^/]+_test\.py$"),
 )
+
+# A file directly inside a `scripts/` directory. `scripts/lib/…` does not match:
+# that is library code, tests import it, and coverage reports it.
+TOP_LEVEL_SCRIPT = re.compile(r"(^|/)scripts/[^/]+$")
 
 # Generated, vendored or declaration-only files. Changing one of these is not
 # code somebody owes a test for, and grading them would teach the run to
@@ -166,6 +205,76 @@ def is_source(path: str) -> bool:
     if is_excluded(path) or is_test(path):
         return False
     return path.endswith(SOURCE_SUFFIXES)
+
+
+def is_top_level_script(path: str) -> bool:
+    """A file sitting directly in a `scripts/` directory, not in `scripts/lib/`.
+
+    The depth matters. `scripts/lib/db-target.mjs` is library code that tests
+    import and coverage reports, so it keeps being graded. `scripts/seed-x.mjs`
+    is a command somebody runs.
+    """
+    return bool(TOP_LEVEL_SCRIPT.search(path))
+
+
+def importers(repo: pathlib.Path, path: str) -> list[str]:
+    """Files that IMPORT this one, by its own basename. Measured, not assumed.
+
+    Matches the four ways a module is loaded — `from "…"`, a bare
+    `import "…"`, `import("…")` and `require("…")` — and deliberately does not
+    match a plain quoted string. `scripts/seed-supplier-brands.test.mjs`
+    references its script as `join(here, "seed-supplier-brands.mjs")` and drives
+    it through `spawnSync`, which starts a second node process that no
+    in-process coverage instrument can see. That test is real and valuable and
+    it still leaves the script absent from the report.
+
+    A failure to run git returns `["<unknown>"]`, which grades the file. Not
+    knowing must never buy an exemption.
+    """
+    base = path.rsplit("/", 1)[-1]
+    pattern = r"""(from|import|require)[[:space:]]*\(?[[:space:]]*["'][^"']*""" + re.escape(base) + r"""["']"""
+    done = subprocess.run(
+        ["git", "grep", "-l", "-E", pattern, "--", ":!" + path],
+        cwd=str(repo),
+        capture_output=True,
+        text=True,
+    )
+    if done.returncode > 1:  # 1 is "no match"; anything above it is a failure.
+        return ["<unknown>"]
+    return [line for line in done.stdout.splitlines() if line]
+
+
+def ungradeable_scripts(
+    repo: pathlib.Path, source: dict, by_relative: dict
+) -> dict[str, str]:
+    """Which changed source files no coverage report can ever reach, and why.
+
+    Three conditions, and ALL of them must hold. Any one failing puts the file
+    back under the full 100% bar:
+
+    1. it sits at the top level of a `scripts/` directory;
+    2. nothing in the repository imports it;
+    3. the coverage report does not mention it either.
+
+    Condition 3 is the backstop for condition 2: a file loaded some way this
+    does not recognise still shows up in the report once a test runs it, and
+    then it is graded like anything else.
+    """
+    found: dict[str, str] = {}
+    for path in sorted(source):
+        if not is_top_level_script(path):
+            continue
+        if by_relative.get(path) is not None:
+            continue
+        who = importers(repo, path)
+        if who:
+            continue
+        found[path] = (
+            "a standalone script: nothing in the repository imports it and the "
+            "coverage report does not mention it, so no in-process instrument "
+            "can reach a line of it"
+        )
+    return found
 
 
 def parse_diff(text: str) -> Changed:
@@ -402,13 +511,17 @@ def audit(
         )
 
     by_relative = index_by_relative(hits, repo)
+    skipped = ungradeable_scripts(repo, changed.source, by_relative)
+    facts["ungraded"] = {
+        path: (len(changed.source[path]), why) for path, why in skipped.items()
+    }
     facts["graded"] = True
     misses: list[str] = []
     covered = 0
     total = 0
     for path in sorted(changed.source):
         numbers = changed.source[path]
-        if not numbers:
+        if not numbers or path in skipped:
             continue
         per_line = by_relative.get(path)
         if per_line is None:
@@ -428,7 +541,11 @@ def audit(
     facts["changed_lines"] = total
     facts["covered_lines"] = covered
     if total == 0:
-        return [], facts  # Every changed line was non-executable. Say nothing false.
+        # Two different silences, and they must not print the same sentence.
+        # Either every changed line was a brace, or the only source in the diff
+        # was a standalone script this cannot reach. `render` tells them apart
+        # from `facts["ungraded"]`.
+        return [], facts
 
     percent = 100.0 * covered / total
     if percent + 1e-9 < threshold:
@@ -446,6 +563,33 @@ def audit(
     return [], facts
 
 
+def ungraded_block(facts: dict) -> list[str]:
+    """What this run did NOT grade, named, counted and explained.
+
+    An exclusion nobody can see is a lowered threshold with no announcement.
+    This block prints on a pass and on a refusal alike, so the reader of either
+    knows which lines the percentage was computed over.
+    """
+    ungraded = facts.get("ungraded") or {}
+    if not ungraded:
+        return []
+    total = sum(count for count, _ in ungraded.values())
+    lines = [
+        f"NOT GRADED: {len(ungraded)} file(s), {total} changed line(s), excluded "
+        "from the percentage above."
+    ]
+    for path, (count, why) in sorted(ungraded.items()):
+        lines.append(f"    {path}: {count} changed line(s) — {why}")
+    lines.append(
+        "  These are NOT covered and this is not a claim that they are. They "
+        "are unmeasurable by an in-process coverage report, so counting them "
+        "as misses graded the tool rather than the diff. A test that DRIVES "
+        "such a script still belongs in the diff, and the `untested` refusal "
+        "above still asks for one."
+    )
+    return lines
+
+
 def render(problems: list[Problem], facts: dict) -> str:
     threshold = facts.get("threshold", 100.0)
     lines: list[str] = []
@@ -455,11 +599,19 @@ def render(problems: list[Problem], facts: dict) -> str:
             "the standing bar of 100% of changed lines."
         )
     if not problems:
-        if facts.get("graded"):
+        if facts.get("graded") and facts["changed_lines"]:
             lines.append(
                 f"OK: {facts['covered_lines']} of {facts['changed_lines']} changed "
-                f"lines executed, across {len(facts['source_files'])} source file(s)."
+                f"lines executed, across "
+                f"{len(facts['source_files']) - len(facts.get('ungraded') or {})} "
+                "source file(s)."
             )
+            lines.extend(ungraded_block(facts))
+        elif facts.get("graded") and facts.get("ungraded"):
+            lines.append(
+                "OK: nothing in this diff could be graded by a coverage report."
+            )
+            lines.extend(ungraded_block(facts))
         elif facts.get("source_files"):
             lines.append("OK: every changed line is non-executable.")
         else:
@@ -475,6 +627,7 @@ def render(problems: list[Problem], facts: dict) -> str:
         lines.extend(problem.lines)
         lines.append(f"  {REMEDY[problem.kind]}")
         lines.append("")
+    lines.extend(ungraded_block(facts))
     return "\n".join(lines).rstrip()
 
 

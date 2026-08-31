@@ -1,7 +1,7 @@
 ---
 name: harden-issues
-description: Attack acceptance criteria at authoring time — a blind-spot pass over issue files that sharpens criteria with evidence, names invariants, and routes open forks to the human. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /harden-issues, or when an upstream issue-drafting pass calls it on freshly drafted slices. Never infer it from wording such as "harden these issues", "pre-batch pass" or "attack the criteria".
-argument-hint: "a named batch — issue numbers or a range — or nothing when invoked on drafts by an upstream tool"
+description: Attack acceptance criteria at authoring time — a blind-spot pass over issue files that sharpens criteria with evidence, names invariants, and routes open forks to the human. EXPLICIT INVOCATION ONLY. Use this skill only when the user types the command /harden-issues, or when the /to-issues skill calls it on freshly drafted slices. Never infer it from wording such as "harden these issues", "pre-batch pass" or "attack the criteria".
+argument-hint: "a named batch — issue numbers or a range — or nothing when invoked by /to-issues on drafts"
 ---
 
 # Harden issues
@@ -11,14 +11,14 @@ are wrong when written passes every gate — the implementer builds to the bad s
 and both gates grade against that same bad spec. This pass is the early fix.
 It is also what buys the next run an uninterrupted one: anything the run would
 otherwise stop and ask a human for is settled here, while a human is at the
-keyboard (see "Checks only the human can run"). Provenance and the incident
-record live in this directory's `decisions.md`; read it when changing this
-skill, not when running it.
+keyboard (see "Checks only the human can run"). Provenance and the incident record
+live in this directory's `decisions.md`; read it when changing this skill, not
+when running it.
 
 Two entry points, same pass:
 
-- **From an upstream issue-drafting pass, if the project has one** — runs on the
-  drafted slices before the user quiz; the pass's questions join that quiz.
+- **From `/to-issues`** — runs on the drafted slices before the user quiz; the
+  pass's questions join that quiz.
 - **Standalone, pre-batch** — runs once over **a named batch**, immediately before
   `/run-issues` takes that same batch; questions come back as one numbered list.
   `needs-harden` is what a run sets when it finds criteria that are wrong or stale,
@@ -33,7 +33,8 @@ Two entry points, same pass:
 ## Write authority — the one rule that matters
 
 The pass may edit an issue file **only where it can cite verification**: a
-file:line in current code, a query against real data, or a measured value. The
+citation into current code (the file plus its distinctive quoted phrase — the
+2026-08-26 form), a query against real data, or a measured value. The
 same bar the run gates use. Everything else — and **every open fork** — becomes a
 numbered question for the human. The pass never settles a fork by choice.
 
@@ -46,13 +47,13 @@ itself, not a narrow question near it.
 
 **A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries the
 forbidden thing AND the permitted one, with an absolute path wherever a path exists. Three
-faults in one `/run-issues` batch shared one shape: "QA is the only WRITABLE
+faults in the 2026-08-09 `/run-issues` batch shared one shape: "QA is the only WRITABLE
 database" constrained the operation and left production reachable, so a verify gate read
 production with a service-role key; "a probe script needs a directory holding `node_modules`"
 named no home, so three files landed at the shared worktree root; and a brief naming no
 register path sent two gates to the worktree copy instead of the main checkout's. A brief
 that constrains the ACT while leaving the PLACE unnamed gets a different answer from every
-agent. (Adopted 2026-08-09.)
+agent. Adopted by the human, 2026-08-09.
 
 Each role is a registered agent type carrying its own brief, model and effort.
 Spawn by `subagent_type`; the pass never pastes a brief.
@@ -84,20 +85,19 @@ and name it as unattacked. **An issue nobody attacked is never stamped
 silent gap here ships exactly the bad spec this pass exists to catch. A missing
 file also narrows the seam agent's input without saying so.
 
-Two adversarial gates died at the weekly usage limit during one workflow audit
-and wrote nothing at all. Nothing mechanical noticed either time.
+Two adversarial gates died at the weekly usage limit during the 2026-08-15
+workflow audit and wrote nothing at all. Nothing mechanical noticed either time.
 
 **Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
-the tier the session was launched on. A second, differently-tuned model was
-pinned here once, for blind-spot hunting; the pin is gone because it hid the
-choice inside an agent file and it was credit-gated. To harden on a different
-model, launch the session on it. Effort stays `high`, not `max`: the checklist
-is enumeration against a file, and enumeration is recall rather than chained
-reasoning.
+the tier the session was launched on. Fable was pinned here once, for blind-spot
+hunting; the pin is gone because it hid the choice in an agent file and it was
+credit-gated. To harden on Fable, launch the session on Fable. Effort stays
+`high`, not `max`: the checklist is enumeration against a file, and enumeration is
+recall rather than chained reasoning.
 
 **Print one launch line before spawn #1, on every invocation** — the resolved
 session model, the issues in scope, and how many attackers are about to spawn.
-Never pass a `model:` value on a spawn: the spawn tool's `model` parameter beats
+Never pass a `model:` value on a spawn: the Agent tool's `model` parameter beats
 agent-file frontmatter, so a spawn-time value defeats `inherit` silently and
 nothing downstream records which tier ran. The launch line is the one place a
 wrong tier is visible, and the stamp does not carry it. Not a wait, an interrupt
@@ -119,7 +119,9 @@ implementer. The guard above protects against a second writer, and at that momen
 there is none — the implementer is dead and the runner spawns nothing else until
 the attacker returns. Strike-2 mode is narrower than a normal pass: classes 1, 5
 and 9 only, evidence or silence, and **it never waits for an answer** — an
-unsettled fork returns as a blocked issue, not a question the run sits on.
+unsettled reversible fork takes its recommended default by the routing table,
+and only a fork in the table's four `[irreversible]` classes, or a split,
+returns as a blocked issue, not a question the run sits on.
 
 ## The attack checklist
 
@@ -141,8 +143,8 @@ sharpened (with evidence), question (for the human), or clean.
    to the examples instead of to the rule behind them. "These four call sites use
    the admin client" passes the moment a fifth is added, and the issue ships with
    its own hole. Write the rule, then name the instances as evidence that the
-   rule bites today. (Adopted 2026-08-07, from a run finale; three implementers
-   warned about this class avoided it three for three.)
+   rule bites today. (Adopted by the human 2026-08-07, from the 238-245 finale; three
+   implementers warned about this class avoided it three for three.)
 
    **A criterion that moves security-relevant code pins the property, not the
    count of surviving tests.** The surviving tests are one more list of instances,
@@ -150,12 +152,12 @@ sharpened (with evidence), question (for the human), or clean.
    than against the rule the moved code holds. Name the property the code must
    still hold — "a caller-supplied needle deletes only what it literally matches" —
    and name a hostile input and an over-long input the criterion covers. (Adopted
-   2026-08-18, from one run. One issue moved the auth failure sanitiser into a
-   shared module so the unauthenticated confirm route could use it. Its
+   by the human 2026-08-18 as R1, from the `cab74e` run. Issue 262b moved the auth
+   failure sanitiser into a shared module so `/auth/confirm` could use it. Its
    criterion graded the move by the surviving tests. The implementer replaced a
    literal sanitiser with a pattern built per character, and all 69 tests passed.
-   The critical review gate then drove two live defects on that route: a needle
-   of about 1000 characters built a regex V8 refuses to
+   The critical review gate then drove two live defects on the unauthenticated
+   confirm route: a needle of about 1000 characters built a regex V8 refuses to
    compile, so the route returned HTTP 500 **and logged nothing**, because its own
    `catch` called the throwing function again; and the separator tolerance let a
    crafted `token_hash` delete the real message out of the log line. Strike 1, one
@@ -170,7 +172,7 @@ sharpened (with evidence), question (for the human), or clean.
    before the issue ships.** Not described, driven: make the change, watch the
    test red, put it back, watch it green. An undriven mutation is a guard nobody
    has proved can fail, which is the class this whole entry exists to close.
-   (Adopted 2026-08-07.)
+   (Adopted by the human 2026-08-07, from the 247-170 run.)
 
    **Grade the drill, not only the criterion. A drill must name the red it
    produces AND a wrong reason it could go red.** Where a criterion carries a
@@ -184,17 +186,17 @@ sharpened (with evidence), question (for the human), or clean.
 
    This is an authoring-time refusal and it costs no run time. Do not answer this
    class by asking an implementer to check their own drill harder — that is the
-   reminder that already failed. (Adopted 2026-08-19, from a run finale. **Ten
-   guards in one batch were green while proving nothing**, and a pattern note in
-   the project's own docs already forbade exactly that, written four days earlier
-   after an earlier run lost four correction rounds to it. Every implementer
-   followed it and every drill passed. One issue drilled its leak guard against a
-   fixture built from the same wrong idea of the error reporter's payload that the
-   guard held, so 54 tests could not see it. In all ten the catch came from an
-   adversarial gate designing its own drill. Mutation testing was weighed as the
-   mechanical alternative and refused the same day: it runs the suite per mutant,
-   and against a suite of some 6,000 tests it would have been the most expensive
-   rule in the system, per run, for ever.)
+   reminder that already failed. (Adopted by the human 2026-08-19, from the `e047ba`
+   finale, queue item D4. **Ten guards in that batch were green while proving
+   nothing**, and `docs/patterns.md` entry 6 already forbade exactly that, written
+   four days earlier after the 328-332 run lost four correction rounds to it.
+   Every implementer followed it and every drill passed. Issue 333a drilled its
+   leak guard against a fixture built from the same wrong idea of Sentry's payload
+   that the guard held, so 54 tests could not see it. In all ten the catch came
+   from an adversarial gate designing its own drill. Mutation testing was weighed
+   as the mechanical alternative and refused the same day: it runs the suite per
+   mutant, and against 6,385 tests it would have been the most expensive rule in
+   the system, per run, for ever.)
 
    **A criterion may never ask for evidence to land somewhere the party it names
    cannot write.** Read the clause, name its writer, and check that writer's
@@ -206,21 +208,22 @@ sharpened (with evidence), question (for the human), or clean.
    for a verdict is the gate.
 
    The check is mechanical, because the clause names its own writer. Refuse it
-   here, at authoring time. (Adopted 2026-08-10 for the issue file, from a run
-   finale: one issue's criteria asked for mutation drives "recorded in the
-   issue's notes", the spawn brief forbade it, the drives went into test doc
-   comments, and the review gate filed the contradiction. **Widened 2026-08-16
-   to any closed home, after a later run:** five of its nine issues carried a
-   clause aimed at the implementer, and the commit-message half fell outside
-   the 2026-08-10 wording. One issue's review gate rejected the work partly
-   because those clauses were unmet, and the runner had to annul the ground.
-   One annulled rejection and one wasted gate round, in one batch.)
+   here, at authoring time. (Adopted by the human 2026-08-10 for the issue file, from
+   the 301-307 finale: issue 305's criteria 3 and 8 asked for mutation drives
+   "recorded in the issue's notes", the spawn brief forbade it, the drives went
+   into test doc comments, and the review gate filed the contradiction as
+   `rg305-06`. **Widened by the human 2026-08-16 to any closed home, after the
+   `dc132b` run:** five of its nine issues — 345, 355, 288, 292 and 293 — carried
+   a clause aimed at the implementer, and the commit-message half fell outside
+   the 2026-08-10 wording. Issue 288's review gate rejected the work partly
+   because those clauses were unmet, and the runner had to annul the ground. One
+   annulled rejection and one wasted gate round, in one batch.)
 
    **A constraint taken from measured data is labelled as one.** Where a criterion
    or an invariant fixes a number because that is what today's input holds, write
    it into `## Must still be true` as an assumption a later issue may need to
-   lift, and say the migration header must do the same. (Adopted 2026-08-10, from
-   the same run finale. The run-issues copy carries the incident.)
+   lift, and say the migration header must do the same. (Adopted by the human
+   2026-08-10, from the 301-307 finale. The run-issues copy carries the incident.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
    against the real code or data.
@@ -232,8 +235,8 @@ sharpened (with evidence), question (for the human), or clean.
    impossibility claim with no command behind it comes out of the issue
    altogether, because a reader cannot tell a checked negative from a guessed one
    and will act on both. Narrowing it is not the remedy; deleting it is. (Adopted
-   2026-08-07. This edits class 5 deliberately and must never become a class of
-   its own — two homes for impossibility claims is the drift it avoids.)
+   by the human 2026-08-07. This edits class 5 deliberately and must never become a
+   class of its own — two homes for impossibility claims is the drift it avoids.)
 6. **Empty or missing hostile data.** Does QA/production hold data that can
    exercise each criterion? If not, say so and name the fixture to create —
    otherwise the gates validate over an empty set.
@@ -246,8 +249,10 @@ sharpened (with evidence), question (for the human), or clean.
    suspect anything whose criteria span several independent deliverables, or that
    packs migration + logic + UI into one slice. Propose the cut line — where one
    half ships and gates alone ("extract + harness", then "behavioural tests") —
-   as a question for the human; splitting is their call, never the pass's or the
-   runner's. `/run-issues` deliberately never splits mid-run — an oversized
+   and route it by `~/.claude/questionrules.md`'s table: the session settles
+   the split itself when it can cut, harden both halves and leave both
+   stampable in this same pass; a split it cannot complete that way goes to
+   the human. `/run-issues` deliberately never splits mid-run — an oversized
    issue that reaches a runner arrives back here.
 
 10. **The database the rows land in.** An issue whose work writes data rows — an
@@ -265,14 +270,25 @@ sharpened (with evidence), question (for the human), or clean.
 
     **A criterion may name only work the run can do.** Where a database is
     reachable by the human alone, that step goes to the project's pending-actions
-    file, if the project keeps one, as a numbered action, and `## Target database`
-    records the intent. Same reason as class 4's rule on evidence in the issue
-    file: an agent cannot meet a criterion aimed at somebody else.
+    file as a numbered action and `## Target database` records the intent. Same
+    reason as class 4's rule on evidence in the issue file: an agent cannot meet a
+    criterion aimed at somebody else.
 
     Unanswered, this defaults: the writable database during the run, then the
     production database, owner the human, after the deploy — written as a default.
     Silence is what this class exists to catch, so a pending action nobody needed
-    is the cheap error. (Adopted 2026-08-12; the incident is in `decisions.md`.)
+    is the cheap error. (Adopted by the human 2026-08-12, from the 301-307 run:
+    `decisions.md`.)
+
+11. **Joint satisfiability.** For each criterion, one real input on which it can
+    pass; for each pair of criteria sharing a surface, one artefact satisfying
+    both. A criterion with no satisfying input, or a pair that cannot both hold,
+    is refused at authoring time. Attack this hardest on a freshly cut issue — a
+    cut strands criteria written against the whole. (Adopted by the human 2026-08-29,
+    from the ticket 33 audit: five criteria resets shared this shape — 296, 327,
+    332, 335, 419b — every one on a stamped file, each costing two rejected
+    attempts before the strike-2 check found the spec at fault. It was the one
+    criteria-fault shape no class covered.)
 
 The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only
@@ -293,13 +309,29 @@ than deleting it — the line may have been rewritten, or the citation may alway
 have been wrong, and those are different repairs. `unknown` means the check
 could not run and is not a fault.
 
-**This pass is where the repair happens (ruled 2026-08-15).** A run may not
-write an issue file, so `/run-issues` reports these and leaves them; one run
-left eight. You already read the whole file and you are already allowed to
-write it, so the fix costs nothing extra here and costs a round everywhere
-else. A `holds` is not proof: the check compares against the commit that last
-touched the citation's own line, so a citation rewritten without re-checking
-its number can read `holds` and still be wrong.
+**Every citation you WRITE from 2026-08-26 onward quotes text, never a line
+number.** `src/lib/deals/room.ts`, then the distinctive phrase the line contains,
+in backticks. A quoted phrase expires only when the code it names actually
+changes, which is exactly when a citation should expire; a line number expires
+whenever anything above it grows. Do not convert the citations already written —
+17,345 of them exist across 393 issue files, measured 2026-08-26 — and do not
+spend a round on it. Repair a `moved` row in place as text, so the corpus drains
+as issues close.
+
+Ruled by the human on 2026-08-26 in the daily brief, after one run broke 228
+citations across 49 open issue files and they named the repair cost as time they were
+losing personally. **This rule alone will not hold, and they know it**: a
+convention nothing refuses is the remember class their own rules reject. Issue 406,
+"nothing refuses a new line number citation in a source comment", is the guard
+that makes it stick, and it is still `needs-harden`.
+
+**This pass is where the repair happens, by the human's ruling of 2026-08-15.** A run
+may not write an issue file, so `/run-issues` reports these and leaves them; the
+347/263 run left eight. You already read the whole file and you are already
+allowed to write it, so the fix costs nothing extra here and costs a round
+everywhere else. A `holds` is not proof: the check compares against the commit
+that last touched the citation's own line, so a citation rewritten without
+re-checking its number can read `holds` and still be wrong.
 
 ## Output and the stamp
 
@@ -307,12 +339,22 @@ its number can read `holds` and still be wrong.
   `## Must still be true` directly, each carrying its citation.
 - **Say how many citations were repaired** in the stamp line below, so a reader
   can tell a quiet pass from one that found nothing.
-- **Every question ships with the pass's recommended answer**, and is marked
-  `[reversible]` or `[irreversible]` — per the project's question standard, if
-  it keeps one. A question with no default is a question the pass has not
-  finished thinking about.
-- Questions go to the human: into the upstream drafting tool's quiz, if there is
-  one, or as the standalone numbered list. Apply their answers to the files.
+- **Every question follows `~/.claude/questionrules.md`.** That file sets the two
+  tiers and the parts each carries. A question with no default is a question the
+  pass has not finished thinking about.
+- **An `[irreversible]` mark must carry the measurement that establishes its blast
+  radius, or the mark is refused at authoring time** and the question takes a
+  recorded default like any other. The mark is what exempts a question from
+  defaulting, so an unmeasured mark buys an unattended stall on nobody's evidence.
+  (Adopted by the human 2026-08-29, on the ticket 33 audit. The incident: 419b's
+  question 6 was marked on the premise that it "decides the shape of rows a person
+  types on the pilot project"; the pilot holds 151 supplier rows with 151 distinct
+  dedupe keys, so no typed row was at risk, and one query would have killed the
+  question that instead held the stamp and cost three agents and four exchanges.
+  `questionrules.md` reserves the mark for four classes, and its routing table says
+  which; a question outside those four classes never takes the mark at all.)
+- Questions go to the human: into the `/to-issues` quiz, or as the standalone numbered
+  list. Apply their answers to the files.
 - Then stamp the issue, one line under `Status:`:
   `Hardened: <date> — <n> sharpened, <m> questions resolved.`
 - **Stamping also sets `Status: ready-for-agent`.** The two must agree, and the
@@ -322,6 +364,27 @@ its number can read `holds` and still be wrong.
   from the next batch while this pass reports it ready. Keep any minting or
   provenance note on its own `Provenance:` line, never as a suffix on `Status:`.
 
+**A recorded default that governs graded behaviour blocks the stamp until its rule
+has a graded home.** Before stamping, walk the defaults this pass is carrying. For
+each one, either write its rule into `## Acceptance criteria` or `## Must still be
+true`, or state in the file why that default grades nothing. **A default with
+neither is an unstamped issue**, and this is a refusal rather than a reminder: it
+is the last thing checked before the stamp is written.
+
+This is not a text search. Whether a default names graded behaviour is a reading
+judgement, and a search would either miss it or fire on every question. The pass
+already enumerates its defaults, so this adds a column to work it does anyway, and
+it leaves a record a later reader can audit: for each default, where its rule lives.
+
+**The measurement.** Issue 99b's rule for how much of a supplier's message may
+advance a purchase order was written once, in `## Questions for the human, round two`,
+a section no gate grades. The file an implementer read at spawn was 1417 lines, of
+which 368 were graded, and the rule was in none of them. Two implementers filled
+the silence with something wider. Both were rejected by both gates, and both
+rejections were annulled when the strike-2 pass found the criteria at fault rather
+than the code. **Two implementer spawns and four gate spawns, bought by a
+section-heading choice.** Adopted by the human 2026-08-28, after run `99b-99e-6e11ba`.
+
 **An open question never removes an issue from a run.** Where the human has not
 answered, take the recommended default, write it into the file as a default rather
 than a decision, and stamp — status included, same rule:
@@ -330,13 +393,16 @@ than a decision, and stamp — status included, same rule:
 
 A provisionally stamped issue is in scope for `/run-issues`' own `all`, and the merge
 briefing names every one that shipped that way, so the answer arrives after the run
-instead of holding it up. Two things are not defaultable: an `[irreversible]`
-question, and a split — both leave the issue unstamped, and out of that scope until
-the human rules. This pass has no `all` of its own; it takes the batch it was given.
+instead of holding it up. An `[irreversible]` question is not defaultable — it
+leaves the issue unstamped, and out of that scope until the human rules. A split
+follows the routing table in `~/.claude/questionrules.md`: the session completes
+it — cut, harden both halves, stamp both — and records it; a split the session
+cannot complete leaves the issue unstamped until the human rules. This pass has no
+`all` of its own; it takes the batch it was given.
 
 Every defaulted question is also appended to `.scratch/decisions-queue.md`, the
-one place every tool upstream of this pass queues decisions, so they reach the
-human in a single list rather than scattered across issue files.
+one place `/to-prd`, `/to-issues`, `/triage` and this pass all queue decisions, so
+they reach the human in a single list rather than scattered across issue files.
 
 Where an answer needs input nobody here has — a third party, a credential, a
 product call with no defensible default — set `needs-harden` instead, so the issue
@@ -347,48 +413,59 @@ line for the human, never a gate, never mid-run.
 
 ## Checks only the human can run happen here, not mid-run
 
-A criterion that waits on a value only the human can fetch — a row in the
-production database, a setting in a provider console, anything behind a credential
-the agents do not hold — costs the run an unattended stall if it survives this
-pass. The hardening session is attended. Settle it here.
+A criterion that waits on a value only the human can fetch — a row in the production
+database, a setting in a provider console, anything behind a credential the agents
+do not hold — costs the run an unattended stall if it survives this pass. The
+hardening session is attended. Settle it here.
 
 - **Collect them as you attack.** An attacker that cannot verify a premise because
   the check is out of its reach records a check, not a question: what to run or look
   at, where, and which criterion in which issue the answer decides. Both agent types
-  write them under `## Checks for the human` in their findings file, which is where
-  this session reads them.
-- **Run everything you can run yourself first.** A QA environment is usually
-  writable, the code is readable, most premises need nobody. The list the human
-  sees carries only what the repo's rules or the credentials put out of your hands,
-  and each item says in one clause why it is theirs.
+  write them under `## Checks for the human` in their findings file, which is where this
+  session reads them.
+- **Run everything you can run yourself first.** QA is writable, the code is
+  readable, most premises need nobody. The list the human sees carries only what the
+  repo's rules or the credentials put out of your hands, and each item says in one
+  clause why it is theirs.
+- **Every item carries its failed attempt.** The command that was run and what it
+  returned, or the wall — the credential or console — that stops any command from
+  reaching the value. An item carrying neither is not a check: the pass runs it
+  itself or deletes it, and it never reaches them.
+- **A defaulted question kills the checks that only serve it.** Before the list
+  goes to them, walk it against the defaults this pass recorded: a check that
+  exists only to decide a question already defaulted dies with the question, and
+  survives only where it also decides something else — then the item says what.
+  Each check names the criterion or question it decides, so this is a read of two
+  lists. (Both adopted 2026-08-29; incidents in `decisions.md`.)
 - **Put the list to them at the end of the pass, in the same session as the
   questions.** Numbered, one action per item, and for any provider console the
-  current official button names, read from the provider's live documentation rather
-  than from memory.
-- **Write their results into the issue files as facts**, cited `checked by the
-  human <date>` with the query or the setting quoted. That citation meets the
+  current official button names, per the pending-actions rule in
+  `~/.claude/CLAUDE.md`.
+- **Write their results into the issue files as facts**, cited `checked by the human
+  <date>` with the query or the setting quoted. That citation meets the
   write-authority bar the same way a file:line does.
 - **No hardened issue may ask the run to stop for a human.** A criterion that tells
   the implementer to run a script and report the output, or to pause for a value, is
   a defect in the issue. Either the check happens here and the answer goes into the
   file, or the criterion is rewritten so the implementer and the gates settle it
   alone.
-- **If the human is away, or waves the list off**, the default road applies
-  unchanged: take the default, write it as a default, queue it to
-  `.scratch/decisions-queue.md`. A check nobody ran never holds the batch.
+- **If they are away, or waves the list off**, the default road applies unchanged: take
+  the default, write it as a default, queue it to `.scratch/decisions-queue.md`. A
+  check nobody ran never holds the batch.
 
 ## Scope notes
 
-Issue trackers are per-project — this pack's convention is
-`.scratch/<feature>/issues/`. The pass edits issue files only — never code, never
-the tracker board, never another skill's state.
+Issue trackers are per-project (this repo: `.scratch/<feature>/issues/`). The pass
+edits issue files only — never code, never the tracker board, never another
+skill's state.
 
 **The pass never mints.** It sharpens the issues it was given and creates none. This
 rule was already written and the practice ran ahead of it anyway: one pass cleared
 two issues out of `needs-harden` and minted two more into it, leaving the queue
 exactly where it started. Where the pass finds work that belongs in no issue in its
 batch — a gap between two of them, a surface nobody owns — it writes **a register
-row**, the one specified in `parallel-hunt/SKILL.md`, carrying an `audience` of
+row**, the one specified in `parallel-hunt/SKILL.md`, into the project's
+main-checkout register, never a worktree copy, carrying an `audience` of
 `operator`, `tester` or `agent`, a severity, and `owner-notes` inside 200
 characters. Promotion turns the rows that earn it into issues, at the end of the
 next run or hunt. A finding is out by default, and promotion is the work that gets

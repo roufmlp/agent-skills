@@ -7,7 +7,7 @@ Four skills spawn an adversarial agent whose entire output is a file:
 In every one of them the orchestrator's next step assumes a verdict is on disk.
 Nothing checked that it was.
 
-Two gates died at the weekly usage limit during one workflow audit
+Two gates died at the weekly usage limit during the 2026-08-15 workflow audit
 and wrote nothing at all. Both times a person recovered the work by reading a
 transcript by hand, and nothing mechanical noticed the gates had returned empty.
 This notices.
@@ -25,13 +25,13 @@ Four refusals, and that is the whole of it:
     stale    the section sits above the newest `Implementation record,
              attempt N` heading, so it grades an earlier diff
 
-`stale` is the 2026-08-19 fault. One issue's attempt-2 gates died with their
+`stale` is the 2026-08-19 fault. Issue 390a's attempt-2 gates died with their
 session before writing, the file still held attempt 1's two rejections under the
 same two headings, and this check passed both. Taking the LAST matching heading
 is not enough on its own: when the new attempt's gate writes nothing, the last
-heading is still the old one. Measured over one project's issue files the morning
+heading is still the old one. Measured over the pilot's issue files the morning
 after: 194 files carry gate sections and no attempt record, 4 carry both with the
-gates written last, and only one carries the record last.
+gates written last, and only 390a carries the record last.
 
 **Name the section wherever the file has one.** A `/parallel-hunt` bug file
 already carries the finder's evidence before any gate writes, and a
@@ -43,7 +43,7 @@ right for a `gate.md` the orchestrator opened and nothing else.
 Reading the path in the run's own worktree is deliberate: a gate that drilled on
 a private whole-tree copy can write its verdict beside the copy, and a verdict in
 the wrong checkout reads as absent here. That is the intended answer, not a false
-alarm — one gate's 175-line verdict was left in the wrong tree on one run.
+alarm — one gate's 175-line verdict was left in the wrong tree on the 328-332 run.
 
 Exit 0 authorises the next step. Exit 1 refuses and prints what it refused on.
 
@@ -103,7 +103,7 @@ def _headings(text):
 def _matches(title, wanted):
     """Is this heading the wanted section, qualifier and all?
 
-    Counted over one project's issue files on 2026-08-16: 78 headings read
+    Counted over the pilot's issue files on 2026-08-16: 78 headings read
     `## Review gate` exactly, and the rest carry a qualifier — `— attempt 2`,
     `— 2026-07-23`, `— critical variant, 2026-08-09`, `, 2026-08-03`. All of
     those are the gate's verdict and must match, or the check refuses a healthy
@@ -317,7 +317,16 @@ def main(argv=None):
         if decision.total:
             print(f"verdict present in {where}: {decision.total} row(s), none pending")
         else:
-            print(f"verdict present in {where}")
+            # Say the ZERO out loud. A pass that read no row and a pass that
+            # read twenty rubric rows must not print the same sentence: run
+            # `414a-483-286335` lost a real fault to exactly that silence in
+            # `check_commit_order.py`, register row `rn414a-01`. This is not a
+            # refusal — a gate may write a prose verdict with no rubric table,
+            # and the section is known non-empty by the time we get here.
+            print(
+                f"verdict present in {where}: 0 rubric row(s) read, so the "
+                "section carries prose only and nothing here graded a table"
+            )
         return 0
     print(decision.reason, file=sys.stderr)
     return 1

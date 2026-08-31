@@ -19,7 +19,17 @@ Listed in the order the loop runs.
 | `skills/run-issues/check_diff_coverage.py` | `~/.claude/skills/run-issues/check_diff_coverage.py` |
 | `skills/run-issues/find_live_ledger.py` | `~/.claude/skills/run-issues/find_live_ledger.py` |
 | `skills/run-issues/orchestrator_cost.py` | `~/.claude/skills/run-issues/orchestrator_cost.py` |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (6 tests grading the skill text and its scripts) |
+| `skills/run-issues/check_commit_order.py` | `~/.claude/skills/run-issues/check_commit_order.py` |
+| `skills/run-issues/check_harden_branch.py` | `~/.claude/skills/run-issues/check_harden_branch.py` |
+| `skills/run-issues/check_issue_ready.py` | `~/.claude/skills/run-issues/check_issue_ready.py` |
+| `skills/run-issues/check_paste_file.py` | `~/.claude/skills/run-issues/check_paste_file.py` |
+| `skills/run-issues/check_permission_floor.py` | `~/.claude/skills/run-issues/check_permission_floor.py` |
+| `skills/run-issues/cache_probe.py` | `~/.claude/skills/run-issues/cache_probe.py` |
+| `skills/run-issues/estimate_accuracy.py` | `~/.claude/skills/run-issues/estimate_accuracy.py` |
+| `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
+| `skills/run-issues/run_costs.py` | `~/.claude/skills/run-issues/run_costs.py` |
+| `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (13 files, 261 cases, grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -28,6 +38,8 @@ Listed in the order the loop runs.
 | `skills/daily-brief/test_move_closed_sections.py` | `~/.claude/skills/daily-brief/test_move_closed_sections.py` |
 | `skills/lib/check_verdict.py` | `~/.claude/skills/lib/check_verdict.py` (shared by the four skills that spawn adversarial agents) |
 | `skills/lib/test_check_verdict.py` | `~/.claude/skills/lib/test_check_verdict.py` |
+| `skills/lib/check_decision_ledger.py` | `~/.claude/skills/lib/check_decision_ledger.py` (refuses a decision walk that ends without a costed ledger) |
+| `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -62,7 +74,35 @@ decision like publishing one; this is where it gets written down:
 ```withheld
 ~/.claude/skills/run-issues/panel-review-*.md
 ~/.claude/skills/run-issues/workflow-redesign-*.md
+~/.claude/skills/run-issues/harness/*
+~/.claude/skills/run-issues/harness/fixture/*
+~/.claude/skills/run-issues/harness/fixture/src/*
+~/.claude/skills/run-issues/harness/fixture/test/*
 ```
+
+**The run harness is withheld, and this is the decision rather than an oversight.**
+`~/.claude/skills/run-issues/harness/` is a fixture project plus a driver that runs a
+real `/run-issues` batch against it, so a workflow change can be measured before and
+after. Nothing published here invokes it, so withholding it dangles no reference.
+
+Three reasons it waits for a sync that publishes it deliberately:
+
+- **It spends the reader's money by running.** One reading took 62.7 minutes and 4.8M
+  weighted tokens. A script in a skill pack that costs that much to invoke needs its
+  price on the label, and writing that label is authoring, not scrubbing.
+- **`baseline.md` is one machine's readings** — a Claude Code version, a fingerprint,
+  a wall clock. That is the same class of one-machine state the hooks below are
+  withheld for.
+- **`fixture/.claude/settings.json` carries absolute paths from the author's home**,
+  which rule H1 would not let a hook ship and which no reader's machine resolves.
+
+Publishing it is a good idea and a later sync should do it, with the fixture's paths
+computed and the cost stated at the top of its README.
+
+It takes four withheld lines rather than one because the checker matches with
+`PurePath.match`, where `*` does not cross a directory separator. That is the
+point of it: a new directory under `harness/` is unlisted again and has to be
+decided, rather than being swallowed by a pattern written today.
 
 ## The hooks
 
@@ -87,21 +127,39 @@ for them.** That is the whole reason `hooks/README.md` exists: it carries the ex
 who copies the file and skips the block still loses. Publish no hook without a line in
 it.
 
-**Neither hook ships with a test, because neither has one.** Measured 2026-08-23: the
-four `test_*.py` files in the live hooks directory cover `machine-preflight.py`,
-`worktree-register-guard.py`, `worktree-snapshot-notice.py` and the `settings.json`
-`env` block, and not one of them imports either hook published here. Every other script
-in this pack ships its tests beside it. These two do not. That is a gap in the live
-tree, not a scrub decision, and it is written here rather than left for a reader to
-discover by grepping.
+**Two of the three published hooks ship no test, because neither has one.** Re-measured
+2026-08-31, correcting a line that read "neither hook ships with a test" after
+`test_run_issues_evidence_gate.py` had already been given a row above. Of the three
+hooks published here, only `run-issues-evidence-gate.py` carries a test.
+`run-issues-foreground-gate.py` and `coderules-gate.py` have none anywhere in the live
+tree: its seven `test_*.py` files cover `machine-preflight.py`,
+`worktree-register-guard.py`, `worktree-snapshot-notice.py`, the `settings.json` `env`
+block, the evidence gate, and the two hooks withheld below — and not one of them imports
+either untested hook published here. Every other script in this pack ships its tests
+beside it. Those two do not. That is a gap in the live tree, not a scrub decision, and
+it is written here rather than left for a reader to discover by grepping.
 
-The rest of the live hooks directory stays unpublished. Each withheld file carries
-state that is true of one machine or one repo and false everywhere else — a disk and
+**Two of the withheld hooks are held back for a different reason, and it is not
+one-machine state.** `run-issues-criteria-fault.py` and `run-issues-parallel-gates.py`
+are sound hooks with the blast radius H4 asks for, and a later sync should publish
+them. They are not ready today on two counts. Their refusal messages name a person,
+which H2 refuses outright — that message is the only part of a hook most readers ever
+see, and rewriting it to a role is authoring rather than scrubbing. And their tests
+read a real project checkout by absolute path, so they cannot ship under H1 and would
+fail for every reader; a hook whose test cannot run is worse evidence than no test.
+
+The rest of the live hooks directory stays unpublished for the original reason. Each
+of those files carries state that is true of one machine or one repo and false
+everywhere else — a disk and
 swap threshold, a CLI version pin, a worktree layout, a per-day browser budget. A
 stranger who installed them would be refused by a description of a machine they do not
 have, which is worse than having no hook:
 
 ```withheld
+~/.claude/hooks/run-issues-criteria-fault.py
+~/.claude/hooks/test_run_issues_criteria_fault.py
+~/.claude/hooks/run-issues-parallel-gates.py
+~/.claude/hooks/test_run_issues_parallel_gates.py
 ~/.claude/hooks/machine-preflight.py
 ~/.claude/hooks/test_machine_preflight.py
 ~/.claude/hooks/heavy-run-version.pin

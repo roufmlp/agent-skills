@@ -7,11 +7,12 @@ skill, not when running it.
 
 ## The pass exists because gates grade against the issue (2026-07-27)
 
-Settled after two runs' evidence (the July 2026 batches). An issue whose
-acceptance criteria are wrong when written passes every gate, because the
-implementer builds to the bad spec and both gates grade against that same bad
-spec. The only place to catch it is before anyone builds — at authoring time,
-with write authority capped at what can be cited.
+Settled after two runs' evidence (the July 2026 batches; the fuller brief lives
+in the `acceptance-criteria-hardening` memory file). An issue whose acceptance
+criteria are wrong when written passes every gate, because the implementer builds
+to the bad spec and both gates grade against that same bad spec. The only place
+to catch it is before anyone builds — at authoring time, with write authority
+capped at what can be cited.
 
 ## What each checklist class cost before it was a class (2026-07-27)
 
@@ -45,17 +46,18 @@ narrow question near it.
 
 ## The stamp and `Status:` were two sources of truth (found 2026-08-02, fixed 2026-08-04)
 
-Found after a model-comparison pass over eight issues. All three arms hit it, so it
-is the skill's fault rather than one model's.
+Found after the model-comparison pass on issues 167, 174,
+182-187 and 201-206. All three arms hit it, so it is the skill's fault rather than
+one model's.
 
-**What happened.** Five issues came out of the pass with
-`Hardened (provisional): <date> — n sharpened, m defaults pending.` and with their
-`Status:` line still reading `needs-harden`. By this skill a provisional stamp puts
-an issue in scope. By `/run-issues`, `all` resolves scope from each issue file's
-`Status:` line and takes only clean `ready-for-agent` issues, skipping `needs-*`. So
-all five would have been silently dropped from the next batch, while this skill's own
-output said they were ready. Nothing errors. The run just comes back smaller than it
-should, and nobody is told which issues went missing.
+**What happened.** Five issues (167, 182, 183, 185, 186) came out of the pass with
+`Hardened (provisional): 2026-08-02 — n sharpened, m defaults pending.` and with
+their `Status:` line still reading `needs-harden`. By this skill a provisional stamp
+puts an issue in scope. By `/run-issues`, `all` "resolve[s] the scope from each issue
+file's `Status:` line and take[s] only clean `ready-for-agent` issues", and skips
+`needs-*`. So all five would have been silently dropped from the next batch, while
+this skill's own output said they were ready. Nothing errors. The run just comes back
+smaller than it should, and nobody is told which issues went missing.
 
 **Why the skill causes it.** SKILL.md says "Then stamp the issue, one line under
 `Status:`". It says where to put the stamp and never says to update `Status:` itself.
@@ -94,23 +96,22 @@ the checklist exists to catch: a green that means nothing, with no observer.
 **The judge, next standalone pass:** whether any issue leaves the pass with a
 `Hardened` stamp and a `needs-*` status. One is a regression, not a slip.
 
-## The model pin is gone; both agents inherit (2026-08-02)
+## The Fable pin is gone; both agents inherit (2026-08-02)
 
-The human's call. `harden-issues-attacker.md` and `harden-issues-seam.md` had
-pinned a specific model since they were written, on the theory that blind-spot
-hunting was the one job that model still led. Both now read `model: inherit`, so
-the pass runs on whatever tier the session was launched on. Effort is unchanged at
-`high`.
+The human's call. `harden-issues-attacker.md` and `harden-issues-seam.md` had read
+`model: fable` since they were written, on the theory that blind-spot hunting was
+the one job Fable still led. Both now read `model: inherit`, so the pass runs on
+whatever tier the session was launched on. Effort is unchanged at `high`.
 
 Two reasons. The pin put the model in a file nobody reads at launch, so a session
-started on one tier quietly bought another for the hardest, most parallel stage of
-the pass. And the pinned model was credit-gated, which is why SKILL.md carried a
-respawn fallback — a branch that only exists because of the pin. Wanting a
-different model is now one action: launch the session on it.
+started on Opus quietly bought Fable for the hardest, most parallel stage of the
+pass. And Fable is credit-gated, which is why SKILL.md carried a respawn-on-Opus
+fallback — a branch that only exists because of the pin. Wanting Fable is now one
+action: launch the session on Fable.
 
 This also removes the last exception to `/run-issues`'s "workers inherit the
 session model" rule, so that rule's parenthetical about a deliberate pin went with
-it. The rule against passing `model:` on a spawn stands: the spawn tool's
+it. The rule against passing `model:` on a spawn stands: the Agent tool's
 parameter still beats frontmatter, and `inherit` is exactly what it would defeat.
 
 **The launch line came with it, same day.** `inherit` makes the tier a launch-time
@@ -120,33 +121,32 @@ briefing, while a harden stamp carries a date and two counts and no tier. So a
 spawn-time `model:` value, or a session launched on the wrong tier, would have run
 the whole pass unobserved. SKILL.md now requires the same launch line, and repeats
 the never-pass-`model:` rule where the spawning happens rather than only in
-`/run-issues`. Asked for after the question of how likely a stray wrong-tier spawn
-actually was — low, but nothing would have caught one.
+`/run-issues`. The human asked for it after asking what the odds of a stray Fable
+spawn actually were — low, but nothing would have caught one.
 
 ## Checks only the human can run belong to the pass, not to the run (2026-08-09)
 
-The human's call, from the pass that hardened the batch before it. That pass left
-two issues carrying work for a person: one told the run to execute a script and
-report what it saw, another asked for a value mid-flight. Both were checks against
+The human's call, from the pass that hardened the batch before it. That pass left two
+issues carrying work for a person: one told the run to execute a script and report
+what it saw, another asked for a value mid-flight. Both were checks against
 production — the database the agents may not write and the settings they cannot
-reach — and both were answerable in ten minutes by the person at the keyboard, who
-ran them at the end of the session and handed the results back. The issues were
-corrected before the run started.
+reach — and both were answerable in ten minutes by the man sitting at the keyboard.
+They ran them themselves at the end of the session and handed the results back, and the
+issues were corrected before the run started.
 
 That is now the rule rather than the exception. The pass is attended by definition;
 `/run-issues` is not, and a run that meets a human-only check either stalls or
 guesses. So an attacker or the seam agent records an out-of-reach premise as a
 **check**, distinct
-from a question: a question needs the human's judgement, a check needs only their
-hands and their credentials. The orchestrating session runs everything it can run
-itself, puts the remainder to them as a numbered list beside the questions, and
-writes the answers into the issue files cited `checked by the human <date>`. A
-criterion that asks the run to pause for a person is treated as a defect in the
-issue, the same as a guard that cannot fail.
+from a question: a question needs the human's judgement, a check needs only their hands
+and their credentials. The orchestrating session runs everything it can run itself,
+puts the remainder to them as a numbered list beside the questions, and writes the
+answers into the issue files cited `checked by the human <date>`. A criterion that asks
+the run to pause for a person is treated as a defect in the issue, the same as a
+guard that cannot fail.
 
-The default road is untouched. If the human is away or waves the list off, the
-check defaults, is written as a default and is queued — the batch never waits on
-it.
+The default road is untouched. If they are away or waves the list off, the check
+defaults, is written as a default and is queued — the batch never waits on it.
 
 ## No issue named the database its rows land in (2026-08-12)
 
@@ -169,10 +169,35 @@ briefing after the branch was finished.
 The instance closed on a follow-up issue. The shape repeats on anything that writes
 rows rather than code, which is why it became a class instead.
 
+## The 481/482 gaps: the split rule aligned, checks carry their attempt, defaults kill their checks (2026-08-29)
+
+Routed through pilot-delivery ticket 33, "Four gaps the 481/482 hardening pass
+hit". The human changed the split rule in `~/.claude/questionrules.md`'s routing
+table at 12:42 and the afternoon's pass still put a split to them, because this
+skill's class 9 and its stamp section carried the 2026-07-27 rule — a local
+refusal beats a table it does not cite. Both sentences now defer to the table:
+the session settles a split it can complete (cut, harden both halves, stamp
+both); one it cannot goes to them. `to-issues/SKILL.md` carried the same stale
+sentence and lost it the same day. The deeper repair is in `questionrules.md`
+itself, "When a skill disagrees with this file": that file wins, and the finder
+repairs the skill rather than asking which wins.
+
+Two refusals joined the checks section the same day, both from the same pass.
+Gap 2: a `## Checks for the human` item carries its failed attempt — the command run
+and what it returned, or the credential/console wall — or the pass runs it or
+deletes it; the incident was an allow-list read they were asked for that twenty
+lines of `scripts/dev-signin-link.mjs` answered. Gap 3: a defaulted question
+kills every check that only serves it; the incident was a 307-replay check that
+went to them after the seam agent had already defaulted the 303 answer that
+removed the replay. Both agent briefs now state the item shape, so the refusals
+grade arrivals rather than manufacture rewrites. Gap 4 of the same section
+records the `[irreversible]` blast-radius refusal working as written; the
+attacker brief's looser "expensive to undo" wording was tightened to the routing
+table's four classes so the wrong marks stop arriving.
+
 ## This file exists (2026-07-27)
 
-One of the five forks from the 2026-07-27 panel review, taken by the human: three
-personas wanted the provenance out of the hot file, which is billed on every
-invocation. The incident anecdotes above moved here from SKILL.md the same day;
-the checklist itself stays in SKILL.md because it is the working instruction, not
-provenance.
+One of the five forks from the 2026-07-27 panel, taken by the human: three personas
+wanted the provenance out of the hot file, which is billed on every invocation.
+The incident anecdotes above moved here from SKILL.md the same day; the checklist
+itself stays in SKILL.md because it is the working instruction, not provenance.

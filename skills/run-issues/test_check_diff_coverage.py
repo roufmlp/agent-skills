@@ -26,6 +26,7 @@ import json
 import contextlib
 import os
 import pathlib
+import subprocess
 import tempfile
 import time
 import unittest
@@ -423,6 +424,140 @@ class EveryRefusalHasARemedy(unittest.TestCase):
             "uncovered",
         }
         self.assertEqual(set(guard.REMEDY), kinds)
+
+
+def git_tree(files: dict[str, str]) -> pathlib.Path:
+    """A throwaway tree that is a real git repository, so `git grep` works.
+
+    `importers()` asks git which files load a script. Without a repository git
+    exits 128, which this guard reads as "cannot tell" and grades the file
+    anyway — the strict direction. These cases need the other answer, so they
+    need a repository.
+    """
+    root = tree(files)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t",
+    }
+    for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "seed"]):
+        subprocess.run(["git", *args], cwd=root, env=env, check=True,
+                       capture_output=True)
+    return root
+
+
+class StandaloneScripts(unittest.TestCase):
+    """Register rows `rn483-01`, `run412-02` and `rev421a-03`.
+
+    Issue 483's whole coverage refusal was `scripts/seed-buy-side-money-483.mjs`
+    — 250 lines that build a service-role client and write at module scope, so
+    no test can import it and no in-process instrument can ever report it. The
+    check charged all 250 as misses and refused a diff that was otherwise fully
+    covered. Issue 481 met the same refusal the run before.
+    """
+
+    SEED = "const admin = createClient(url, key);\nawait admin.from('x').insert({});\n"
+
+    def build(self, extra: dict[str, str] | None = None, script="scripts/seed-x.mjs"):
+        files = {
+            script: self.SEED,
+            "src/lib/quote.ts": "export const q = 1;\n",
+            "src/lib/quote.test.ts": "import { q } from './quote';\n",
+        }
+        files.update(extra or {})
+        root = git_tree(files)
+        report = root / "coverage/coverage-final.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(istanbul(str(root / "src/lib/quote.ts"), {1: 1, 2: 1}))
+        return root
+
+    def whole(self, script="scripts/seed-x.mjs"):
+        return diff((script, 1, 250),
+                    ("src/lib/quote.ts", 1, 2),
+                    ("src/lib/quote.test.ts", 1, 1))
+
+    def test_a_standalone_script_is_not_charged_as_uncovered(self):
+        root = self.build()
+        problems, facts = run(root, self.whole())
+        self.assertEqual(problems, [], guard.render(problems, facts))
+        self.assertIn("scripts/seed-x.mjs", facts["ungraded"])
+        self.assertEqual(facts["ungraded"]["scripts/seed-x.mjs"][0], 250)
+
+    def test_the_output_says_what_it_did_not_grade(self):
+        root = self.build()
+        problems, facts = run(root, self.whole())
+        text = guard.render(problems, facts)
+        self.assertIn("NOT GRADED", text)
+        self.assertIn("scripts/seed-x.mjs", text)
+        self.assertIn("250 changed line(s)", text)
+        self.assertIn("NOT covered and this is not a claim that they are", text)
+
+    def test_a_script_something_imports_is_still_graded(self):
+        """The exemption is measured, not a path rule. One import ends it."""
+        root = self.build({"src/lib/use-seed.ts": "import '../../scripts/seed-x.mjs';\n"})
+        problems, facts = run(root, self.whole())
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertFalse(facts["ungraded"])
+
+    def test_a_script_the_report_mentions_is_still_graded(self):
+        """Condition 3, the backstop: once a test really runs it, grade it."""
+        root = self.build()
+        both = json.loads(istanbul(str(root / "src/lib/quote.ts"), {1: 1, 2: 1}))
+        both.update(json.loads(istanbul(str(root / "scripts/seed-x.mjs"), {1: 0})))
+        (root / "coverage/coverage-final.json").write_text(json.dumps(both))
+        problems, facts = run(root, self.whole())
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertFalse(facts["ungraded"])
+
+    def test_scripts_lib_is_library_code_and_stays_graded(self):
+        root = self.build(script="scripts/lib/db-target.mjs")
+        problems, facts = run(root, self.whole("scripts/lib/db-target.mjs"))
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertFalse(facts["ungraded"])
+
+    def test_a_script_with_no_test_in_the_diff_is_still_untested(self):
+        """The `untested` half is untouched. A script CAN carry a `spawnSync`
+        test, so a diff that adds a script still owes one."""
+        root = self.build()
+        problems, _ = run(root, diff(("scripts/seed-x.mjs", 1, 250)))
+        self.assertEqual([p.kind for p in problems], ["untested"])
+
+    def test_a_diff_of_nothing_but_a_script_says_it_graded_nothing(self):
+        root = self.build()
+        problems, facts = run(
+            root, diff(("scripts/seed-x.mjs", 1, 250), ("src/lib/quote.test.ts", 1, 1))
+        )
+        self.assertEqual(problems, [])
+        text = guard.render(problems, facts)
+        self.assertIn("nothing in this diff could be graded", text)
+        self.assertIn("NOT GRADED", text)
+
+    def test_the_exemption_is_named_in_a_refusal_too(self):
+        """A refused diff must still say which lines were left out of the sum,
+        or the reader cannot check the arithmetic."""
+        root = self.build()
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul(str(root / "src/lib/quote.ts"), {1: 1, 2: 0})
+        )
+        problems, facts = run(root, self.whole())
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        text = guard.render(problems, facts)
+        self.assertIn("1 of 2 changed lines executed", text)
+        self.assertIn("NOT GRADED", text)
+
+    def test_a_tree_that_is_not_a_repository_grades_the_script(self):
+        """Not knowing must never buy an exemption."""
+        root = tree({
+            "scripts/seed-x.mjs": self.SEED,
+            "src/lib/quote.ts": "export const q = 1;\n",
+            "src/lib/quote.test.ts": "import { q } from './quote';\n",
+        })
+        report = root / "coverage/coverage-final.json"
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(istanbul(str(root / "src/lib/quote.ts"), {1: 1, 2: 1}))
+        problems, facts = run(root, self.whole())
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertFalse(facts["ungraded"])
 
 
 if __name__ == "__main__":

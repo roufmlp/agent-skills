@@ -72,6 +72,11 @@ Status machine, single writer per transition:
 - `candidate → open` or `retracted` — claim gate only.
 - `open → in-fix → fix-ready` — fixer only.
 - `fix-ready → verified`, or back to `in-fix` with written reasons — fix gate only.
+  (Outside this loop, a `/run-issues` commit step also closes rows to `verified`
+  where its commit fixed them — rule F6, 2026-08-27.)
+- A hardening-pass or seam-agent row enters at `open` — or at `deferred` where
+  it only waits for promotion. No claim gate runs over it: the pass's evidence
+  bar is the gates' own. (Ruled by the human 2026-08-29.)
 - `deferred` — orchestrator, at round end, and only from `open`, `in-fix` or
   `fix-ready`. A `candidate` is gated or deleted, never deferred; `retracted` is
   terminal. **`deferred` means the row is waiting for promotion, and nothing else.**
@@ -87,14 +92,14 @@ being able to read. A register that rotates on size or on the round boundary nee
 guard against firing mid-run; with no rotation there is nothing to guard.
 
 **`fixed` is an exit in its own right and never a kind of refusal.** Split out on
-the human's ruling, 2026-08-06. Before it, a round that fixed thirteen faults
-reported thirteen refusals into the daily brief, where one word would have
+the human's ruling, 2026-08-06 (queue item T15-3). Before it, a round that fixed thirteen
+faults reported thirteen refusals into their daily brief, where one word would have
 overturned them and minted thirteen issue files for work that had already shipped.
 
 **Retractions clean up after themselves.** The claim gate may touch nothing but
-status and its verdict, and the finder is dead, so the orchestrator deletes the
-finder's regression test file for that bug ID when it records a retraction. A
-deliberately failing test left in the suite poisons every later green judgement.
+status and its verdict, and the finder is dead, so the orchestrator deletes
+`tests/regressions/<ID>.test.ts` when it records a retraction. A deliberately
+failing test left in the suite poisons every later green judgement.
 
 **A fix rejection on non-executable PROSE is fixed by deleting the claim, never by
 restating it.** A fix for an over-claim is itself a new claim with its own
@@ -106,15 +111,15 @@ graded like the diff. One canonical statement per claim — everywhere else cite
 `file:line` and asserts nothing. `/run-issues` carries the same rule, at its
 "One canonical statement per claim" paragraph in `run-issues/SKILL.md`.
 
-One round is the measurement: four fix rejections across sixteen entries and four
+Round 9 is the measurement: four fix rejections across sixteen entries and four
 assigned tasks, and **not one was a wrong diff**. All four were prose, and three of
 them were caught only because a gate re-measured a sentence nobody had asked it to
-check (`decisions.md`).
+check (`decisions.md:91-108`).
 
-At round end commit `register.md`, `leads.md`, `bugs/` and the finder's regression
-test directory — those paths only — and delete `round-brief.md`. Never commit the
-whole `.scratch/<feature>/` directory: a run's ledger, journal and issue files live
-there too, and committing them mid-run puts half-written run state on main.
+At round end commit `register.md`, `leads.md`, `bugs/` and `tests/regressions/` —
+those paths only — and delete `round-brief.md`. Never commit the whole
+`.scratch/<feature>/` directory: a run's ledger, journal and issue files live there
+too, and committing them mid-run puts half-written run state on main.
 
 ## Promotion — the only door into `issues/`
 
@@ -144,40 +149,39 @@ resolved one of three ways:
   file, then delete the row.
 - **Refused** — everything else. Delete the row and give the reason in the round report.
 
-**The thresholds live in [`agents/promotion.md`](../../agents/promotion.md) and
-nowhere else.** This file and `run-issues/SKILL.md` both carried "operator at any
-severity" for a day after the human set a `medium` floor on `operator` (2026-08-09),
-and a run brief repeated the stale figure. Name the exits here; read the numbers
-there.
+**The thresholds live in `~/.claude/agents/promotion.md` and nowhere else.** This file
+and `run-issues/SKILL.md` both carried "operator at any severity" for a day after the human
+set a `medium` floor on `operator` (T15-2, 2026-08-09), and a run brief repeated the
+stale figure. Name the exits here; read the numbers there.
 
 **`fixed` is never reported as a refusal**, and the ordering above is what enforces
-it. The human overturns a refusal with one word, so a round's thirteen successful
-fixes listed as thirteen refusals put a trap on their only control: one word would
-mint thirteen issue files for work that had already shipped. Ruled 2026-08-06. This
-section still said "two ways" a day after that ruling landed forty lines above it;
-corrected 2026-08-07.
+it. The human overturns a refusal with one word, so a round's thirteen successful fixes
+listed as thirteen refusals put a trap on their only control: one word would mint
+thirteen issue files for work that had already shipped. Ruled 2026-08-06, queue item
+T15-3. This section still said "two ways" a day after that ruling landed forty lines
+above it; corrected 2026-08-07.
 
 A promoted row becomes an issue file carrying:
 
 - `Status: needs-harden`. A local file has no reporter, so there is nobody to ask
   for more, and `needs-info` is a dead end there. `/harden-issues` sharpens it from
-  evidence instead.
-- One category role, from the project's own triage set.
+  evidence instead. This is `triage`'s rule for a local file, inherited unchanged.
+- One category role, from the same set `triage` uses.
 - A link to `bugs/<ID>.md`. Promotion copies no evidence into the issue file.
 
 **The human holds the veto, through `/daily-brief`.** The round report lists every
 promotion and every refusal, and the brief carries both to them. Overturning either
 is one word in the brief. **`fixed` is a count only, and carries no control** — it
-is not a decision and the human is offered none over it. A step they have to invoke
-by hand is a step somebody forgets, and then the register grows in place of the
-issue directory.
+is not a decision and they are offered none over it. A step they have to invoke by hand is a
+step somebody forgets, and then the register grows in place of the issue directory.
 
-**Anything needing the human's hands, rather than their judgement, goes somewhere
-else.** A secret, an env var, an OAuth client, a DNS record at a registrar, a console
-setting — anything the repo cannot do to itself — is written as a numbered action,
-one action per number, with one line of what is blocked on it, to the project's
-pending-actions file, if it keeps one. The round report is history the moment the
-branch merges; that file is the list the human actually reads.
+**Anything needing their hands, rather than their judgement, goes somewhere else.** A
+secret, an env var, an OAuth client, a DNS record at a registrar, a console setting —
+anything the repo cannot do to itself — is written as a numbered action, one action per
+number, with one line of what is blocked on it, to the project's pending-actions file,
+if it has one. Where that file lives outside the repo, cite its path in full every time
+and never make a repo-local copy. The round report is history the moment the branch
+merges; the pending-actions file is the list a human actually reads.
 
 ## Harvesting the leads file
 
@@ -201,14 +205,12 @@ archive a register, and archived registers piled up on disk anyway.
 
 ## Code ownership — the merge-tax rule
 
-- **Finder** writes the register and NEW test files, one per bug, named by bug id,
-  in a regressions directory of the project's own test layout. It never edits
-  existing suites and never touches shipped code, not even to help.
-  **Where the project has no test layout of its own, that directory is
-  `tests/regressions/`** — the pack's default, and the path the agent files name.
+- **Finder** writes the register and NEW files at
+  `tests/regressions/<bug-id>.test.ts` — one per bug. It never edits existing
+  suites and never touches shipped code, not even to help.
 - **Fixer** owns shipped code, unit fakes and fixtures. It may flip an expectation
-  in one of those regression files only when the fix intentionally changes the
-  pinned behaviour, and must say so in `bugs/<ID>.md`. Unexplained touches are an
+  in `tests/regressions/` only when the fix intentionally changes the pinned
+  behaviour, and must say so in `bugs/<ID>.md`. Unexplained touches are an
   automatic reject.
 - Deferred bugs keep their failing test as `test.skip` with the bug ID.
 
@@ -227,15 +229,15 @@ own agent file. **The register is the handoff.**
 
 ## Orchestrator rules
 
-**A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries
-the forbidden thing AND the permitted one, with an absolute path wherever a path
-exists. Three faults in one `/run-issues` batch shared one shape: "QA is the only
-WRITABLE database" constrained the operation and left production reachable, so a
-verify gate read production with a service-role key; "a probe script needs a
-directory holding `node_modules`" named no home, so three files landed at the shared
-worktree root; and a brief naming no register path sent two gates to the worktree
-copy instead of the main checkout's. A brief that constrains the ACT while leaving
-the PLACE unnamed gets a different answer from every agent. (Adopted 2026-08-09.)
+**A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries the
+forbidden thing AND the permitted one, with an absolute path wherever a path exists. Three
+faults in the 2026-08-09 `/run-issues` batch shared one shape: "QA is the only WRITABLE
+database" constrained the operation and left production reachable, so a verify gate read
+production with a service-role key; "a probe script needs a directory holding `node_modules`"
+named no home, so three files landed at the shared worktree root; and a brief naming no
+register path sent two gates to the worktree copy instead of the main checkout's. A brief
+that constrains the ACT while leaving the PLACE unnamed gets a different answer from every
+agent. Adopted by the human, 2026-08-09.
 
 Stay thin — the orchestrator's context is the only one that lasts all round.
 
@@ -257,22 +259,22 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    **It has four refusals, not three.** It exits non-zero when the heading is
    absent, when nothing sits under it, when a row still reads `pending`, and when
    the section sits above the newest `Implementation record, attempt N` heading —
-   `stale`, meaning the section grades an earlier diff. `stale` closes a measured
-   fault: one entry's second-attempt gates died before writing, the file still held
-   the first attempt's rejections under the same headings, and the check passed
-   both. A non-zero exit means the gate died, wrote somewhere else, or judged an
-   older attempt, so the entry keeps its old status and the gate is re-spawned.
+   `stale`, meaning the section grades an earlier diff. `stale` closes the
+   2026-08-19 fault: issue 390a's attempt-2 gates died before writing, the file
+   still held attempt 1's rejections under the same headings, and the check passed
+   both (`check_verdict.py:28-34`). A non-zero exit means the gate died, wrote
+   somewhere else, or judged an older attempt, so the entry keeps its old status
+   and the gate is re-spawned.
    **A gate that returned empty has not retracted anything and has not verified
-   anything** — two adversarial gates died at the weekly usage limit during one
-   workflow audit and wrote nothing, and nothing mechanical noticed.
+   anything** — two adversarial gates died at the weekly usage limit during the
+   2026-08-15 workflow audit and wrote nothing, and nothing mechanical noticed.
 
    This does not break rule 1. The check reads the file; you read an exit code
    and one line.
 5. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
 6. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
-   over every row, giving it the project's issue directory path and its numbering
-   rule; delete the heartbeat cron; delete `round-brief.md`; commit. Then
+   over every row; delete the heartbeat cron; delete `round-brief.md`; commit. Then
    report — verified fixes, rejected fixes, retracted claims, and the two lists
    promotion returned. Say plainly what was left undone; a round that reports only
    its wins is not a report.
@@ -296,14 +298,14 @@ had already diagnosed the failure mode (`run-issues/SKILL.md`, the paragraph
 beginning "The ledger carries an owner line").
 
 Create the wakeup anyway at launch (CronCreate, every ~30 min): "Check that
-`<main-repo-root>/.scratch/<feature>/round-brief.md` exists, and read the mtime of
-`<main-repo-root>/.scratch/<feature>/register.md` — do not read the rest of either
-file. If the brief is there and the register's mtime is over 60 minutes old, resume
-from register state; otherwise do nothing." `round-brief.md` is the marker because
-it is written at launch and deleted at round end, so its presence is what "a round
-is open" means. Firings that land while rate-limited simply fail; the first after
-the reset revives the round. Delete the cron at round end. Remind the user once
-that the machine must stay awake (on macOS, `caffeinate -dimsu`).
+`<main-repo-root>/.scratch/<feature>/round-brief.md` exists, and read
+`stat -f %m <main-repo-root>/.scratch/<feature>/register.md` — do not read the rest
+of either file. If the brief is there and the register's mtime is over 60 minutes
+old, resume from register state; otherwise do nothing." `round-brief.md` is the
+marker because it is written at launch and deleted at round end, so its presence is
+what "a round is open" means. Firings that land while rate-limited simply fail; the
+first after the reset revives the round. Delete the cron at round end. Remind the
+user once that the machine must stay awake (`caffeinate -dimsu`).
 
 Every agent file opens with its own idempotency check — read the register first,
 stop if the assigned work is already past this stage — which is what makes resume
@@ -322,14 +324,14 @@ safe.
 - **Record the session model in the register, and check it before spawning.**
   Agent files use `model: inherit`, so every worker inherits the session's tier.
   A round on any tier is a valid round, and it is also the first evidence at that
-  tier. **A null result — "no bugs found" — from a tier with no track record is
+  tier. **A null result -- "no bugs found" -- from a tier with no track record is
   not evidence of absence, and may not be reported as one.** This loop has no
   downstream check on a finder's miss: a weak finder and a clean codebase produce
   the same empty register, which is why the tier is recorded and the null result
-  qualified. (Generalised 2026-08-23. This bullet used to name one model — a
-  pinned model name goes stale the day a new model ships, and a stale pin gets
-  edited away with the caution inside it. `run-issues/SKILL.md` carries the same
-  rule for a run.)
+  qualified. (Generalised by the human, 2026-08-23, answering C8 of the skills audit.
+  This bullet read "The session model is Opus 5" -- a pinned model name goes stale
+  the day a new model ships, and a stale pin gets edited away with the caution
+  inside it. `run-issues/SKILL.md` carries the same rule for a run.)
 - **Verify the allowlist, never assert it.** Dry-run every command class this
   round will use, in no-op form, before spawn #1. A miss is a launch-time blocker;
   mid-round it is a worker blocked on a prompt, stalling silently. (The text this
@@ -346,46 +348,44 @@ safe.
   role the round will spawn and ask what it shells out to.
 
   - **Finder** — the test runner on single files, wide greps, and **starting the
-    dev server** by name from the repo's `.claude/launch.json`, where the project
-    has one, because it hunts the live system rather than the code's intentions.
-    **It probes that server through a repo probe script allowed by one prefix
-    rule, if the project has one, never with a bare `curl`.**
+    dev server** by name from the repo's `.claude/launch.json`, because it hunts
+    the live system rather than the code's intentions. On this repo that is
+    `spine-dev-qa-auto`, port 3101. **It probes that server through the repo's
+    probe script, never with a bare `curl`** — on this repo,
+    `node scripts/http-probe.mjs "<label>" <url>`, allowed by one prefix rule.
   - **Fixer** — typecheck, lint, the relevant test files, git stage and commit.
   - **Claim gate** — whatever the reproducers it runs need, plus
     `git clone --shared` into the session scratchpad.
   - **Fix gate, and fix gate critical** — `git clone --shared` into the
-    scratchpad, the test runner inside that copy, and a code review.
-  - **The orchestrator itself** — the cron-creation tool, for the resume wakeup.
+    scratchpad, the test runner inside that copy, and `/code-review`.
+  - **The orchestrator itself** — `CronCreate`, for the resume wakeup.
 
   **Two measurements, both paid by `/run-issues`, and both would repeat here.** On
-  2026-08-14 a verify gate sat on a dialog asking to start the dev server, with its
-  own task counter reading 6h 00m 05s, and a person found it by looking at the
+  2026-08-14 a verify gate sat on "Allow Claude to start spine-dev-qa-auto?" with
+  its own task counter reading 6h 00m 05s, and the human found it by looking at the
   screen. A bullet was already present and the runner ran it correctly: it
   enumerated the classes the old text named and dry-ran every one. It read an
-  illustrative list as a complete one. Separately, one run stopped for a permission
-  dialog at the end, unattended, because a raw `curl` is allowed as an exact string
-  and the next probe used a different port. The list is derived from roles for
-  those two reasons, and each role names its own tools.
+  illustrative list as a complete one. Separately, run `cab74e` stopped for a
+  permission dialog at the end, unattended, because a raw `curl` is allowed as an
+  exact string and the next probe used a different port. The list is derived from
+  roles for those two reasons, and each role names its own tools.
 - **Creating a worktree includes installing dependencies and making the
   `.env.local` symlink. If either fails, the round refuses to start.** Not a
   checklist item to remember afterwards — part of what "the tree is ready" means.
   One shell command, 30 to 60 seconds per worktree, and it saves more than it
   costs the first time it stops a finder diagnosing a false green that was really
-  a missing environment file. (Adopted 2026-08-07.)
-- If the project keeps its env in a canonical file outside the worktrees, every
-  worktree's `.env.local` is a **symlink** to it, never a copy. Replace any copy
-  found. Env files are never committed or pushed.
-- **If that symlink exists, CLI tools can write through it.** Vercel's `vercel
-  link` / `vercel pull` are the known case: they write *through* the link into the
-  canonical file. Remove the symlink, run the command, delete the `.env.local` it
-  wrote, restore the link.
+  a missing environment file. (Adopted by the human 2026-08-07.)
+- Every worktree's `.env.local` is a **symlink** to the canonical env file (path in
+  the repo CLAUDE.md), never a copy. Replace any copy found. Env files are never
+  committed or pushed.
+- **Vercel-CLI trap:** `vercel link` / `vercel pull` write *through* the symlink
+  into the canonical env file. Remove the symlink, run the command, delete the
+  `.env.local` it wrote, restore the link.
 
 ## Also fits
 
-Pre-launch security gates (the ten points under "The pre-launch gate" in
-[`steering/coderules.md`](../../steering/coderules.md) as register entries),
+Pre-launch security gates (coderules' ten points as register entries),
 test-coverage campaigns, migration and deprecation sweeps, docs-drift rounds.
 
-**Not** for building one feature — that is a dependency chain. Take an issue file
-(with a `Status:` line, acceptance criteria, and a `## Must still be true`
-section) through `/run-issues` instead.
+**Not** for building one feature — that is a dependency chain. Use
+`/to-issues` then `/run-issues`.
