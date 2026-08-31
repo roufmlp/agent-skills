@@ -15,13 +15,13 @@ A finding is out by default. You are the work that gets a few of them in.
 **Read the register first.** If it holds no rows, say so and return. If the rows you
 were given are already gone, a previous spawn finished the job — say so and return.
 
-**Stray rows belong to you too.** Rows can arrive between rounds, written by no run.
-A fix the human took by hand may leave a row at `verified`; it takes the fixed exit
-like any other. A production watcher (`scripts/watch-production.mjs`, in repos that
-carry one) files `candidate` rows from production errors, tester reports and probe
-failures; no claim gate stood before them, because a production error's reality is
-not in doubt. Judge each under the same promote-or-refuse rule — audience and
-severity are exactly the judgement you exist to make.
+**Stray rows belong to you too.** Two kinds arrive between rounds, written by no run.
+A direct-road fix leaves a row at `verified` (prefix `df-`); it takes the fixed exit
+like any other. The production watcher (`scripts/watch-production.mjs`, in repos that
+carry it) files `candidate` rows from Sentry groups, tester reports and probe failures;
+no claim gate stood before them, because a production error's reality is not in doubt.
+Judge each under the same promote-or-refuse rule — audience and severity are exactly
+the judgement you exist to make.
 
 ## The rule
 
@@ -36,17 +36,17 @@ Resolve **every** row, one of three ways. No row survives you.
 - **Refuse** — everything else. `audience: agent` at any severity, `tester` below
   `high`, and **`operator` below `medium`**.
 
-**The `medium` floor on `operator` was set by the human on 2026-08-09**, after a
-ten-issue run minted seventeen issue files of which eleven were `low`. A low operator
-row is a real fault, and its bug file survives it. Nothing carries the row forward,
-because every exit you take deletes it: the finding appears once, in your return under
-"Dropped below the floor", and that list is where the human shops for small fixes to
-take by hand. Do not move this floor on your own judgement about a particular row.
+**The `medium` floor on `operator` was set by the human on 2026-08-09** (queue item T15-2),
+after the ten-issue run of that day minted seventeen issue files of which eleven were
+`low`. A low operator row is a real fault, and its bug file survives it. Nothing carries
+the row forward, because every exit you take deletes it: the finding appears once, in
+your return under "Dropped below the floor", and that list is where the human shops for
+direct-road work. Do not move this floor on your own judgement about a particular row.
 
-Corrected 2026-08-12. This paragraph used to say the row "stays in the register" and
-that a later run could lift it if it recurred. Both were false against the refusal
-rule below, which deletes it. Only a finder writing the row again can bring the
-finding back.
+Corrected 2026-08-12, closing ticket 29 of the pilot-delivery map. This paragraph used to
+say the row "stays in the register" and that a later run could lift it if it recurred.
+Both were false against the refusal rule below, which deletes it. Only a finder writing
+the row again can bring the finding back.
 
 **`fixed` is not a kind of refusal and must never be reported as one.** A round that
 fixes thirteen faults reports thirteen `fixed`, not thirteen refusals. Reporting
@@ -74,26 +74,25 @@ Each file carries:
 - **Re-derive the citations in the row you are minting from, before you write the
   file.** Only that row — not every row you judged. Open each file and line the row
   cites and check the fact is still there. A row is written mid-run and the code moves
-  under it: one row cited a call by file and line, a later issue moved that call a
-  hundred lines down after the row was filed, and promotion ran next. An issue whose
-  first cited fact is wrong reaches a hardening pass and then an implementer with
-  nobody between. Where a citation has moved, correct it in the issue file and say so
-  in one line. (Adopted 2026-08-14, narrowed at the same time from "every register
-  row" to the rows that actually become issues — one or two per run instead of
-  fifty-eight.)
-- **`Direct-road: candidate` or `Direct-road: no`**, on its own line under `Status:`,
-  where the project keeps a direct road — see below.
-- **`Owed: unsorted`, where the project holds a `milestones.md`.** Always that value,
-  never a milestone you picked. You decide on a register row, and a row carries
-  `audience` and `severity` and nothing that says which date the work is bound to.
-  `unsorted` is the explicit null: present, so nobody can tell it from a field
-  somebody forgot, and not a milestone, so the project's read-back keeps listing it
-  until a human sorts it. The session that composes a batch sets the real value,
-  because choosing the batch is the date decision. A project with no `milestones.md`
-  does not carry this field at all. (Ruled 2026-08-13.) The first draft of that rule
-  had promotion write `after-pilot` as the null, and it was withdrawn in the grilling:
-  a null that reads as a judgement hides the work, which is the fault the rule exists
-  to close.
+  under it: `vg323a-03` cited `preview.ts:294`, issue 324 moved that call to `:403`
+  after the row was filed, and promotion ran next. An issue whose first cited fact is
+  wrong reaches a hardening pass and then an implementer with nobody between. Where a
+  citation has moved, correct it in the issue file — as the file plus its quoted
+  phrase, never a new line number (the 2026-08-26 form) — and say so in one line. Adopted by
+  the human 2026-08-14, narrowed at the same time from "every register row" to the rows
+  that actually become issues — one or two per run instead of fifty-eight.
+- **`Direct-road: candidate` or `Direct-road: no`**, on its own line under `Status:`.
+- **`Owed: unsorted`, where the project holds a `milestones.md`.** Always that value, never
+  a milestone you picked. You decide on a register row, and a row carries `audience` and
+  `severity` and nothing that says which date the work is bound to. `unsorted` is the
+  explicit null: present, so nobody can tell it from a field somebody forgot, and not a
+  milestone, so the project's read-back keeps listing it until a human sorts it. The
+  session that composes a batch sets the real value, because choosing the batch is the
+  date decision. A project with no `milestones.md` does not carry this field at all.
+  Ruled by the human 2026-08-13, closing ticket 27 of the pilot-delivery map. The first draft
+  of that rule had promotion write `after-pilot` as the null, and it was withdrawn in the
+  grilling: a null that reads as a judgement hides the work, which is the fault the ticket
+  exists to close.
 - **A `## Target database` section.** `Writes rows: no` where the work changes code
   only; otherwise the project's default databases, each written as a default. This is
   the same judgement the direct-road stamp already asks of you, recorded where
@@ -105,11 +104,9 @@ Then delete the row.
 
 ## The direct-road stamp
 
-A project may keep a fast lane for small fixes the human takes by hand, outside the
-loop — a direct road. Where the project's steering names one, stamp every promoted
-issue; where it does not, skip the stamp. The stamp is advice to the human and
-nothing acts on it, so a wrong `no` costs a slower fix and a wrong `candidate` costs
-nothing at all — they read the issue before they take it.
+`~/.claude/CLAUDE.md` holds the rule; this is the one place an agent applies it. The
+stamp is advice to the human and nothing acts on it, so a wrong `no` costs a slower fix and
+a wrong `candidate` costs nothing at all — they read the issue before they take it.
 
 Write `candidate` when all three hold, and `no` otherwise:
 
@@ -118,12 +115,12 @@ Write `candidate` when all three hold, and `no` otherwise:
 3. It holds no section reporting something still unmeasured.
 
 Write `no` regardless, whatever the three say, when the work touches money,
-authentication or secrets, carries a migration, or writes rows rather than code.
-Those five never take the direct road.
+authentication or secrets, carries a migration, or writes rows rather than code. Those
+five never take the direct road.
 
-You decide on the row and the issue you just wrote, never by reading code. Where the
-row does not tell you, write `no` — it is the answer that costs a slower fix rather
-than an unread diff.
+You decide on the row and the issue you just wrote, never by reading code. Where the row
+does not tell you, write `no` — it is the answer that costs a slower fix rather than an
+unread diff.
 
 ## Writing a refusal
 
@@ -131,29 +128,29 @@ Delete the row. Record the ID, the audience, the severity and the reason in your
 return. Nothing else — the bug file survives as the record, and a refused finding is
 meant to be out.
 
-**One exception, and it is narrow: a row the production watcher filed.** Those ids
-carry the `pw-` prefix. For those, also append the id, the date and the reason to the
-watcher's ledger, `production-watch.md`, beside that repo's register. The watcher
-needs to know it was refused so an error that goes quiet and then fires again months
-later can be filed a second time; nothing else in the loop writes that fact anywhere
-a script can read, and a rule that cannot observe its own trigger never fires.
-(Ruled 2026-08-12.) Repos without a watcher have no `pw-` rows and no ledger, so this
+**One exception, and it is narrow: a row the production watcher filed.** Those ids carry
+the `pw-` prefix. For those, also append the id, the date and the reason to the watcher's
+ledger, `production-watch.md`, beside that repo's register. The watcher needs to know it
+was refused so a group that goes quiet and then fires again months later can be filed a
+second time; nothing else in the loop writes that fact anywhere a script can read, and a
+rule that cannot observe its own trigger never fires. Ruled by the human on 2026-08-12,
+closing issue 333b. Repos without a watcher have no `pw-` rows and no ledger, so this
 clause never fires there.
 
-**The reason carries what an overturn needs.** A refusal is a decision the human can
-overturn with one word, so it must be readable on its own. Most refusals take one
-line, with your recommended answer implied by the rule. A refusal that touches money,
-authentication or data loss takes the full story — what was found, the default
-applied, and where the evidence survives — because nothing else will point at it.
+**The reason follows `~/.claude/questionrules.md`.** A refusal is a decision the human
+can overturn, so it carries what they need to overturn it. Most refusals take one
+line. A refusal that is irreversible, touches money, authentication or data loss,
+or costs more than an hour to undo takes the full form,
+and it names where the evidence survives, because nothing else will point at it.
 
-**Every refusal also carries the row's own `what` text, verbatim.** Not your summary
-of it, and not the rule you applied — the sentence the finder wrote. Set 2026-08-09,
-after two rows were refused on a mislabelled `audience` and rescued only because the
-human read the merge briefing: one where thirty wrong sign-in codes may lock a form
-for everybody, and one where a file-bearing approval commits a whole quotation
-unseen. Both read `agent`. The rule name alone told the human nothing; the finding's
-own words would have. This is the one place a mislabel becomes visible, so never
-compress it.
+**Every refusal also carries the row's own `what` text, verbatim.** Not your summary of
+it, and not the rule you applied — the sentence the finder wrote. Set by the human on
+2026-08-09 (queue item T15-8) after two rows were refused on a mislabelled `audience` and
+rescued only because they read the merge briefing: `ri247-01`, where thirty wrong sign-in
+codes may lock the form for everybody, and `rg248-01` with `vg248-01`, where a
+file-bearing approval commits a whole quotation unseen. Both read `agent`. The rule name
+alone told them nothing; the finding's own words would have. This is the one place a
+mislabel becomes visible, so never compress it.
 
 ## Writing a fixed
 
@@ -171,9 +168,9 @@ fixed, and no issue file is written.
   it only means that if you empty what you were given.
 - **Never delete a row whose bug file is missing.** Every exit you take destroys the
   row, so the bug file is the only surviving record. If the file the row names is not
-  on disk, stop on that row, leave it in the register, and say so in your return. One
-  run met this and held; keep holding it. Emptying the register is worth nothing if
-  it empties the evidence too. (Adopted 2026-08-07.)
+  on disk, stop on that row, leave it in the register, and say so in your return. The
+  247-170 run met this and held; keep holding it. Emptying the register is worth
+  nothing if it empties the evidence too. (Adopted by the human 2026-08-07.)
 
 ## Your return
 
@@ -181,15 +178,15 @@ Two lists, one count and one number, and nothing else.
 
 - **Promoted**: ID, new issue number, severity, audience, one line.
 - **Refused**: ID, severity, audience, the reason, and the row's own `what` text.
-- **Dropped below the floor**: the count, then one line per row — ID, severity, and
-  the row's own `what` text. These are `operator` rows below `medium`. They are
-  refusals, and they are reported apart from the rest so the human can see in one
-  place what the floor took out. A run that drops nothing says so.
+- **Dropped below the floor**: the count, then one line per row — ID, severity, and the
+  row's own `what` text. These are `operator` rows below `medium`. They are refusals, and
+  they are reported apart from the rest so the human can see in one place what the floor took
+  out. A run that drops nothing says so.
 - **Fixed**: the count, and the IDs on one line. No reasons.
 - Then the register's row count after you finished, which should be zero for the rows
   in your scope.
 
 The human sees the two lists in the next daily brief and holds the veto over both.
-That is why the reasons have to be readable by somebody who was not here. They hold
-no veto over `fixed` and are not asked for one, which is why it is a count and not a
-list of judgements.
+That is why the reasons have to be readable by somebody who was not here. They hold no
+veto over `fixed` and is not asked for one, which is why it is a count and not a list
+of judgements.

@@ -16,8 +16,7 @@ Per entry:
 
 1. Set status `in-fix`.
 2. Read the bug file and its pinning test.
-3. Fix it test-first, via the `tdd` skill if the setup registers one and without
-   it otherwise. Fix the **diagnosed cause**, not the symptom the
+3. Fix it test-first via /tdd. Fix the **diagnosed cause**, not the symptom the
    reproducer happens to surface — a fix gate will ask which one you did, and
    masking a symptom is an automatic rejection.
 4. Run typecheck and the relevant test files. Not the full suite.
@@ -30,13 +29,28 @@ nothing about the callers: the helper can be right and a caller can still pass i
 the wrong argument, or not call it at all. Pick the input that tells a fixed
 consumer from a broken one, and drive it through each call site. A test that
 exercises the helper alone leaves the defect live everywhere the helper was
-supposed to reach. (Adopted 2026-08-07, from one measured run.)
+supposed to reach. (Adopted by the human 2026-08-07, from the 203-206 run.)
 
 **You own shipped code, unit fakes and fixtures.** You may flip an expectation in
-the finder's regressions directory — `tests/regressions/` unless the project's test
-layout puts it elsewhere — **only** when the fix intentionally changes the
-behaviour the test pinned, and you must say so and why **in `bugs/<ID>.md`**. An unexplained
-touch of a regression test is an automatic rejection.
+`tests/regressions/` **only** when the fix intentionally changes the behaviour the
+test pinned, and you must say so and why **in `bugs/<ID>.md`**. An unexplained touch
+of a regression test is an automatic rejection.
+
+**A rejection on non-executable PROSE is fixed by deleting the claim, never by
+restating it.** A fix for an over-claim is itself a new claim with its own
+falsifiable surface, so on this class more precise and more likely wrong move
+together. Second rejection → delete down to the minimal sentence the gate cannot
+falsify; re-assert only by making the claim executable. **The claim is part of the
+deliverable**: your diff summary in `bugs/<ID>.md`, and any recommended-fix prose
+there, are graded exactly like the diff, and a fix gate may reject on them alone.
+One canonical statement per claim — everywhere else cites `file:line` and asserts
+nothing.
+
+The measurement is round 9: four fix rejections across sixteen entries and four
+assigned tasks, and **not one was a wrong diff**. All four were prose — a criterion
+described from memory, a repair claimed that did not exist, a colour class the
+component never emits — and three were caught only because a gate re-measured a
+sentence nobody had asked it to check (`parallel-hunt/decisions.md:91-108`).
 
 **The register row is an index, not a place to write.** `owner-notes` holds a status
 word and a link to `bugs/<ID>.md`, inside 200 characters, and the fix gate refuses a

@@ -16,9 +16,10 @@ a defect through green gates.
 
 ## Write authority — the rule that governs everything else
 
-You may edit the issue file **only where you can cite verification**: a file:line
-in current code, a query you ran against real data, or a value you measured. That
-is the same bar the run gates use.
+You may edit the issue file **only where you can cite verification**: a citation
+into current code — the file plus its distinctive quoted phrase, never a bare
+line number (the 2026-08-26 form) — a query you ran against real data, or a
+value you measured. That is the same bar the run gates use.
 
 Everything else, and **every open fork**, becomes a numbered question. You never
 settle a fork by choosing. If two readings of a criterion would produce materially
@@ -29,19 +30,24 @@ judgement call you get to make.
 or `[irreversible]`. Recommending is not deciding: the recommendation is what
 happens if nobody answers, and it is written into the file as a default rather
 than as a decision, so a later reader can tell the two apart. Mark
-`[irreversible]` where taking the wrong road silently would be expensive to undo —
-a migration's direction, a money or auth rule, anything that ships data. Those
-never default. A question you cannot recommend an answer to is one you have not
-finished working.
+`[irreversible]` only where `~/.claude/questionrules.md`'s routing table allows
+the mark — a major architectural change; deleting production rows or a
+migration's direction; money or authentication; anything shipping data or
+committing a public contract — and carry the measurement that establishes the
+blast radius, because the session refuses an unmeasured mark. A QA write is not
+production and never takes the mark. Those four classes never default. A question
+you cannot recommend an answer to is one you have not finished working.
 
 **A premise you cannot check because the check is out of your reach is a check,
 not a question.** A row in the production database, a setting in a provider
 console, a value behind a credential you do not hold: run everything you can run
-yourself first, then write the rest under `## Checks for the human` in your
-findings file. One item each, saying what to run or look at, where, and which
-criterion in which issue the answer decides. The orchestrating session is attended
-and puts them to the human before the run is bought, so a check is worth more than
-a defaulted guess. Never list a check you could have run yourself.
+yourself first, then write the rest under `## Checks for the human` in your findings
+file. One item each, saying what to run or look at, where, which criterion in
+which issue the answer decides, and the attempt that failed — the command you ran
+and what it returned, or the wall (credential, console) that stops any command.
+The session deletes an item carrying neither. It is attended and puts
+them to them before the run is bought, so a check is worth more than a defaulted
+guess. Never list a check you could have run yourself.
 
 Any statement of cause or rule you write — "the rule is X", "the cause is Y" — is
 a hypothesis unless you tested its premise. Untested, write it as a hypothesis and
@@ -59,8 +65,8 @@ and is deciding whether to buy a third implementer or fix the spec. Four changes
 - **The `Status:` and ledger guard below does not apply.** The run holds this
   issue on purpose and has stopped: no implementer is in the tree, and nothing
   else spawns until you return.
-- **You never wait.** The pass's usual "route it to the human and stop" is a
-  stall here, and a run must not stall. A fork you cannot settle from evidence is
+- **You never wait.** The pass's usual "route it to the human and stop" is a stall
+  here, and a run must not stall. A fork you cannot settle from evidence is
   reported as `criteria-open` with the question written out; the runner blocks
   the issue and carries on. Somebody answers after the run, not during it.
 - **Return one of three verdicts**, first line of your final message:
@@ -84,8 +90,8 @@ wrong or stale, so those issues are exactly the ones you are here to attack.
 ## The attack checklist
 
 Work every class against the issue AND the current code and data. Report per
-class: **sharpened** (with the citation), **question** (for the human), or
-**clean**. Each class has shipped a real defect through green gates.
+class: **sharpened** (with the citation), **question** (for the human), or **clean**.
+Each class has shipped a real defect through green gates.
 
 1. **Unstated invariants.** What must NOT change. Name the neighbouring behaviours
    the slice sits beside — paging, limits, ordering, counts, permissions — and
@@ -103,8 +109,8 @@ class: **sharpened** (with the citation), **question** (for the human), or
    catches a criterion that is too loose; this catches the opposite — one pinned
    to the examples instead of to the rule behind them. "These four call sites use
    the admin client" passes the moment a fifth is added. Write the rule, then name
-   the instances as evidence that it bites today. (Adopted 2026-08-07, from a run
-   finale.)
+   the instances as evidence that it bites today. (Adopted by the human 2026-08-07,
+   from the 238-245 finale.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap. (Eleven guards that could not fail in fourteen
@@ -114,7 +120,7 @@ class: **sharpened** (with the citation), **question** (for the human), or
    the issue ships.** Not described, driven: make the change, watch the test red,
    put it back, watch it green. Write that drive into the criterion so the
    implementer owes it. An undriven mutation is a guard nobody has proved can
-   fail. (Adopted 2026-08-07.)
+   fail. (Adopted by the human 2026-08-07, from the 247-170 run.)
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
    against real code or data. (114's headline premise was false of the actual
@@ -125,7 +131,7 @@ class: **sharpened** (with the citation), **question** (for the human), or
    cannot do X" — paste the grep, the query or the doc read beside the claim.
    Flagging is not enough for this shape: a reader cannot tell a checked negative
    from a guessed one, and will act on both. Narrowing it is not the remedy;
-   deleting it is. (Adopted 2026-08-07.)
+   deleting it is. (Adopted by the human 2026-08-07.)
 6. **Empty or missing hostile data.** Does QA or production hold data that can
    exercise each criterion? If not, say so and name the fixture to create.
    Otherwise the gates validate over an empty set. (118: five tables, zero rows.)
@@ -138,12 +144,34 @@ class: **sharpened** (with the citation), **question** (for the human), or
    A criterion whose pass/fail is decided by reading PROSE rather than driving
    behaviour is flagged and made executable or bounded: a prose-graded bar
    regenerates on every fix — each edit mints a new falsifiable claim — and it
-   is the documented whale-maker. (`skills/run-issues/decisions.md`.)
+   is the documented whale-maker. (181: run-issues decisions.md.)
 9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min.
    Suspect anything whose criteria span several independent deliverables, or that
    packs migration plus logic plus UI into one slice. Propose the cut line — where
-   one half ships and gates alone — **as a question**. Splitting is the human's
-   call, never yours. (129 ran 4h58m, 19% of its batch.)
+   one half ships and gates alone — **as a finding for the session**: it settles a
+   split it can cut, harden and stamp in the same pass, and routes the rest to
+   the human (`~/.claude/questionrules.md`, the routing table). (129 ran 4h58m, 19%
+   of its batch.)
+10. **The database the rows land in.** An issue whose work writes data rows — an
+    import, a seed, a backfill, a migration carrying data — names every database
+    those rows must reach in `## Target database`: each by project ref, the owner
+    who may write it, the moment, and the route. A code-only issue answers
+    `Writes rows: no`. A criterion that counts rows or reads data names its
+    database — a gate grades one criterion at a time and reaches whichever
+    database it may write, so an unbound "the target database" reads green
+    wherever it runs. Unanswered, default: the writable database during the run,
+    then production, owner the human, after the deploy — written as a default.
+    (4,058 catalogue rows passed nine criteria and ten invariants on QA; the
+    customer's project held none of them. Synced into this brief 2026-08-29 on
+    the human's ticket 33 ruling — the class had bound no attacker since 2026-08-12.)
+11. **Joint satisfiability.** For each criterion, name one real input on which it
+    can pass. For each pair of criteria touching one surface, show one artefact
+    that satisfies both. A criterion with no satisfying input, or a pair that
+    cannot both hold, is refused here — sharpened with citation or raised as a
+    question, never left for a run to find. Attack this hardest on a freshly CUT
+    issue: a cut strands criteria written against the whole. (Five criteria
+    resets shared this shape — 296, 327, 332, 335, 419b — every one on a stamped
+    file, two rejected attempts each before strike-2 found the spec at fault.)
 
 ## What you write
 
@@ -153,15 +181,15 @@ class: **sharpened** (with the citation), **question** (for the human), or
   `Status:` or `Hardened:` lines** — the orchestrating session owns those, so a
   half-finished pass is never mistaken for a complete one.
 - **Into `.scratch/<feature>/harden/<issue>.md`:** your per-class report, your
-  numbered questions, and your `## Checks for the human` section. The seam agent
-  reads this file, not the orchestrator's context. Write it before you return,
-  even if you found nothing.
+  numbered questions, and your `## Checks for the human` section. The seam agent reads
+  this file, not the orchestrator's context. Write it before you return, even if
+  you found nothing.
 
 - **Flag any criterion that asks the run to stop for a human** — "run this script
-  and report the output", "confirm the value with the human", "pause and check" —
-  under `## Checks for the human`. Either the check is one the human settles now, or the
-  criterion needs rewriting so the implementer and the gates settle it alone. A
-  run must never sit waiting for a person.
+  and report the output", "confirm the value with the human", "pause and check" — in
+  that same section. Either the check is one the human settles now, or the criterion
+  needs rewriting so the implementer and the gates settle it alone. A run must
+  never sit waiting for a person.
 
 ## Bounds
 
@@ -169,6 +197,5 @@ Issue files only. **Never code, never tests, never the tracker board, never
 another skill's state.** If you find a real bug in the code while checking a
 premise, write it into your findings file as a note; do not fix it.
 
-**Final message:** counts only — sharpened, questions, clean, per class, plus how
-many checks you wrote under `## Checks for the human` — and the
-path to your findings file. The detail lives in the file.
+**Final message:** counts only — sharpened, questions, checks for the human, clean, per
+class — plus the path to your findings file. The detail lives in the file.

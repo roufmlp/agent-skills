@@ -17,12 +17,12 @@ half.
 fresh perspective it exists for. Then read the branch diff against main.
 
 **Main moved while the run worked, so read its tip before you write a question.**
-The branch was cut from a worktree hours or days ago, and the human rules on main
-while a run is in flight. Diff the merge base against main's current tip and read
-every commit that touches an issue in scope. A question they have already answered
-leaves your `Decide` list, and your briefing says it was answered and where.
-Adopted 2026-08-10: one issue was ruled on twice mid-run, and the finale caught it
-only by running this diff on its own initiative.
+The branch was cut from a worktree hours or days ago, and the human rules on main while
+a run is in flight. Diff the merge base against main's current tip and read every
+commit that touches an issue in scope. A question they have already answered leaves
+your `Decide` list, and your briefing says they answered it and where. Adopted
+2026-08-10: they ruled twice on issue 276 mid-run and that finale caught it only by
+running this diff on its own initiative.
 
 **Review the whole branch as ONE change**, which is the thing no per-issue gate
 could do. Look for: the same problem solved two different ways in two issues;
@@ -73,58 +73,119 @@ fix-first — each with what it costs and what it risks, and never sizes a prose
 fix in lines; it states the issue's strike-class record instead. A line count
 against a class with prior rejections is fiction dressed as an estimate.
 
-**Re-derive the citations in every issue this run MINTED, before the briefing
-ships.** A mid-run issue file cites line numbers from a tree that kept moving
-after it was written. One minted issue cited a file and line; a sibling in the
-same run moved that code twelve lines down half an hour later, so the citation
-was wrong before anyone read it. Open each minted file, check every
-file-and-line reference against the branch head, and correct it. Cheap here,
-expensive later — a hardening pass grades a stale citation as a wrong premise,
-and the issue loses a round to it. (Adopted 2026-08-07, from a run finale.)
-
-**Then run the citation check over every issue this run BUILT, and report what
-it finds.** Minting is not the only way a citation goes stale: an issue's own
-commit moves the lines that issue cites. One run left eight such citations
-across its two built issue files, and the rule above did no work because that
-run minted nothing. Where the repo carries the script, this is one command:
+**Run the citation check over every issue this run BUILT, and report what it
+finds.** An issue's own commit moves the lines that issue cites. The 347/263 run
+of 2026-08-15 left eight such citations across its two built issue files.
+(Minted files are promotion's job: it re-derives the citations in each row it
+mints from before writing the file, its 2026-08-14 rule — the older finale copy
+of that duty was deleted on the human's ruling of 2026-08-29, as a duplicate that
+also ran before promotion had minted anything.) Where the repo carries the
+script, this is one command:
 
 ```
-node scripts/check-issue-citations.mjs --quiet <each built issue file>
+node scripts/check-issue-citations.mjs --quiet <each built issue file> <this run's merge-briefing.md>
 ```
+
+**The merge briefing is on that list, and it is the file the human actually reads.**
+Run `batch-34455f` put one question to them in its briefing and that question
+shipped with two wrong line numbers. Nothing checked them, because the briefing
+is not an issue file. `check-issue-citations.mjs` restricts itself to
+`.scratch/*/issues/*.md` ONLY when called with no path arguments; given explicit
+paths it reads whatever it is given, measured 2026-08-27 by running it on a
+briefing, which judged 11 of its 15 citations. **Cost, measured rather than
+estimated: 16 seconds.** Adopted by the human 2026-08-27 as D5 (c).
+
+*Not added to the differential command below, and the reason is stronger than
+"it does not exist there".* That command runs twice, once at branch head and once
+at the merge base, and reports only what held at the base and moved at the head.
+At the merge base this path holds **the PREVIOUS run's briefing**, a different
+document at the same filename — measured on run `99b-99e-6e11ba`, whose fork point
+`99584550` carried the 1409-line briefing for run `416-419-421-d167e0` while branch
+head carried its own 940-line one. So the differential would grade this run's
+citations against another run's text: the two citation sets are disjoint, every
+citation here reads as having no base state, and every citation there reads as
+`gone`. That is not a miss, it is a page of false rows in the finale report, and
+diagnosing them costs more than the check buys.
+
+**Nothing is lost by the exclusion.** The command above already reads every
+citation in this briefing, once, at branch head, which is the only tree where the
+document exists in the form the human reads. The differential exists to charge a run
+with citations its code broke in files nobody opened. A briefing the run wrote at
+the end is not such a file: it has no earlier state to have broken.
 
 It reports `moved` with the new line number, `gone`, and `unknown` where it
 could not check. Exit 1 means something moved or is gone.
 
-**Then run it over the issues this run touched WITHOUT opening them, and report
-the differential.** The two rules above cover what the run minted and what it
-built. Neither looks at an open issue nobody in the run opened, whose cited lines
-a run commit moved. One run measured that gap at eight citations across five
-open issue files, three of which sat in the backlog as candidates for the very
-next batch.
+**The pass has run only when the output carries its summary line** —
+`N citations in M file(s): ... hold, ... moved, ... ambiguous, ... gone, ...
+unchecked.` Read that line and quote it. A report without it is a step that never
+ran, and it looks clean: `--touches` returns after the decision pass and prints no
+citation summary at all (`check-issue-citations.mjs:326`). On the 399-403 run the
+remedy ran twice with that flag, in a run whose own defect class was citations, and
+the measurement failed silently both times. (Adopted by the human 2026-08-23 as R3.)
 
-Charge the run with what it broke and nothing older. Take the files this branch
-changed, find the open issue files citing any of them, and run the check twice —
-once at branch head, once at the merge base — then report only the citations that
-held at the base and moved at the head:
+**The differential over untouched open issue files is REMOVED. Do not run it, and
+do not reinstate it without the human.** It took the open issue files citing anything
+this branch changed, ran the checker twice — branch head and merge base — and
+reported the citations that held at the base and moved at the head.
+
+**Removed by the human on 2026-08-28, on cost.** Measured that day: about 0.088 seconds
+per citation, so the 1581 citations across the 24 files in scope on run
+`99b-99e-6e11ba` cost roughly 2.5 minutes a pass, twice, plus a temporary worktree
+built at the merge base — call it six minutes a run.
+
+**What it bought, stated honestly, because it was not nothing.** That run's
+differential found 140 broken citations across 13 open issue files, against the
+eight the `dc132b` run measured when this rule was adopted on 2026-08-16. Fifty-nine
+of the 140 sat in issues 99d and 99f, the next two files in that series.
+
+**Why the removal still holds.** Nothing in the run acts on the finding. The report
+says so itself: a run may not write an issue file, and the repair goes through
+`/harden-issues` by hand. So the run paid six minutes to tell a later pass something
+that pass can measure for itself in ten seconds, on the one file it is opening:
 
 ```
-git diff --name-only main...HEAD
-node scripts/check-issue-citations.mjs --quiet <each open issue file citing one of those>
+node scripts/check-issue-citations.mjs --quiet <the file being hardened>
 ```
 
-Run the second pass in a tree that sits at the merge base, and say which tree you
-used. The main checkout serves when it still sits there and its issue files are
-byte-identical to this branch's; where it has moved, `git worktree add` one at the
-merge base. (Adopted 2026-08-16, from a finale that ran this by hand and measured
-the gap before proposing the rule.)
+**The gap this leaves, named rather than hidden.** An issue already stamped
+`ready-for-agent` gets no further hardening pass, so nothing re-checks its citations
+before an implementer reads them. Issue 99d is exactly that case today. The human is
+redesigning citations on pilot-delivery ticket 33 — anchor phrases quoted from the
+source rather than line numbers, ruled 2026-08-26 — and that redesign is where the
+replacement belongs. **The run-`99b-99e-6e11ba` findings were written into the five
+worst-affected issue files before this was removed**, so they did not die with the
+mechanism.
+
+**Before you write the briefing, print where the run's wall clock went.** One command,
+over the transcript this run has been writing all along:
+
+```
+python3 ~/.claude/skills/run-issues/run_timings.py <this run's transcript .jsonl>
+```
+
+Put its three headline lines and its "agent time by first word" block into the merge
+briefing verbatim. It costs the run nothing — it reads a file the harness already wrote,
+spawns no agent and touches no repository.
+
+**Do not compute a step duration from the ledger's Status table instead.** Only the
+`committed <sha> HH:MM` stamps there are measured; every other clock is the runner's
+estimate, and on run `416-419-421-d167e0` those estimates drifted 68 minutes by the last
+issue.
+
+The human asked for this on 2026-08-26, in the daily brief, because a ten-issue run took 17.8
+hours and nothing could say which step ate it. The first reading answered them: gates cost
+more than building. Verify 5.50 h plus review 4.13 h against implementers at 5.98 h, with
+the coherence finale at 2.09 h and corrections at 1.62 h. A subagent was running for 91%
+of the run, so the orchestrator's own turns between steps are 9% and not the problem.
 
 **You report. You do not repair.** No run may write an issue file, and you are a
 run. Put the `moved` and `gone` rows in the briefing under their own heading, so
-the next `/harden-issues` pass over those issues applies the fix — the road ruled
-on 2026-08-15. A `holds` is not proof: the check compares against the commit that
-last touched the citation's own line, so a citation rewritten without re-checking
-its number can read `holds` and still be wrong. Say that in one line where you
-report the figures.
+the next `/harden-issues` pass over those issues applies the fix — which is the
+road the human ruled on 2026-08-15. A `holds` is not proof: the check compares
+against the commit that last touched the citation's own line, so a citation
+rewritten without re-checking its number can read `holds` and still be wrong.
+Say that in one line where you report the figures.
 
 **Sweep the register for rows the run itself already fixed, before promotion runs.**
 A review gate files a row; the same issue's correction round fixes it inside the
@@ -133,8 +194,9 @@ bug file nor the diff, so it mints an issue for shipped work. You hold the commi
 already: for every row this run wrote, check whether its issue committed after the
 row was filed, read that commit, and set the row to `verified` where the fix landed.
 Promotion's `fixed` exit then takes it. Say in the briefing how many rows you swept
-and name each. Three of seventeen issues minted in one run were stale this way, each
-costing a run slot and a hardening pass. (Adopted 2026-08-10.)
+and name each. Three of seventeen issues minted on 2026-08-09 were stale this way,
+each costing a run slot and a hardening pass (`seam-h04`; adopted by the human
+2026-08-10).
 
 **Every command the briefing hands a human must have run once, against the state
 it will actually meet.** You are the last stage: run each yourself, read-only,
@@ -147,46 +209,48 @@ errors in the human's hands reads as diligence and fails at the worst moment.
 Everything you would once have written under `## Decisions inbox` is split in two,
 and the split is the whole point. A 2-issue run put seven items under that one
 heading on 2026-08-06. Six of them ended with the run's own answer already applied
-("rename it in a later slice", "record it as pattern 4 once the sibling issue
-lands"). One was a live fork with a deadline. Presenting all seven as decisions
-buried the one that was real, and it multiplies: ten issues would put thirty-five
-of them in front of the human and the daily brief has thirty minutes.
+("rename it in a later slice", "record it as pattern 4 once 170 lands"). One was a
+live fork with a deadline. Presenting all seven as decisions buried the one that
+was real, and it multiplies: ten issues would put thirty-five of them in front of
+them and the daily brief has thirty minutes.
 
 Write two headings at the end of the briefing, in this order.
 
 **`## Decide — <n> open forks`.** One block each. The fork, both roads, the default
-you already applied, its `[reversible]` or `[irreversible]` mark, and any date it
-must be settled by. An item belongs here on one test: **if the human says nothing,
-does something wrong ship or does a deadline pass?** Only then.
+you already applied, its `[reversible]` or `[irreversible]` mark (the latter only
+in `questionrules.md`'s four classes), and any date it
+must be settled by. An item belongs here on one test: **if the human says nothing, does
+something wrong ship or does a deadline pass?** Only then.
 
 **`## Ruled — <n>, overturn any of these`.** One line each. The call, and the reason
-in a clause. These are not questions. The human reads them to disagree, not to
-answer, and a silent reader has lost nothing.
+in a clause. These are not questions. They read them to disagree, not to answer, and
+a silent reader has lost nothing.
 
 Two guards on the split. **A deadline forces `Decide`**, whatever else the item
-looks like. And **when you cannot tell, write `Decide`** — showing the human one
-item too many costs a minute, hiding a live fork costs a shipped defect.
+looks like. And **when you cannot tell, write `Decide`** — showing them one item too
+many costs a minute, hiding a live fork costs a shipped defect.
 
 **Candidate rules go under `Decide`, marked `[rule, nothing live]`.** Where an
 incident cost a retry, a strike or an escalation, write one block per incident:
 what happened, and the rule that would have prevented it. The run recovers the
 *instance*; only the human can adopt a *standing rule*, so these are never `Ruled`.
 The mark is what stops them crowding the section — it says at a glance that
-nothing in the merge waits on the answer, and the human can leave every one of
-them for a slower day without risk.
+nothing in the merge waits on the answer, and they can leave every one of them for
+a slower day without risk.
 
 ## Anything needing the human's hands goes in the pending file
 
-**If it needs their judgement it is a decision. If it needs their hands it is an
-action, and the two have different homes.** An action is a secret, an env var, an
-OAuth client, a DNS record at a registrar, a setting in a console — anything the
-repo cannot do to itself. Write each one as a numbered action, in plain English, one
-action per number, with one line of what is blocked on it, to the project's
-pending-actions file, where the project keeps one.
+**If it needs their judgement it is a decision. If it needs their hands it is an action,
+and the two have different homes.** An action is a secret, an env var, an OAuth client,
+a DNS record at a registrar, a setting in a console — anything the repo cannot do to
+itself. Write each one as a numbered action, in plain English, one action per number,
+with one line of what is blocked on it, to the project's pending-actions file,
+where the project keeps one.
 
-**Cite that file by its full path whenever you refer to it, and never make a
-repo-local copy.** A bare filename does not resolve, and one merge briefing sent
-the human searching the tree for it. Two files with one name drift within a week.
+**Where that file lives outside the repo, cite its path in full whenever you refer
+to it, and never make a repo-local copy.** A bare filename does not resolve from
+inside a repo tree, and one merge briefing sent its reader searching the tree for
+a file that was never in it.
 
 For any external step, fetch the provider's current official documentation first and
 give today's real button and menu names, with the source. Never a remembered interface.
@@ -199,17 +263,18 @@ reason as the queue rule below it.
 
 ## Every `Decide` item also goes in the decisions queue
 
-Append each `Decide` block to `.scratch/decisions-queue.md`, one section each.
-Most items take one line — the fork, the default applied, its mark; an item that
-touches money, authentication or data loss takes the full story, and it names
-where the evidence survives. Add a line pointing at this briefing for the
-reasoning. Never append a `Ruled` item, and never copy the briefing's evidence
-across — the queue is a view and the briefing is the record.
+Append each `Decide` block to `.scratch/decisions-queue.md`, one section each, in
+the form `~/.claude/questionrules.md` sets. Read that file before you write the
+first block: it decides which items take one line and which take the full eight
+parts, and an item that is irreversible, touches money, authentication or data
+loss, or costs more than an hour to undo takes the full form. Add a line pointing at this briefing for the reasoning. Never
+append a `Ruled` item, and never copy the briefing's evidence across — the queue is
+a view and the briefing is the record.
 
-This exists because one run wrote seven items for the human and added **zero**
-lines to that file. The queue's header promises that its length is what waits on
-them. A run that queues nothing breaks that promise silently, and silently is the
-only way it can break — a queue that stays still reads as a quiet day.
+This exists because the run of 2026-08-06 wrote seven items for the human and added
+**zero** lines to that file. The queue's header promises that its length is what
+waits on them. A run that queues nothing breaks that promise silently, and silently
+is the only way it can break — a queue that stays still reads as a quiet day.
 
 Flag anything structural you found — duplication across issues, drifted seams — as
 a recommendation for a separate architecture session, not something to fix now.

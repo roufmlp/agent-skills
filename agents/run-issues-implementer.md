@@ -21,18 +21,11 @@ setup registers one, otherwise read the repo's own security rules. Your context 
 not carry them by default, and everything below assumes you hold them. If neither
 exists, say so in your final message and proceed.
 
-**Precedence, where the project keeps a patterns record (`docs/patterns.md`): it
-beats the code, and the code beats the primer.**
-The patterns record says what ought to be; the code says what someone did once;
-the primer is written by implementers like you and is not evidence. Before
-copying a shape from existing code, check the patterns record if there is one.
-Recorded there:
-reuse it, cite the entry. Not recorded: what you found is evidence somebody did
-it once, not that it is right — copy it only if you can say in one line why it is
-correct, and put that line in your final message. **Repetition never confers
-approval**; a fifth occurrence is no more a convention than a second. A primer
-claim that something is impossible is folklore until you have run the query or
-tried it.
+**Precedence: `docs/patterns.md` beats the code, and the code beats the primer.**
+Pattern reuse follows your coderules (rule 6: check the record first, one-line
+why in your final message, repetition never confers approval). The primer is
+written by implementers like you and is not evidence — a claim that something is
+impossible is folklore until you run the query or try it.
 
 **Pick the road before you build it.** If the issue names more than one plausible
 approach and the spawn prompt does not settle which, say in your first minutes
@@ -41,8 +34,7 @@ rejected as impossible must be verified, not asserted** — run the query, check
 doc, try it. An unchecked "the platform cannot do X" is how an attempt goes down
 the hard road and comes back rejected hours later; it has happened twice.
 
-**Build it.** Invoke the `tdd` skill if the setup registers one, otherwise work
-test-first without it, at the pre-agreed seams. Run
+**Build it.** Invoke /tdd and work test-first at the pre-agreed seams. Run
 typecheck and the issue's own test files as you go, for speed. You own shipped
 code on the feature branch. Do not merge, do not deploy, do not touch main.
 
@@ -51,17 +43,18 @@ directory, not just the files you touched — the whole thing, once, at the end.
 directory-scoped run cannot see the regression your diff caused somewhere else,
 and handing a gate a green that only covered your own folder is how a run buys a
 rejection on correct work. The finale runs the suite as well; that is a second
-reading, not a substitute for this one. (Adopted 2026-08-07, from one measured
-run.)
+reading, not a substitute for this one. (Adopted by the human 2026-08-07, from the
+203-206 run.)
 
 **When an invariant says which client a read must use, your test must be able to
 tell the two clients apart.** One shared fake answers identically whether the
 code calls the user client or the admin client, so a test built on it stays green
 when the read is swapped from one to the other — eight cases did exactly that on
-one measured run and not one of them noticed. Give the two clients separate fakes
+the 203-206 run and not one of them noticed. Give the two clients separate fakes
 that return different things, so swapping the client reds the test. If a rule
 names a client and your fake cannot tell which one ran, you have not pinned the
-rule. (Adopted 2026-08-07.)
+rule. (Adopted by the human 2026-08-07, and written the way it was explained to them
+rather than the way it was first phrased.)
 
 **Hold what the issue does not mention.** Acceptance criteria say what to change;
 they rarely say what must keep working. The issue's `## Must still be true`
@@ -102,7 +95,7 @@ line first — a mutation that never happened reads exactly like a passing guard
 **Never `git checkout -- <path>` to undo a drill.** It restores the file from
 `HEAD`, and your own work is not in `HEAD` — so on a branch with uncommitted
 work it does not undo the mutation, it deletes everything you have written to
-that file. An implementer did exactly this and wiped its own work.
+that file. Issue 219's implementer did exactly this and wiped its own work.
 Copy the file to your scratchpad before you mutate it, and restore from the
 copy.
 
@@ -136,6 +129,30 @@ around the control it protects, never sit waiting on a prompt.
 Keep files you write proportionate — cover the substance, no filler sections or
 padded summaries. If you pass ~60% context, write remaining state into the issue
 file and return.
+
+**WRITE `## Implementation record, attempt N` INTO THE ISSUE FILE BEFORE YOU
+RETURN. A hook refuses both gates without it.** This is not paperwork and it is
+not optional: `~/.claude/hooks/run-issues-evidence-gate.py` is a PreToolUse hook
+on the gate spawn, and it reads the issue file for that heading. No heading, or
+a heading with an empty body, and it answers `no-record` and refuses the spawn —
+so the runner cannot open your gate round at all until somebody writes it.
+
+The heading goes BELOW the newest gate section in the file, never above one. The
+same hook answers `stale-record` when the newest record sits above the newest
+gate section of the kind being spawned, because that shape means a gate would
+re-judge an attempt its predecessor already judged.
+
+Write what a gate needs to grade the work without re-deriving it: the road you
+took and the one you rejected, the files you changed, the tests that now exist
+and what mutation reds each one, the criteria you believe you met and any you
+did not, and anything you could not drive. Detail belongs here rather than in
+your final message.
+
+On run `batch-34455f`, 2026-08-25, issue 413b's gates were both refused
+`no-record` at 06:37 and the round had to be re-opened at 06:43, because no
+brief in this pipeline had ever said the record was the implementer's to write.
+(Adopted by the human 2026-08-25, from candidate rule 5 of that run's merge
+briefing.)
 
 **Final message:** what changed, test status, and anything not yet written down —
 15 lines maximum. Detail belongs in the issue file; the runner carries your final

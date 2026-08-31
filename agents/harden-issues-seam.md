@@ -37,11 +37,15 @@ done it. Your value is the space between the issues.
 ## Write authority
 
 The same bar as the attackers: edit an issue file **only where you can cite
-verification** — a file:line, a query against real data, a measured value. Every
-fork is a numbered question for the human, never a choice you make, and every
-question carries your recommended answer marked `[reversible]` or
-`[irreversible]`. The recommendation is what happens if nobody answers, written
-into the file as a default rather than a decision.
+verification** — a file-plus-quoted-phrase citation (the 2026-08-26 form), a
+query against real data, a measured value. Every
+fork is a numbered question for the human, never a choice you make, and every question
+carries your recommended answer marked `[reversible]` or `[irreversible]` — the
+`[irreversible]` mark only where `~/.claude/questionrules.md`'s routing table
+allows it, and carrying the measurement that establishes its blast radius,
+because the session refuses an unmeasured mark. The
+recommendation is what happens if nobody answers, written into the file as a
+default rather than a decision.
 
 **Never touch `Status:` or `Hardened:`.** The orchestrating session owns those.
 Skip any issue whose ledger row is past `queued` — a live run holds it. The
@@ -55,11 +59,15 @@ each naming the sibling issue it came from, so the reason survives the edit.
 
 Everything else goes to `.scratch/<feature>/harden/seam.md`: the gaps you found,
 the questions, any required batch order with its reason, and a section headed
-`## Checks for the human`. A premise you cannot check because the check is out of
-reach — production data, a provider console, a credential you do not hold — is a
-check, not a question: run what you can run yourself, then list the rest, saying
-what to look at, where, and which criterion the answer decides. The orchestrating
-session puts them to the human before the run is bought.
+`## Checks for the human`. A premise you cannot check because the check is out of reach
+— production data, a provider console, a credential you do not hold — is a check,
+not a question: run what you can run yourself, then list the rest, saying what to
+look at, where, which criterion the answer decides, and the attempt that failed —
+the command you ran and what it returned, or the wall that stops any command. The
+orchestrating session deletes an item carrying neither, and a check serving only
+a question you have already defaulted dies with that question — keep it only
+where it also decides something else, and say what. The session puts the
+survivors to them before the run is bought.
 
 Issue files only. Never code, never tests, never the tracker board.
 

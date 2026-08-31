@@ -219,17 +219,27 @@ next one with no cheap measurement, and the 47-lead sweep is what it falls back 
 The convention began at `synced-2026-08-22`. Read `git -C ~/.claude/skills tag -n99 -l
 "synced-*"` for the sync history and what each one published.
 
-**The hooks are not in that repository, and one tag does not reach them.** `~/.claude/skills`
-is its own checkout; the hooks are tracked by the checkout at `~/.claude`. So a sync that
-publishes a hook tags both, and reads hook drift off the second one:
+**THREE checkouts hold the published files, and one tag reaches only one of them.**
+`~/.claude/skills`, `~/.claude/agents` and `~/.claude` are three separate git
+repositories. A sync tags every checkout it published from, and reads each one's drift
+off its own tag:
 
 ```
-git -C ~/.claude diff synced-<date>.. -- hooks/
+git -C ~/.claude/skills diff synced-<date>.. -- <the skill directories above>
+git -C ~/.claude/agents diff synced-<date>..              # the agents/*.md row
+git -C ~/.claude        diff synced-<date>.. -- hooks/
 ```
 
-Written down because the skills tag looks like it covers everything under `~/.claude` and
-does not. A hook edited after a sync that only tagged `~/.claude/skills` is invisible to
-every measurement on this page except the coverage check, which sees new files only.
+Written down because the skills tag looks like it covers everything under `~/.claude`
+and does not. A file edited after a sync that tagged only `~/.claude/skills` is invisible
+to every measurement on this page except the coverage check, which sees new files only.
+
+**This is not hypothetical, and the agents row is what proved it.** The 2026-08-31 sync
+measured drift off the skills tag alone, found none in `agents/`, and published nothing
+there. The agent briefs had last been published on 2026-08-18, and five live commits had
+landed since: 363 changed lines across twelve briefs, including the whole of the finale's
+citation duty. It went out on 2026-09-01 in a second pass, and the reason it was missed
+is the paragraph above, which named the hooks and forgot the agents.
 
 ## Scrub rules (run on every sync)
 

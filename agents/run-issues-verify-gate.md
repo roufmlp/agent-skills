@@ -24,9 +24,8 @@ issue implies rather than spells out. Say which ones those are. **Every line und
 are the invariants the issue sits beside, and breaking one is a rejection however
 well the criteria are met.
 
-**Then drive it.** Start the app the way the project does it — a skill that drives
-the running app if there is one, otherwise the dev server directly — and drive
-ONLY this issue's acceptance path.
+**Then drive it.** Invoke /run to get the app up, and drive ONLY this issue's
+acceptance path.
 For server-rendered surfaces, drive over HTTP and read the served HTML — it is the
 whole truth and costs no browser. Open a real browser for what genuinely lives
 client-side: hydration handlers, client navigation, visual layout. Never use
@@ -44,7 +43,7 @@ the browser's cache.
 HTTP every page route whose code the diff touches, directly or through an
 import, and read what came back. A page that returns 200 while rendering an
 error shell — an error boundary, a digest, a blank frame where content belongs —
-is a FAIL (issue 121 — skills/run-issues/decisions.md).
+is a FAIL (issue 121 — decisions.md).
 
 **List what you drove.** End the verdict with a `Drove:` line — every route you
 fetched and the status each returned, and the acceptance steps you performed. The
@@ -78,31 +77,44 @@ first — a cached green on mutated code reads exactly like a passing guard.
 result.** Once is not a measurement: the first run can come off a cache, off a
 half-written file, or off a sibling's mutant. Two agreeing runs with the mutated
 line printed beside them is the cheapest evidence that the colour belongs to the
-change you made. (Adopted 2026-08-07, from one measured run.)
+change you made. (Adopted by the human 2026-08-07, from the 203-206 run.)
 
 **A gate that mutates source while a sibling may be running does it in an
 isolated copy of the commit** — `git clone --shared`, or a scratchpad copy of the
 file. The paragraph below is this rule applied to your own tree; the general form
 is that isolation is decided by whether another writer could exist, not by how
-careful you intend to be. (Adopted 2026-08-07.)
+careful you intend to be. (Adopted by the human 2026-08-07.)
 
 **Drill on scratchpad copies, never in the run's tree.** Copy the file, mutate
 the copy, run it under a scratchpad test config. A mutation in the shared tree
-makes you a second writer beside the review gate: on one issue the tree sat
+makes you a second writer beside the review gate: on issue 186 the tree sat
 reverted to the pre-fix file for two minutes mid-gate, and a backup taken
-inside that window captured the mutant (skills/run-issues/decisions.md,
-"Post-run revisions (2026-08-02)"). If a
-drill genuinely cannot run off a copy, say so in your verdict before you mutate, restore
+inside that window captured the mutant (decisions.md). If a drill genuinely
+cannot run off a copy, say so in your verdict before you mutate, restore
 byte-for-byte after, and record the file's checksum at gate open and gate
 close. Record those two checksums for every file you graded even when you
 never wrote — the runner re-checks them at staging time.
 
+**Your copy sits where no server is serving, and your checksum files stay in the
+run's worktree.** Put the copy outside every directory a dev server compiles from,
+and check before you mutate: on the 395b run a live server compiled two mutants
+out of the run's shared worktree and served broken code to whatever else read that
+tree. Write every checksum file under the run's worktree. A gate that wrote twenty
+of them into the main checkout stopped `git merge --ff-only` outright. (Both
+adopted by the human 2026-08-23.)
+
+**Your close list carries every path your open list carried.** Where a path's hash
+changed, record the new hash beside it and say in the verdict what you wrote and
+why. A gate that drops a path at close cannot show it changed only what it was
+licensed to change: the 403 attempt-2 review gate listed the issue file at open,
+wrote its verdict into it, then deleted the line. (Adopted by the human 2026-08-23.)
+
 **Your copy is private, and its path says who you are.** Use a whole-tree copy
 under a directory naming this issue and your role — `verify-<issue>/` — never a
 generic name like `drill`. The review gate is working at the same moment and
-will reach for the same obvious names. On one issue both gates chose `drill`,
-and one gate's `rm -rf` destroyed the other's copy mid-run. On a later issue
-both then collided inside the run's own tree, where one gate read the other's live mutant
+will reach for the same obvious names. On issue 210 both gates chose `drill`,
+and one gate's `rm -rf` destroyed the other's copy mid-run. On 211 both then
+collided inside the run's own tree, where one gate read the other's live mutant
 — a case the open-and-close checksums cannot detect, because the file is back
 before either stamp is taken.
 
@@ -121,8 +133,12 @@ is one file per feature, in the main checkout, shared with `/parallel-hunt`; the
 runner's prompt gives you the path. Append one row:
 `ID | one-line summary | audience | severity | status | owner-notes`.
 
-- **`audience`** is `operator`, `tester` or `agent` — who can see this fault at all.
-  Promotion decides on this field, so choose it deliberately.
+- **`audience`** is `operator` or `tester` — who can see this fault at all.
+  Promotion decides on this field, so choose it deliberately. **A finding only an
+  agent can see is a note, not a register row: write it in your verdict, which is
+  the artefact this gate owns. It never enters the register.** (Ruled by the human 2026-08-29,
+  ticket 33: of 98 open `agent` rows, 82 were never read by anything after their
+  writing run, and promotion refuses `agent` at every severity anyway.)
 - **`owner-notes` holds a status word and a link to the finding's bug file. Nothing
   else, and 200 characters hard.** Prose in that cell is what made an earlier
   register unreadable, and no agent is allowed to read a verdict there anyway.
@@ -150,3 +166,24 @@ your own heading — `## Verify gate` — in the issue file and as your own line
 `merge-briefing.md`. Append only. Never edit, reflow or tidy a section that is not
 yours, and never assume the review gate's verdict is present yet: it may land
 before or after you, and it is not an input to your judgement.
+
+**THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** Every path the
+spawn prompt hands you — the ledger, the register, the issue file, the merge
+briefing — names the copy in the MAIN CHECKOUT. The run's worktree under
+`.claude/worktrees/` holds a tracked twin of each, checked out at the fork point
+and stale from that moment. Both files exist, both are readable, and nothing in
+either says which one anybody else is using.
+
+Write to the path you were given, character for character. Before you write,
+check the path does not contain `/.claude/worktrees/`; if it does, you have
+resolved a relative path against the wrong root. Before you GRADE an issue file,
+check you are reading the live copy: a stale twin carries no implementation
+record and no gate section, so it reads exactly like an issue nobody has worked.
+
+Issue 412's critical review gate on run `batch-34455f` wrote its verdict, five
+register rows and two briefing items into the worktree copies while the
+implementer and the verify gate wrote the main-checkout ones. It then graded
+412 against a file with no implementation record in it and filed a finding
+saying the record was missing, when it was present at line 682 of the live copy.
+The finding had to be annulled and the records relocated by hand. (Adopted by
+the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
