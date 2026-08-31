@@ -229,6 +229,28 @@ issue over 90 minutes. Then the branch head SHA, and one line for their answer.
 Name what the run could not tell them: issues that shipped on defaults, with the
 pending question each; anything blocked and why; anything minted.
 
+**Then the cost block, per repo holding a run at `awaiting-merge`.** Read
+`.scratch/workflow-audit/run-costs.md`, print this run's row and the row above it, and
+add one line naming which columns moved. That table is written by `run_costs.py` at
+every finale and says on its own face what it is for: compare a row against the row
+above it to read what a skill change or a version change did. Until 2026-09-01 nothing
+outside the `run-issues` skill opened it, so the finale printed the cost at line 1790 of
+a 1963-line briefing and the human never found it. A second print in the same document
+was never the fix; the comparison is.
+
+**Invent no alarm threshold.** Across the table's 13 rows the `Per issue` column ran
+0.96M to 2.45M, and consecutive runs swung by as much as 75 per cent (1.22M to 2.14M,
+both on 2026-08-23). A 25 per cent flag would fire on seven of the twelve transitions and
+teach them to ignore it. State the observed range beside the figure and let them judge,
+which is what the table was built for.
+
+Two columns are tighter and worth naming when they leave their range. `Orchestrator` has
+run 9 to 31 per cent across all 13 rows. `Idle` has **no baseline** — two readings, 12
+and 17 per cent — so say that plainly rather than reading a third as a trend.
+
+Three lines and a row pair. This is not a fourth section, and the brief still has thirty
+minutes.
+
 ### 1b. Promotions — one screen
 
 `/parallel-hunt` and `/run-issues` both end with a promotion phase, and it is the

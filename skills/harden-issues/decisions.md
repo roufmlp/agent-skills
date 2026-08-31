@@ -195,6 +195,110 @@ records the `[irreversible]` blast-radius refusal working as written; the
 attacker brief's looser "expensive to undo" wording was tightened to the routing
 table's four classes so the wrong marks stop arriving.
 
+## The incident anecdotes moved out of SKILL.md (2026-09-01)
+
+The human asked for both skills to be as slim as possible on 2026-08-29, and
+the reason is measured rather than aesthetic: the 2026-08-26 timing reading puts a gate at
+78% of its wall clock reading and writing rather than in tool calls, so every
+line in a loaded brief is paid on every spawn that reads it, for the life of the
+skill.
+
+The rules, their dates and their adoption stamps stayed in SKILL.md. What
+follows is the evidence each one was adopted on. `test_skill_structure.py`
+beside this file is what refuses a move that carries a rule out with its story,
+and what refuses a paste-back.
+
+Two stories are not repeated here because they already had a home:
+`run-issues/decisions.md` holds the 2026-08-09 prohibition's three faults and
+the two adversarial gates that died at the 2026-08-15 weekly usage limit. This
+skill had been carrying a second full copy of both, which is the duplication the
+ticket is named for. The Fable pin's history is the same case, and its home is
+the 2026-08-02 section above.
+
+### Class 3, R1: the sanitiser that passed 69 tests and broke the confirm route
+
+Adopted by the human 2026-08-18, from the `cab74e` run. Issue 262b moved the auth
+failure sanitiser into a shared module so `/auth/confirm` could use it. Its
+criterion graded the move by the surviving tests. The implementer replaced a
+literal sanitiser with a pattern built per character, and all 69 tests passed.
+The critical review gate then drove two live defects on the unauthenticated
+confirm route: a needle of about 1000 characters built a regex V8 refuses to
+compile, so the route returned HTTP 500 **and logged nothing**, because its own
+`catch` called the throwing function again; and the separator tolerance let a
+crafted `token_hash` delete the real message out of the log line. Strike 1, one
+retry, 89 minutes against an estimate of 30 to 45. The 21-item verify pass
+missed both, and the gate said why: a permissive-regex swap satisfies "the
+existing tests keep passing" while changing behaviour.
+
+### Class 4, D4: ten guards green while proving nothing, and why not mutation testing
+
+Adopted by the human 2026-08-19, from the `e047ba` finale, queue item D4. **Ten
+guards in that batch were green while proving nothing**, and `docs/patterns.md`
+entry 6 already forbade exactly that, written four days earlier after the
+328-332 run lost four correction rounds to it. Every implementer followed it and
+every drill passed. Issue 333a drilled its leak guard against a fixture built
+from the same wrong idea of Sentry's payload that the guard held, so 54 tests
+could not see it. In all ten the catch came from an adversarial gate designing
+its own drill.
+
+**Mutation testing was weighed as the mechanical alternative and refused the
+same day**, and the refusal is recorded so nobody re-proposes it: it runs the
+suite per mutant, and against 6,385 tests it would have been the most expensive
+rule in the system, per run, for ever.
+
+### Class 4: evidence addressed to a party that cannot write it
+
+Adopted by the human 2026-08-10 for the issue file, from the 301-307 finale. Issue
+305's criteria 3 and 8 asked for mutation drives "recorded in the issue's
+notes", the spawn brief forbade it, the drives went into test doc comments, and
+the review gate filed the contradiction as `rg305-06`.
+
+**Widened by the human 2026-08-16 to any closed home, after the `dc132b` run.** Five
+of its nine issues — 345, 355, 288, 292 and 293 — carried a clause aimed at the
+implementer, and the commit-message half fell outside the 2026-08-10 wording.
+Issue 288's review gate rejected the work partly because those clauses were
+unmet, and the runner had to annul the ground. One annulled rejection and one
+wasted gate round, in one batch.
+
+### Class 11: the five criteria resets that shared one shape
+
+Adopted by the human 2026-08-29, from the ticket 33 audit. Five criteria resets
+shared this shape — 296, 327, 332, 335, 419b — every one on a stamped file, each
+costing two rejected attempts before the strike-2 check found the spec at fault.
+It was the one criteria-fault shape no class covered.
+
+### The unmeasured `[irreversible]` mark that held a stamp
+
+Adopted by the human 2026-08-29, on the ticket 33 audit. Issue 419b's question 6 was
+marked on the premise that it "decides the shape of rows a person types on the
+pilot project"; the pilot holds 151 supplier rows with 151 distinct dedupe keys,
+so no typed row was at risk, and one query would have killed the question that
+instead held the stamp and cost three agents and four exchanges.
+
+### The measurement behind the graded-home refusal
+
+Adopted by the human 2026-08-28, after run `99b-99e-6e11ba`. Issue 99b's rule for
+how much of a supplier's message may advance a purchase order was written once,
+in `## Questions for the human, round two`, a section no gate grades. The file an
+implementer read at spawn was 1417 lines, of which 368 were graded, and the rule
+was in none of them. Two implementers filled the silence with something wider.
+Both were rejected by both gates, and both rejections were annulled when the
+strike-2 pass found the criteria at fault rather than the code. **Two implementer
+spawns and four gate spawns, bought by a section-heading choice.**
+
+### The citation repair cost that produced the quoted-phrase rule
+
+Ruled by the human on 2026-08-26 in the daily brief, after one run broke 228
+citations across 49 open issue files and he named the repair cost as time he was
+losing personally. Issue 406, the guard that makes the rule stick, read
+`needs-harden` on the day the rule was written.
+
+### The pass that ran ahead of the no-minting rule
+
+The rule was already written and the practice ran ahead of it anyway: one pass
+cleared two issues out of `needs-harden` and minted two more into it, leaving
+the queue exactly where it started.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel, taken by the human: three personas

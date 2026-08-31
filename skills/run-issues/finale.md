@@ -27,7 +27,7 @@ jump, a reversal and a ledger with no state. **This exists because the finale wr
 `awaiting-merge` with promotion and the board still unrun in three consecutive runs** —
 `dc132b`, `cab74e` and `fd4fa2`, the last at 15:10 on 2026-08-20, where the runner put the
 state back by hand. Promotion is what turns register rows into issue files, so a resume
-that skips it loses them. The human approved the refusal on 2026-08-21. Promotion is safe to re-enter — it deletes each row as it
+that skips it loses them. the human approved the refusal on 2026-08-21. Promotion is safe to re-enter — it deletes each row as it
 resolves it — and the board render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
@@ -102,6 +102,10 @@ resolves it — and the board render is safe to repeat:
    it can only tell that the reader was handed something runnable.
 2. **Judgment.** Spawn `run-issues-finale`. Its verdicts plus `merge-briefing.md`
    become the merge briefing.
+
+   **The one-screen block that opens the briefing is written at step 4, not here.**
+   It carries the wall clock, and the wall clock does not exist until the measurement
+   runs. Writing it early means writing it with a hole in it.
 
    **Every command the briefing hands a human runs once first, against the state
    it will actually meet.** A pre-migration check runs before the migration, on
@@ -190,45 +194,7 @@ resolves it — and the board render is safe to repeat:
    in it. The runner spawns, gets two lists back, and appends them to
    `merge-briefing.md`, one line each. `/daily-brief` carries both to the human and they
    hold the veto over either direction.
-4. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
-   human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
-   what and one of why each, ticks persisted in localStorage. Keep the existing
-   styling; send it with SendUserFile. **A fresh subagent renders it, spawned with
-   `model: "haiku"` named explicitly on the Agent call** — from `merge-briefing.md`
-   plus the old board, never the runner itself, whose context is at its most
-   expensive by run end, and the old board's bytes never enter the runner.
-   Naming the model is not optional and "cheap" is not a model: an unnamed spawn
-   inherits the session model, so this step was paying the top tier to convert one
-   markdown file into HTML on the largest input in the pipeline (283 KB, measured
-   2026-08-06). There is no judgement in the render — the briefing already decided
-   what the board says. `merge-briefing.md` stays the source of truth,
-   and `/daily-brief` reads that file, never the board.
-
-   **This is the one spawn `SKILL.md`'s "never pass a `model:` value" rule does not
-   cover, and the two do not conflict.** That rule is scoped to roles that HAVE an
-   agent file, because there a spawn-time value silently defeats the file's
-   `model: inherit`. The board renderer has no agent file, so there is nothing to
-   defeat and nothing to inherit from but the session. (Scoped by the human on
-   2026-08-22, answering C7 of the skills audit.)
-5. **Recommend follow-ups; start none.** One exception is mandatory:
-   - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at
-     `awaiting-merge` and the brief carries it to the human with the branch head SHA
-     they are approving. When they write `merge`, that session merges, rewrites the
-     `unmerged` statuses, deploys, and drives a READ-ONLY walk of the **deployed**
-     site on real data before the human walk: every list page and its filters and
-     search, every detail page, the send and receive surfaces as far as read-only
-     allows. Read-only means no permission risk, so there is no reason to skip it.
-     **The walk fires on ANY merge of a run branch, whoever merged** — a merge
-     outside the `/daily-brief` path does not skip it; the next brief session
-     runs it and reports what it found.
-   - Recommended after it: a `/parallel-hunt` round on the live system. It hunts
-     the seams between issues and against live external systems — the class of bug
-     per-issue gates cannot see. Its own promotion phase decides which of its
-     findings become the next run's issues.
-   - Only if the finale's findings are structural: an architecture-improvement
-     session on a clean tree.
-
-6. **Measure this run, and append its row.** Run
+4. **Measure this run, and append its row.** Run
 
    ```
    python3 ~/.claude/skills/run-issues/run_costs.py --run <run-name> --issues <count> \
@@ -294,7 +260,7 @@ resolves it — and the board render is safe to repeat:
 
    **A PROMPT row is the finding.** It names a command class that has no rule in
    `.claude/settings.json`, and a rule there means it can never be asked again.
-   The human asked for this measurement on 2026-08-30 because until then the only
+   the human asked for this measurement on 2026-08-30 because until then the only
    way to see a lost night was for somebody to go and count afterwards.
 
    **The `--note` is the only part that needs a person, and it is the part that makes
@@ -316,3 +282,156 @@ resolves it — and the board render is safe to repeat:
    `run_timings.py`, built on 2026-08-26 when a fourteen-hour run could not say which step
    ate the clock, was named in no skill file at all and had only ever been run by hand.
    Both readings existed and neither was wired to anything.
+
+   **Then write `## The run in one screen` at the very top of the briefing, above
+   every other section.** This is the last thing written before the board renders,
+   because it is the first moment every figure in it exists.
+
+   Six things are read after a run. On run `batch-88624c` three of them sat past line
+   1700 of a 1963-line file and the human found none of them; the second time that happened
+   it cost four cost measurements they had commissioned the day before. The block puts all
+   six above line 40.
+
+   ```
+   ## The run in one screen
+
+   Run `batch-88624c`, 10 issues, 8.48 h. Nothing is merged and nothing is deployed.
+
+   | What                | Count | Detail lives at             |
+   |---------------------|-------|-----------------------------|
+   | Shipped, unmerged   |     8 | ## What shipped             |
+   | Did NOT ship        |     2 | ## Skipped or blocked       |
+   | Migrations minted   |     5 | ## Migrations minted        |
+   | Issues minted       |     3 | ## Promotion                |
+   | Register rows left  |     0 | ## Promotion                |
+   | Waiting on you      |     6 | ## Actions waiting on the human |
+   | Forks to decide     |     4 | ## Decide                   |
+   | Wall clock, hours   |  8.48 | ## What this run cost       |
+   | Idle, per cent      |    17 | ## What this run cost       |
+
+   Shipped:      201, 224, 224b, 224c, 339, 153, 225, 269
+   Did not ship: 160, 160b   - both wait on 161, which is unbuilt
+   Minted:       500, 501, 502
+   Register:     45 rows resolved - 3 promoted, 5 fixed, 37 refused. None left.
+   ```
+
+   **It adds no new measurement.** Every value comes from a section the briefing
+   already writes, and each row names the HEADING that holds the detail rather than a
+   line number, because that file grew from 1830 lines to 1963 in a single day. A
+   finale that has to compute something to fill this block is the wrong build, and
+   that cost would land on every run.
+
+   **Every comparable figure is a table row, the two cost ones included.** The board
+   panel copies this table and `check_run_picture.py` compares the two, and it can
+   only compare what the table holds.
+
+   **A run that shipped nothing writes an honest block, never a short one.** Zero is a
+   row reading 0 and a sentence saying nothing shipped. A blank panel reads as a render
+   that failed.
+
+   **`/daily-brief` reads this block and never the board**, so the block must never be
+   thinned on the grounds that the panel shows the same thing. The duplication is
+   deliberate: the two are read at different moments, and a brief may not run before
+   the human merges.
+
+5. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
+   human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
+   what and one of why each, ticks persisted in localStorage, **and the run panel
+   described below**. Keep the existing styling; send it with SendUserFile. **A fresh
+   subagent renders it, spawned with `model: "fable"` named explicitly on the Agent
+   call** — from `merge-briefing.md` plus the old board, never the runner itself, whose
+   context is at its most expensive by run end, and the old board's bytes never enter
+   the runner.
+   Naming the model is not optional and "cheap" is not a model: an unnamed spawn
+   inherits the session model, so this step was paying the top tier to convert one
+   markdown file into HTML on the largest input in the pipeline (283 KB, measured
+   2026-08-06). `merge-briefing.md` stays the source of truth,
+   and `/daily-brief` reads that file, never the board.
+
+   **This is the one spawn `SKILL.md`'s "never pass a `model:` value" rule does not
+   cover, and the two do not conflict.** That rule is scoped to roles that HAVE an
+   agent file, because there a spawn-time value silently defeats the file's
+   `model: inherit`. The board renderer has no agent file, so there is nothing to
+   defeat and nothing to inherit from but the session. (Scoped by the human on
+   2026-08-22, answering C7 of the skills audit.)
+
+   **The panel goes at the top, headed "The run in one screen".** the human named this
+   surface themselves: the board is the only artefact a run produces that renders, and it
+   is the one they open after every run. It carries the counts as figures, one table of
+   issues by state, one table of the register and cost numbers, and a drawn chain where
+   the run has a blocked chain. Where it has none, no chain is drawn. Zero shipped reads
+   as a red figure and a sentence saying nothing shipped, never as a blank panel.
+
+   Every figure carries `data-figure` on the element whose own text is the number, and
+   the key is the block's row label slugged — `Shipped, unmerged` becomes
+   `shipped-unmerged`:
+
+   ```
+   <div class="stat good"><div class="n" data-figure="shipped-unmerged">8</div>
+     <div class="l">Shipped</div></div>
+   ```
+
+   **The panel transcribes. It never counts.** Every figure is copied out of the
+   briefing's `## The run in one screen` block, which is the single place a figure is
+   derived. The renderer used to read all 1963 lines, count the bold issue headings
+   under `## What shipped`, notice which of them also sat under `## Skipped or blocked`
+   and subtract. That is arithmetic, and arithmetic in a render is judgement. The
+   diagram draws the chain the block states in words, and draws nothing where the block
+   states none.
+
+   **Then run the guard, and do not ship a board it refuses:**
+
+   ```
+   python3 ~/.claude/skills/run-issues/check_run_picture.py \
+       --briefing .scratch/<feature>/merge-briefing.md \
+       --board .scratch/<feature>/board.html
+   ```
+
+   It reads the figures from both files and compares them. A disagreement exits 1 and
+   the finale stops; exit 2 means it could read neither the block nor a panel, which is
+   also a stop. **This is the only part of the change that catches a false number at
+   any model.** It catches numbers alone: a wrong sentence in a `why` line is not a
+   figure and passes, so never cite this guard as cover for the prose.
+
+   **Why Fable, and why the model line had to be settled here.** The old sentence
+   justifying Haiku read "there is no judgement in the render". A panel carrying
+   derived counts and a conditional diagram breaks that premise, so the licence would
+   have expired the moment the panel shipped. The rule above restores it: with the
+   transcription rule in force the render has no judgement in it again, and the guard
+   refuses a board that finds some.
+
+   Two facts settle the choice. **Cost is not the constraint.** The 2026-08-06 figure
+   that chose Haiku cites a 283 KB input; measured 2026-09-01, the render reads
+   `merge-briefing.md` at 125 KB plus the old board at 12.5 KB, roughly 35,000 tokens in
+   and 3,000 out. Against a run weighing 56.9M to 88.9M weighted tokens that is under one
+   tenth of one per cent, and one redo costs more than the model saving. **And effort
+   cannot be named on an Agent spawn** — the tool takes a model and no effort argument,
+   so `fable medium` is unbuildable and effort inherits the session.
+
+   The evidence for Fable on this class of work is
+   `.scratch/workflow-audit/citation-recheck-fable.md`, taken 2026-08-16: read a source,
+   report it faithfully, invent nothing. Of 107 citations it returned 95 correct, 2 off
+   by a line number, and 6 mismatches of which 4 were drift that happened after the
+   source was written. Two substantive errors in 107. **State both limits wherever this
+   is cited: it measured a checking task producing a report rather than an HTML render,
+   and it is one reading rather than a trend.** Without the transcription rule and the
+   guard the render is arithmetic, which Fable was not measured on, and Opus is the
+   safer buy.
+
+6. **Recommend follow-ups; start none.** One exception is mandatory:
+   - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at
+     `awaiting-merge` and the brief carries it to the human with the branch head SHA
+     they are approving. When they write `merge`, that session merges, rewrites the
+     `unmerged` statuses, deploys, and drives a READ-ONLY walk of the **deployed**
+     site on real data before the human walk: every list page and its filters and
+     search, every detail page, the send and receive surfaces as far as read-only
+     allows. Read-only means no permission risk, so there is no reason to skip it.
+     **The walk fires on ANY merge of a run branch, whoever merged** — a merge
+     outside the `/daily-brief` path does not skip it; the next brief session
+     runs it and reports what it found.
+   - Recommended after it: a `/parallel-hunt` round on the live system. It hunts
+     the seams between issues and against live external systems — the class of bug
+     per-issue gates cannot see. Its own promotion phase decides which of its
+     findings become the next run's issues.
+   - Only if the finale's findings are structural: an architecture-improvement
+     session on a clean tree.

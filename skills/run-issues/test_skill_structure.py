@@ -106,6 +106,13 @@ SKILL_MARKS = [
     "never pass a `model:` value on a spawn",
     "A green produced without dependencies on disk is",
     "It is a floor, not a definition.",
+    # The permission-floor block. The mechanism sentences are the rule: they
+    # say WHY the check reads a tracked allow rule rather than dry-running,
+    # and a move that took them with the cost figures would leave a check
+    # nobody could reason about.
+    "a worktree freezes it on the day it was cut",
+    "A class verified at launch is not a class verified",
+    "The remedy is the human's hands",
 ]
 
 DECISIONS_MARKS = [
@@ -129,6 +136,9 @@ DECISIONS_MARKS = [
     "it moved to `inherit` on 2026-08-02",
     "resolved off a global install",
     "task counter reading 6h 00m 05s",
+    # The permission floor's cost, moved to decisions.md on 2026-09-01.
+    "the single largest step of a 14.76 hour run",
+    "dry-run `npx vitest` successfully at 04:00",
 ]
 
 EFFORT_ROLES = [

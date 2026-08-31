@@ -46,14 +46,10 @@ itself, not a narrow question near it.
 ## Fan-out
 
 **A prohibition in a brief names the SYSTEM, not the verb.** Every "do not" carries the
-forbidden thing AND the permitted one, with an absolute path wherever a path exists. Three
-faults in the 2026-08-09 `/run-issues` batch shared one shape: "QA is the only WRITABLE
-database" constrained the operation and left production reachable, so a verify gate read
-production with a service-role key; "a probe script needs a directory holding `node_modules`"
-named no home, so three files landed at the shared worktree root; and a brief naming no
-register path sent two gates to the worktree copy instead of the main checkout's. A brief
+forbidden thing AND the permitted one, with an absolute path wherever a path exists. A brief
 that constrains the ACT while leaving the PLACE unnamed gets a different answer from every
-agent. Adopted by the human, 2026-08-09.
+agent. Adopted by the human, 2026-08-09; `run-issues/decisions.md` holds the three faults it
+was adopted on.
 
 Each role is a registered agent type carrying its own brief, model and effort.
 Spawn by `subagent_type`; the pass never pastes a brief.
@@ -84,16 +80,13 @@ and name it as unattacked. **An issue nobody attacked is never stamped
 `ready-for-agent`**: the stamp is what puts it in the next run's scope, so a
 silent gap here ships exactly the bad spec this pass exists to catch. A missing
 file also narrows the seam agent's input without saying so.
-
-Two adversarial gates died at the weekly usage limit during the 2026-08-15
-workflow audit and wrote nothing at all. Nothing mechanical noticed either time.
+`run-issues/decisions.md` holds the two gates that died silently and made this a
+check rather than a reminder.
 
 **Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
-the tier the session was launched on. Fable was pinned here once, for blind-spot
-hunting; the pin is gone because it hid the choice in an agent file and it was
-credit-gated. To harden on Fable, launch the session on Fable. Effort stays
-`high`, not `max`: the checklist is enumeration against a file, and enumeration is
-recall rather than chained reasoning.
+the tier the session was launched on. To harden on Fable, launch the session on
+Fable. Effort stays `high`, not `max`: the checklist is enumeration against a
+file, and enumeration is recall rather than chained reasoning.
 
 **Print one launch line before spawn #1, on every invocation** — the resolved
 session model, the issues in scope, and how many attackers are about to spawn.
@@ -152,18 +145,8 @@ sharpened (with evidence), question (for the human), or clean.
    than against the rule the moved code holds. Name the property the code must
    still hold — "a caller-supplied needle deletes only what it literally matches" —
    and name a hostile input and an over-long input the criterion covers. (Adopted
-   by the human 2026-08-18 as R1, from the `cab74e` run. Issue 262b moved the auth
-   failure sanitiser into a shared module so `/auth/confirm` could use it. Its
-   criterion graded the move by the surviving tests. The implementer replaced a
-   literal sanitiser with a pattern built per character, and all 69 tests passed.
-   The critical review gate then drove two live defects on the unauthenticated
-   confirm route: a needle of about 1000 characters built a regex V8 refuses to
-   compile, so the route returned HTTP 500 **and logged nothing**, because its own
-   `catch` called the throwing function again; and the separator tolerance let a
-   crafted `token_hash` delete the real message out of the log line. Strike 1, one
-   retry, 89 minutes against an estimate of 30 to 45. The 21-item verify pass
-   missed both, and the gate said why: a permissive-regex swap satisfies "the
-   existing tests keep passing" while changing behaviour.)
+   by the human 2026-08-18 as R1, from the `cab74e` run; `decisions.md` holds the
+   incident.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap.
@@ -187,16 +170,8 @@ sharpened (with evidence), question (for the human), or clean.
    This is an authoring-time refusal and it costs no run time. Do not answer this
    class by asking an implementer to check their own drill harder — that is the
    reminder that already failed. (Adopted by the human 2026-08-19, from the `e047ba`
-   finale, queue item D4. **Ten guards in that batch were green while proving
-   nothing**, and `docs/patterns.md` entry 6 already forbade exactly that, written
-   four days earlier after the 328-332 run lost four correction rounds to it.
-   Every implementer followed it and every drill passed. Issue 333a drilled its
-   leak guard against a fixture built from the same wrong idea of Sentry's payload
-   that the guard held, so 54 tests could not see it. In all ten the catch came
-   from an adversarial gate designing its own drill. Mutation testing was weighed
-   as the mechanical alternative and refused the same day: it runs the suite per
-   mutant, and against 6,385 tests it would have been the most expensive rule in
-   the system, per run, for ever.)
+   finale, queue item D4; `decisions.md` holds the ten green guards and the
+   refusal of mutation testing as the mechanical alternative.)
 
    **A criterion may never ask for evidence to land somewhere the party it names
    cannot write.** Read the clause, name its writer, and check that writer's
@@ -208,16 +183,9 @@ sharpened (with evidence), question (for the human), or clean.
    for a verdict is the gate.
 
    The check is mechanical, because the clause names its own writer. Refuse it
-   here, at authoring time. (Adopted by the human 2026-08-10 for the issue file, from
-   the 301-307 finale: issue 305's criteria 3 and 8 asked for mutation drives
-   "recorded in the issue's notes", the spawn brief forbade it, the drives went
-   into test doc comments, and the review gate filed the contradiction as
-   `rg305-06`. **Widened by the human 2026-08-16 to any closed home, after the
-   `dc132b` run:** five of its nine issues — 345, 355, 288, 292 and 293 — carried
-   a clause aimed at the implementer, and the commit-message half fell outside
-   the 2026-08-10 wording. Issue 288's review gate rejected the work partly
-   because those clauses were unmet, and the runner had to annul the ground. One
-   annulled rejection and one wasted gate round, in one batch.)
+   here, at authoring time. (Adopted by the human 2026-08-10 for the issue file,
+   **widened by them 2026-08-16 to any closed home**; `decisions.md` holds both
+   incidents.)
 
    **A constraint taken from measured data is labelled as one.** Where a criterion
    or an invariant fixes a number because that is what today's input holds, write
@@ -285,10 +253,8 @@ sharpened (with evidence), question (for the human), or clean.
     both. A criterion with no satisfying input, or a pair that cannot both hold,
     is refused at authoring time. Attack this hardest on a freshly cut issue — a
     cut strands criteria written against the whole. (Adopted by the human 2026-08-29,
-    from the ticket 33 audit: five criteria resets shared this shape — 296, 327,
-    332, 335, 419b — every one on a stamped file, each costing two rejected
-    attempts before the strike-2 check found the spec at fault. It was the one
-    criteria-fault shape no class covered.)
+    from the ticket 33 audit; `decisions.md` holds the five criteria resets it
+    was measured on.)
 
 The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only
@@ -318,12 +284,12 @@ whenever anything above it grows. Do not convert the citations already written �
 spend a round on it. Repair a `moved` row in place as text, so the corpus drains
 as issues close.
 
-Ruled by the human on 2026-08-26 in the daily brief, after one run broke 228
-citations across 49 open issue files and they named the repair cost as time they were
-losing personally. **This rule alone will not hold, and they know it**: a
+Ruled by the human on 2026-08-26 in the daily brief; `decisions.md` holds what
+that run broke and the cost they named. **This rule alone will not hold, and they
+know it**: a
 convention nothing refuses is the remember class their own rules reject. Issue 406,
 "nothing refuses a new line number citation in a source comment", is the guard
-that makes it stick, and it is still `needs-harden`.
+that makes it stick.
 
 **This pass is where the repair happens, by the human's ruling of 2026-08-15.** A run
 may not write an issue file, so `/run-issues` reports these and leaves them; the
@@ -346,13 +312,10 @@ re-checking its number can read `holds` and still be wrong.
   radius, or the mark is refused at authoring time** and the question takes a
   recorded default like any other. The mark is what exempts a question from
   defaulting, so an unmeasured mark buys an unattended stall on nobody's evidence.
-  (Adopted by the human 2026-08-29, on the ticket 33 audit. The incident: 419b's
-  question 6 was marked on the premise that it "decides the shape of rows a person
-  types on the pilot project"; the pilot holds 151 supplier rows with 151 distinct
-  dedupe keys, so no typed row was at risk, and one query would have killed the
-  question that instead held the stamp and cost three agents and four exchanges.
-  `questionrules.md` reserves the mark for four classes, and its routing table says
-  which; a question outside those four classes never takes the mark at all.)
+  (Adopted by the human 2026-08-29, on the ticket 33 audit; `decisions.md` holds
+  the incident. `questionrules.md` reserves the mark for four classes, and its
+  routing table says which; a question outside those four classes never takes
+  the mark at all.)
 - Questions go to the human: into the `/to-issues` quiz, or as the standalone numbered
   list. Apply their answers to the files.
 - Then stamp the issue, one line under `Status:`:
@@ -376,14 +339,8 @@ judgement, and a search would either miss it or fire on every question. The pass
 already enumerates its defaults, so this adds a column to work it does anyway, and
 it leaves a record a later reader can audit: for each default, where its rule lives.
 
-**The measurement.** Issue 99b's rule for how much of a supplier's message may
-advance a purchase order was written once, in `## Questions for the human, round two`,
-a section no gate grades. The file an implementer read at spawn was 1417 lines, of
-which 368 were graded, and the rule was in none of them. Two implementers filled
-the silence with something wider. Both were rejected by both gates, and both
-rejections were annulled when the strike-2 pass found the criteria at fault rather
-than the code. **Two implementer spawns and four gate spawns, bought by a
-section-heading choice.** Adopted by the human 2026-08-28, after run `99b-99e-6e11ba`.
+Adopted by the human 2026-08-28, after run `99b-99e-6e11ba`; `decisions.md` holds
+the measurement it was adopted on.
 
 **An open question never removes an issue from a run.** Where the human has not
 answered, take the recommended default, write it into the file as a default rather
@@ -459,12 +416,11 @@ Issue trackers are per-project (this repo: `.scratch/<feature>/issues/`). The pa
 edits issue files only — never code, never the tracker board, never another
 skill's state.
 
-**The pass never mints.** It sharpens the issues it was given and creates none. This
-rule was already written and the practice ran ahead of it anyway: one pass cleared
-two issues out of `needs-harden` and minted two more into it, leaving the queue
-exactly where it started. Where the pass finds work that belongs in no issue in its
-batch — a gap between two of them, a surface nobody owns — it writes **a register
-row**, the one specified in `parallel-hunt/SKILL.md`, into the project's
+**The pass never mints.** It sharpens the issues it was given and creates none;
+`decisions.md` holds the pass that ran ahead of this rule. Where the pass finds
+work that belongs in no issue in its batch — a gap between two of them, a surface
+nobody owns — it writes **a register row**, the one specified in
+`parallel-hunt/SKILL.md`, into the project's
 main-checkout register, never a worktree copy, carrying an `audience` of
 `operator`, `tester` or `agent`, a severity, and `owner-notes` inside 200
 characters. Promotion turns the rows that earn it into issues, at the end of the

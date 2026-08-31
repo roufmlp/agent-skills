@@ -1101,20 +1101,17 @@ procedure is a script and not a judgement.
   `.claude/settings.json`, because the auto-mode classifier refuses every write
   to it. Give them the exact lines the check prints and wait.
 
-  **Run `414a-483-286335`, 2026-08-30, is the instance, and it cost 2 h 34 m** —
-  the single largest step of a 14.76 hour run, spent on a 25-line test while
-  the human slept. `Bash(npx vitest *)` sat in the MAIN checkout's untracked
+  **Run `414a-483-286335`, 2026-08-30, is the instance; `decisions.md` holds what
+  it cost.** `Bash(npx vitest *)` sat in the MAIN checkout's untracked
   `.claude/settings.local.json` and not in the run worktree's copy. That file is
   gitignored (`.gitignore:31`), so a worktree freezes it on the day it was cut.
 
-  **This does not dry-run anything, deliberately.** That run's pre-flight DID
-  dry-run `npx vitest` successfully at 04:00 and the classifier still refused
-  the same class at 07:22. A class verified at launch is not a class verified
-  for the run, because the dry run never consulted the thing that refuses. A
+  **This does not dry-run anything, deliberately.** A class verified at launch
+  is not a class verified for the run, because the dry run never consulted the
+  thing that refuses. A
   tracked allow rule is checked BEFORE the classifier and git carries it into
-  every worktree, so that is what this reads. Replayed against that run's real
-  launch state, it refuses all eight classes and names `npx vitest` first.
-  (Built 2026-08-30 on the human's instruction, closing `rn99f-03`.)
+  every worktree, so that is what this reads. (Built 2026-08-30 on the human's
+  instruction, closing `rn99f-03`; `decisions.md` holds the replay.)
 - **Creating the worktree includes installing dependencies and making the
   `.env.local` symlink. If either fails, the runner refuses to start.** Not a
   check to remember at pre-flight — part of what "the worktree is ready" means.

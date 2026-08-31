@@ -1469,3 +1469,18 @@ Run `batch-88624c` was the first run to take all four measurements the human com
    silence its own empty-table refusal exists to prevent. That time is now optional. Git
    supplies the time this check actually compares; the ledger stamp was only quoted back
    in the refusal. Tests: `TheCommitClockIsOptional` in `test_check_commit_order.py`.
+
+## The permission floor: an allow rule the run worktree could not see (2026-08-30)
+
+Moved out of SKILL.md on 2026-09-01, in a pass that took the incident stories out
+of both hot skills. The rule and the mechanism stay loaded there; this is what the
+rule cost.
+
+Run `414a-483-286335`, 2026-08-30, is the instance, and it cost 2 h 34 m — the
+single largest step of a 14.76 hour run, spent on a 25-line test while the human
+slept. That run's pre-flight DID dry-run `npx vitest` successfully at 04:00 and
+the classifier still refused the same class at 07:22. Replayed against that
+run's real launch state, `check_permission_floor.py` refuses all eight classes
+and names `npx vitest` first.
+
+Built 2026-08-30 on the human's instruction, closing `rn99f-03`.

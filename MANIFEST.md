@@ -10,6 +10,7 @@ Listed in the order the loop runs.
 |-----------|-------------|
 | `skills/harden-issues/SKILL.md` | `~/.claude/skills/harden-issues/SKILL.md` |
 | `skills/harden-issues/decisions.md` | `~/.claude/skills/harden-issues/decisions.md` |
+| `skills/harden-issues/test_skill_structure.py` | `~/.claude/skills/harden-issues/test_skill_structure.py` (refuses a slim that carries a rule out with its story) |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |
@@ -24,12 +25,13 @@ Listed in the order the loop runs.
 | `skills/run-issues/check_issue_ready.py` | `~/.claude/skills/run-issues/check_issue_ready.py` |
 | `skills/run-issues/check_paste_file.py` | `~/.claude/skills/run-issues/check_paste_file.py` |
 | `skills/run-issues/check_permission_floor.py` | `~/.claude/skills/run-issues/check_permission_floor.py` |
+| `skills/run-issues/check_run_picture.py` | `~/.claude/skills/run-issues/check_run_picture.py` |
 | `skills/run-issues/cache_probe.py` | `~/.claude/skills/run-issues/cache_probe.py` |
 | `skills/run-issues/estimate_accuracy.py` | `~/.claude/skills/run-issues/estimate_accuracy.py` |
 | `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
 | `skills/run-issues/run_costs.py` | `~/.claude/skills/run-issues/run_costs.py` |
 | `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (13 files, 261 cases, grading the skill text and its scripts) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (14 files, 271 cases, grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -40,6 +42,7 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_verdict.py` | `~/.claude/skills/lib/test_check_verdict.py` |
 | `skills/lib/check_decision_ledger.py` | `~/.claude/skills/lib/check_decision_ledger.py` (refuses a decision walk that ends without a costed ledger) |
 | `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
+| `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (fails when a superseded sentence survives in a steering file; seed it with your own) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
