@@ -6,9 +6,25 @@ that fail are the pair one run shipped with the confirmation query commented
 out; the two that pass were written before that regression.
 """
 
+import os
+import tempfile
 import unittest
 
 import check_paste_file as guard
+
+
+def fake_git(**answers):
+    """A stand-in for git that answers a fixed status per subcommand.
+
+    Keyed by the subcommand, so a test says what git found and never what git
+    was asked. `None` is git itself missing from the machine.
+    """
+
+    def git(args, cwd):
+        del cwd
+        return answers[args[0]]
+
+    return git
 
 
 class JudgeTest(unittest.TestCase):
@@ -82,6 +98,88 @@ class JudgeTest(unittest.TestCase):
     def test_an_empty_file_is_refused_rather_than_passed(self):
         kind, _ = guard.judge("")
         self.assertEqual(kind, "no-query")
+
+
+class TrackStateTest(unittest.TestCase):
+    """Run `batch-45c8b1` wrote seven paste files and committed none of them.
+
+    Each one graded `ok` on its content and none of them existed for anybody but
+    the agent that wrote it. The finale caught all seven by hand as F1.
+    """
+
+    def test_a_file_the_index_holds_is_tracked(self):
+        state = guard.track_state(
+            "/repo/.scratch/0110-paste.sql",
+            git=fake_git(**{"rev-parse": 0, "ls-files": 0}),
+        )
+        self.assertEqual(state, "tracked")
+
+    def test_a_file_the_index_does_not_hold_is_untracked(self):
+        """`ls-files --error-unmatch` exits non-zero on a path git never saw."""
+        state = guard.track_state(
+            "/repo/.scratch/0110-paste.sql",
+            git=fake_git(**{"rev-parse": 0, "ls-files": 1}),
+        )
+        self.assertEqual(state, "untracked")
+
+    def test_a_tree_with_no_repository_cannot_be_graded(self):
+        """Not a refusal about the file. The check cannot see its input."""
+        state = guard.track_state(
+            "/tmp/loose/0110-paste.sql",
+            git=fake_git(**{"rev-parse": 128}),
+        )
+        self.assertEqual(state, "no-repository")
+
+    def test_git_missing_from_the_machine_cannot_be_graded_either(self):
+        state = guard.track_state(
+            "/repo/0110-paste.sql",
+            git=fake_git(**{"rev-parse": None}),
+        )
+        self.assertEqual(state, "no-git")
+
+
+class TrackedGateTest(unittest.TestCase):
+    """`main` refuses an untracked file, on its own exit code.
+
+    Exit 3 and not 1: the two want different repairs, exactly as `no-query` is
+    separated from `commented-only`. A content refusal is a `--` to delete; this
+    one is a `git add` and a commit, and the content of a file nobody can pull
+    does not matter yet.
+    """
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self.directory.name, "0110-paste.sql")
+        with open(self.path, "w", encoding="utf-8") as handle:
+            handle.write("select count(*) from public.brands;\n")
+        self.addCleanup(self.directory.cleanup)
+
+    def test_an_untracked_file_is_refused_with_exit_three(self):
+        self.assertEqual(guard.main([self.path], track=lambda path: "untracked"), 3)
+
+    def test_the_same_file_tracked_passes(self):
+        self.assertEqual(guard.main([self.path], track=lambda path: "tracked"), 0)
+
+    def test_a_tree_with_no_repository_exits_two_rather_than_refusing_the_file(self):
+        self.assertEqual(guard.main([self.path], track=lambda path: "no-repository"), 2)
+        self.assertEqual(guard.main([self.path], track=lambda path: "no-git"), 2)
+
+    def test_untracked_outranks_a_content_refusal(self):
+        """Both faults are printed, and the tracking code is the one returned.
+
+        Repairing the comment marker in a file nobody will ever pull repairs
+        nothing, so the exit the reader acts on is the tracking one.
+        """
+        commented = os.path.join(self.directory.name, "0111-paste.sql")
+        with open(commented, "w", encoding="utf-8") as handle:
+            handle.write("-- select count(*) from public.brands;\n")
+        self.assertEqual(guard.main([commented], track=lambda path: "untracked"), 3)
+
+    def test_a_tracked_file_with_a_commented_query_still_exits_one(self):
+        commented = os.path.join(self.directory.name, "0111-paste.sql")
+        with open(commented, "w", encoding="utf-8") as handle:
+            handle.write("-- select count(*) from public.brands;\n")
+        self.assertEqual(guard.main([commented], track=lambda path: "tracked"), 1)
 
 
 class MainTest(unittest.TestCase):

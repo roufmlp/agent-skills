@@ -78,21 +78,34 @@ agent's return when its verdict file is missing or empty,
 the attempt cap, [`find_live_ledger.py`](skills/run-issues/find_live_ledger.py) picks
 the one ledger a resume may read, and
 [`move_closed_sections.py`](skills/daily-brief/move_closed_sections.py) archives what
-the brief has closed instead of trusting a session to. Tests sit beside each script,
-and some grade the skill text itself, so an edit that drops an invocation fails the
-suite.
+the brief has closed instead of trusting a session to. The list has grown since:
+[`check_paste_file.py`](skills/run-issues/check_paste_file.py) refuses a migration
+paste file whose confirmation query is commented out, or that git does not track,
+[`check_permission_floor.py`](skills/run-issues/check_permission_floor.py) refuses to
+launch a run whose own commands are not in the allow list,
+[`check_run_picture.py`](skills/run-issues/check_run_picture.py) refuses an action
+board whose figures disagree with the briefing block they were copied from, and
+[`check_decision_ledger.py`](skills/lib/check_decision_ledger.py) refuses a decision
+walk that ends without a costed ledger. Beside them sit the measuring scripts the finale
+runs: what a run cost, where its hours went, how far each estimate missed. Tests sit
+beside every script, and some grade the skill text itself, so an edit that drops an
+invocation fails the suite.
 
-Two of those checks are not scripts a skill calls. They are hooks the harness runs, and
+Four of those checks are not scripts a skill calls. They are hooks the harness runs, and
 they refuse a tool call outright, before it happens.
 [`run-issues-foreground-gate.py`](hooks/run-issues-foreground-gate.py) refuses a
-`run-issues-*` spawn that does not set `run_in_background: false`, and
+`run-issues-*` spawn that does not set `run_in_background: false`,
+[`run-issues-evidence-gate.py`](hooks/run-issues-evidence-gate.py) refuses a gate spawn
+over an issue nobody has implemented yet,
 [`coderules-gate.py`](hooks/coderules-gate.py) refuses the first code edit of a context
-until the code rules have been read. Both ship here.
+until the code rules have been read, and
+[`retired-phrases-gate.py`](hooks/retired-phrases-gate.py) refuses a write that puts a
+superseded sentence back into a steering file. All four ship here.
 
-**Neither does anything until you register it**, and this pack cannot register them for
+**None does anything until you register it**, and this pack cannot register them for
 you: a hook runs only when an entry in your `settings.json` points at it. The exact
 block to paste, the event each hook matches, and what you still lose if you skip one are
-in [hooks/README.md](hooks/README.md). Copying the two files and stopping there leaves
+in [hooks/README.md](hooks/README.md). Copying the four files and stopping there leaves
 you with the reminders the hooks replaced.
 
 ## The orchestration skills
@@ -210,11 +223,12 @@ The fix for the failure mode gates cannot catch: an issue whose acceptance
 criteria were wrong when written passes every gate, because every gate grades
 against the issue. This pass attacks criteria at authoring time — one attacker
 subagent per issue plus a seam agent over the whole set, working a checklist of
-nine blind-spot classes that each shipped a real defect through green gates
-(unstated invariants, vague words, guards that cannot fail, unverified premises,
-empty test data, deploy ordering, unobservable criteria, oversized slices, plus
-a seam pass for what falls between issues). It may only write what it can cite
-evidence for; every open fork routes to the human. Hardened issues carry a dated
+eleven blind-spot classes that each shipped a real defect through green gates
+(unstated invariants and their scope, vague words, guards that cannot fail,
+unverified premises, empty test data, deploy ordering, unobservable criteria,
+oversized slices, which database the rows land in, criteria that cannot all be
+true at once, plus a seam pass for what falls between issues). It may only write
+what it can cite evidence for; every open fork routes to the human. Hardened issues carry a dated
 stamp that `run-issues` checks at launch.
 
 ### [daily-brief](skills/daily-brief/SKILL.md)
@@ -348,6 +362,16 @@ role that turns a register finding into an issue file.
 This is also the only way to set effort per role — the `Agent` tool takes a model
 but no effort parameter, so without these files every worker silently inherits one
 session-wide setting.
+
+## Keeping the copies honest
+
+Every file here is a scrubbed copy of a live one, and a copy drifts. Two checks at the
+repo root run before each sync. [`check_manifest_coverage.py`](check_manifest_coverage.py)
+refuses a live file the manifest neither publishes nor names as withheld, and a manifest
+row whose source or publication has gone. [`check_skill_drift.py`](check_skill_drift.py)
+refuses the two hand-edited orchestration skills when one has dropped a rule the other
+still states. [MANIFEST.md](MANIFEST.md) maps every published file to its source and
+holds the scrub rules, including the stricter set a hook has to pass.
 
 ## Case study
 

@@ -529,20 +529,60 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    correct for tests and for mutation drills. Adopted by the human 2026-08-24, the
    other half of the same walk.
 
-   **The citation checker runs at every issue's commit, and a citation this run
-   moved becomes a register row before the next implementer spawns. It NEVER runs
-   with `--all`.** Take the files that commit changed, find the issue files that
-   cite any of them — the run's own built files, plus any open backlog issue citing
-   one — and run the check over that list alone:
+   **Each pass is pinned to the commit it reports on, and runs in the background.** The
+   checker takes `--at <sha>`, and at that sha no verdict it prints depends on anything
+   outside the commit. So the pass does not have to run serial with the implementers any
+   more, and R2's measured cost goes to nearly nothing: run `e047ba` paid about 5h50m on an
+   8h30m estimate for ten serial passes.
+
+   At every commit, fire the pass and move on:
 
    ```
    git diff --name-only <previous commit>..HEAD
-   node scripts/check-issue-citations.mjs --quiet <each issue file citing one of those>
+   node scripts/check-issue-citations.mjs --at <the commit just made> --quiet \
+     <each issue file citing one of those changed files> \
+     > .scratch/<feature>/citation-deltas/<sha>.txt 2>&1
    ```
 
-   File each new `moved` or `gone` as a register row naming the citation and the
-   commit that moved it. The loop advances to the next issue once every new one is
-   filed.
+   **Pin to the commit just made, never to branch head.** R2 needs each row to name the commit
+   that moved the citation, and a pass pinned to a later head cannot name one.
+
+   **Name only issue files that commit carries.** The pass refuses with exit 5 and names the
+   path when it is handed one the pinned tree does not hold — an issue file the run minted or
+   renamed after the commit is the ordinary way that happens. Filter the list against
+   `git ls-tree -r --name-only <the commit just made> -- .scratch`, or run that file unpinned.
+   The refusal is deliberate: a skipped file leaves no row, and a pass with no rows prints a
+   clean summary.
+
+   **`--all` stays banned here**, for the reason ruled on 2026-08-26: a commit can only break a
+   citation into a file that commit changed, so reading all 592 issue files buys nothing and
+   costs the whole corpus. Pinning makes a wide pass cheap in wall clock, not free in machine
+   time.
+
+   **The baseline pass pins too.** The runner commits its pre-flight state and pins the
+   baseline to that commit. It does not stash and it does not read the working tree, because
+   issue files carry uncommitted edits at pre-flight and a working-tree baseline compares the
+   run against something no commit holds.
+
+   **Passes queue in commit order and run one at a time. None is ever dropped.** Dropping one
+   loses the attribution R2 was bought for. A pass is roughly 40 minutes against an issue of 30
+   to 90, so the queue mostly keeps up.
+
+   **One file per sha, in `.scratch/<feature>/citation-deltas/<sha>.txt`.** The last line of a
+   finished pass reads `=== CITATION PASS COMPLETE === exit=<n> pinned=<sha>`. A file without
+   that line is a killed pass, not a clean one: a session host can exit and take every session
+   with it, so the file on disk is the only record.
+
+   **The finale collects every file and runs one catch-up pass at branch head for any sha
+   whose file is missing or unterminated.** A run that reports a clean sweep over a pass that
+   never returned is reporting on nothing.
+
+   **File each new `moved` or `gone` as a register row naming the citation and the commit that
+   moved it**, exactly as before. The row is the whole remedy, and the run repairs nothing: a
+   run may not edit the specification it is graded against, so the repair belongs to the next
+   `/harden-issues` pass over that issue, which already reads the file and is already allowed
+   to write it (the human, 2026-08-15). The checker holds the same rule in its own code and never
+   writes an issue file.
 
    **The register is swept at every issue's commit too, and for the same reason.**
    Re-read every register row filed against the issue that just committed, and close
@@ -559,49 +599,20 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    to promotion untouched. Adopted by the human 2026-08-27 as F6, because it moves work
    earlier rather than adding it.
 
-   **`--all` is banned here, and the ban is the point.** It reads the whole corpus:
-   17,345 citations across 393 issue files, measured 2026-08-26. One pass took over
-   30 minutes on that measurement and the SKILL used to call it once per commit, so
-   a ten-issue run spent hours of wall clock re-reading 383 files it never touched.
-   A commit can only break a citation into a file that commit changed, so the wide
-   read buys nothing. Ruled by the human on 2026-08-26 in the daily brief, after they read
-   the run's own background-task timers: three citation passes at 50m 47s, 31m 32s
-   and 30m 39s, wrapped in about a dozen polling shells, four of which failed.
+   The exit codes a collector reads: 0 clean, 1 a fault, 2 no issue file matched, 3 not a git
+   repository, 4 the unchecked-majority refusal, 5 `--at` could not be honoured, 6 named paths
+   went ungraded. Codes 4, 5 and 6 are refusals to answer, not answers, and all three outrank 1.
 
-   The row is the whole remedy, and the run repairs nothing: a run may not edit the
-   specification it is graded against, so the repair belongs to the next
-   `/harden-issues` pass over that issue, which already reads the file and is
-   already allowed to write it (the human, 2026-08-15). The checker holds the same rule
-   in its own code and never writes an issue file.
+   **Exit 6 was added 2026-09-02 with issue 503.** Positional paths were given and the pass
+   graded none of them, so there is no summary line to read. Two roads reach it: `--touches`
+   passed together with paths, and a path the unpinned pass cannot read. Both answered exit 0
+   on a run that had graded nothing until then, which is why it is a sixth code and not a
+   second meaning on one of the five.
 
    (Adopted by the human 2026-08-18 as R2, from the `cab74e` finale; `decisions.md`
    holds that run's citation counts and the drift mechanism behind them. It trades
    run time for record accuracy, which is a price only the human may set, and they set
    it.)
-
-   **INTERIM, from 2026-08-19 until issue 379 ships: run ONE pass at the finale, not
-   one per commit.** This is a stopgap with an expiry, not R2's new shape. R2 above
-   is unchanged and returns in full the moment the expiry is met.
-
-   Why: the pass reads the working tree at three points, so it must run serial with
-   the implementers. Measured on run `e047ba`, one pass over 424 issue files and
-   15,048 citations took 35 minutes, timed twice. Ten passes on a nine-issue batch
-   added about 5h50m to an 8h30m estimate. Register row `run-cit-02`.
-
-   What it costs while it holds, so nobody reports this as free: a finale-only pass
-   finds what the run broke hours after the fact. On run `e047ba` the per-commit pass
-   caught four dead citations in issue 139's file straight after issue 138 committed,
-   and 139 was the very next issue, so the corrected line numbers reached its
-   implementer's prompt instead of its head. A finale-only pass loses that.
-
-   **The expiry.** Issue 379 pins every read to a commit so the pass can run in the
-   background beside the implementers. When it ships, delete this block. Any run that
-   finds 379 `done` must restore per-commit passes and say so in its briefing.
-
-   The human ruled this on 2026-08-19, in the `/daily-brief` walk. They were offered the
-   choice of weakening R2 or paying its measured cost, and refused both: R2 stays
-   per-commit, and the harness gets fixed instead. Recording it as a stopgap with a
-   named expiry is what stops the cheap shape becoming permanent by default.
 
    **The runner commits. An implementer never commits its own work**, and the
    runner says so in every spawn. A self-commit does no visible harm, and that is

@@ -45,12 +45,19 @@ resolves it — and the board render is safe to repeat:
    a live harness rather than assuming one. `preview_start` on a stopped server is
    already permitted, so this needs no new permission. (Adopted by the human 2026-08-18
    as R3, from the `cab74e` finale: the step deleted `.next` under a server that
-   had run since 02:27, every route answered HTTP 500 afterwards, `preview_stop` is
-   refused by the permission classifier in an unattended run, and starting a server
-   by hand is forbidden by the round header. **So `finale-judgment` drove no
+   had run since 02:27, every route answered HTTP 500 afterwards, `preview_stop` was
+   TAKEN TO BE refused by the permission classifier in an unattended run, and starting
+   a server by hand is forbidden by the round header. **So `finale-judgment` drove no
    cross-issue seam live in that run**, and fell back to reading composed source at
    branch head plus five seam test files. The failure is silent: the briefing still
    appears, and nothing in it announces the gap unless the finale volunteers it.)
+
+   **CORRECTED 2026-09-02: `preview_stop` is NOT refused.** The `batch-45c8b1` finale
+   called it on Claude Code 2.1.255, unattended, and the classifier permitted it. That
+   is the only reason that finale recovered its own dev server instead of handing the human
+   a numbered action. R3 itself stands unchanged; only the claim about the classifier
+   was wrong. Do not plan around a refusal that does not happen — call `preview_stop`
+   when the server needs restarting, and record what the call actually answered.
 
    Preview deploy is **skipped in this repo** by standing decision — see the repo
    CLAUDE.md. Say so in the briefing; never work around it; never re-litigate it.
@@ -92,8 +99,22 @@ resolves it — and the board render is safe to repeat:
    413b (26 minutes early), 413 (115 minutes) and 422 (1 minute, which nobody
    noticed), and passes the other six.
 
-   `check_paste_file.py` refuses a pilot paste file whose confirmation query is
-   commented out. Pasted as written, such a query returns no rows, no error and
+   **`check_paste_file.py` refuses a paste file git does not know, on exit 3.**
+   Added 2026-09-02 on the human's ruling, from this run's F1: `batch-45c8b1` wrote
+   seven paste files, committed none of them, and seven gates ran this script
+   over them and all seven exited 0, because until then it graded content alone.
+   An untracked paste file is not in the branch, so the merge cannot carry it and
+   the deploy goes out with the migration unapplied and nothing left to paste.
+   **Exit 3 is not exit 1 and wants a different repair**: `git add` and a commit,
+   not a comment marker. It outranks a content refusal, because repairing a
+   comment in a file nobody can pull repairs nothing. **Exit 2 here means the
+   question could not be asked** — no working tree, or no git — and is not a
+   verdict on the file. Tracked means the index holds it: a file added but not
+   yet committed passes, deliberately, because the finale writes and commits
+   paste files in the same round.
+
+   `check_paste_file.py` also refuses a pilot paste file whose confirmation query
+   is commented out. Pasted as written, such a query returns no rows, no error and
    no output, which reads exactly like a clean result — and on `0095` the
    dangerous outcome is the one only the row COUNT catches. Nine agents touched
    that run's two paste files and nobody ran the query. **A refusal here is

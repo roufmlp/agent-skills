@@ -302,9 +302,10 @@ class TestTheClassBPassagesWereNotTouched(unittest.TestCase):
         "cannot prevent a call that was never made",
         # The recoverability test and the standing xhigh refusal.
         "No value in the effort column was measured against a lower one",
-        # The INTERIM R2 block: its expiry and its restore obligation.
-        "INTERIM, from 2026-08-19 until issue 379 ships",
-        "must restore per-commit passes and say so in its briefing",
+        # The INTERIM R2 block was here. Its expiry was met: issue 379 shipped in
+        # run batch-375cbf, merged 2026-09-01, and the block was replaced with the
+        # pinned background pass on the human's ruling of the same day. A guard that
+        # demands text a met expiry deleted is a guard against the wrong thing.
         # The self-commit contingency, stated nowhere else.
         "The runner commits. An implementer never commits its own work",
         "do not revert it — record it and give the gates the range",
@@ -566,6 +567,119 @@ class TestTheBridgeCseChangesSurvive(unittest.TestCase):
         window = skill[start:start + 2600]
         self.assertIn("audience: agent", window)
         self.assertIn("promotion.md", window)
+
+
+class TheRunPictureLandsOnBothSurfaces(unittest.TestCase):
+    """Issue 506. A finished run showed the human nothing at a glance.
+
+    Run `batch-88624c` handed them a 1963-line briefing. Of the six things they
+    look for afterwards, three sat past line 1700 and they found none of them;
+    the second time that happened it cost four cost measurements they had
+    commissioned the day before. The finale now writes `## The run in one
+    screen` at the top of the briefing and the board renders it as a panel.
+
+    These read the live `finale.md`, like every other check in this file. A
+    fixture would pass while the real instructions drifted, which is the whole
+    failure being guarded.
+    """
+
+    def board_step(self):
+        """Just the board step, cut at the next numbered step.
+
+        Slicing to the end of the file would let a sentence in a LATER step
+        satisfy these checks, which is the fault they exist to catch.
+        """
+        finale = read(FINALE)
+        start = finale.index("**Regenerate the action board**")
+        after = re.search(r"\n\d\. \*\*", finale[start:])
+        return finale[start:start + after.start()] if after else finale[start:]
+
+    def test_the_finale_is_told_to_write_the_block(self):
+        self.assertIn("## The run in one screen", read(FINALE))
+
+    def test_the_finale_is_told_to_render_the_panel_on_the_board(self):
+        self.assertIn("The run in one screen", self.board_step())
+
+    def test_the_block_is_named_as_the_only_place_a_figure_is_derived(self):
+        """Item 6a. A panel that counts for itself re-creates the fault 6b
+        refuses, and the licence for a cheap model rests on the render having no
+        judgement in it."""
+        board_step = self.board_step()
+        self.assertIn("never counts", board_step)
+        self.assertRegex(board_step, r"single place a figure\s+is\s+derived")
+
+    def test_the_comparison_guard_is_named_and_on_disk(self):
+        """Item 6b, and the only part of item 6 that catches a false number at
+        any model."""
+        self.assertIn("check_run_picture.py", self.board_step())
+        self.assertTrue((RUN_ISSUES / "check_run_picture.py").exists())
+
+    def test_the_cost_measurement_runs_before_the_board(self):
+        """Item 3. The panel carries the wall clock, so at render time
+        `## What this run cost` has to exist already. It used to be written two
+        steps after the board."""
+        finale = read(FINALE)
+        self.assertLess(
+            finale.index("run_costs.py"),
+            finale.index("**Regenerate the action board**"),
+        )
+
+    def test_the_board_spawn_still_names_a_model_explicitly(self):
+        """Item 6c changes WHICH model, never the rule that one is named. An
+        unnamed spawn inherits the session model, which is what this step was
+        written to stop."""
+        board_step = self.board_step()
+        self.assertRegex(board_step, r'model: "\w+"')
+        self.assertIn("Naming the model is not optional", board_step)
+
+    def test_the_model_line_carries_the_two_limits_of_its_measurement(self):
+        """The Fable reading is one measurement of a checking task, not a trend
+        and not an HTML render. The issue requires both limits stated wherever it
+        is cited, or the citation outgrows its evidence."""
+        board_step = self.board_step()
+        self.assertIn("citation-recheck-fable.md", board_step)
+        self.assertIn("one reading", board_step)
+
+
+class TheDailyBriefShowsWhatTheRunCost(unittest.TestCase):
+    """Issue 506 item 5. The cost table existed and nothing read it.
+
+    `run_costs.py` appends a row per run to `.scratch/workflow-audit/run-costs.md`
+    and that file says what it is for: compare a row against the row above it.
+    Measured 2026-08-31, the only files naming it were inside the run-issues
+    skill. The brief never opened it, so the finale printed the cost at line 1790
+    of 1963 and a second print in the same document was never the fix.
+    """
+
+    def section_one(self):
+        text = read(SKILLS / "daily-brief" / "SKILL.md")
+        return text[text.index("### 1. Merge reads"):text.index("### 1b.")]
+
+    def test_section_one_reads_the_cost_table(self):
+        self.assertIn(".scratch/workflow-audit/run-costs.md", self.section_one())
+
+    def test_it_compares_this_run_against_the_one_before_it(self):
+        """One row alone is a number. The table was built for the comparison."""
+        section = self.section_one()
+        self.assertIn("the row above it", section)
+
+    def test_it_states_the_observed_range_instead_of_inventing_a_threshold(self):
+        """Across the table's 13 rows `Per issue` ran 0.96M to 2.45M and
+        consecutive runs swung by up to 75 per cent. A 25 per cent flag would
+        fire on seven of twelve transitions and train the reader to ignore it."""
+        section = self.section_one()
+        self.assertIn("0.96M", section)
+        self.assertIn("2.45M", section)
+
+    def test_idle_is_declared_to_have_no_baseline(self):
+        """Two readings, 12 and 17 per cent. A third is not a trend."""
+        self.assertIn("no baseline", self.section_one())
+
+    def test_the_block_stays_inside_section_one(self):
+        """The brief has thirty minutes and this must not become a fifth
+        section."""
+        text = read(SKILLS / "daily-brief" / "SKILL.md")
+        self.assertNotIn("### 1c.", text)
 
 
 if __name__ == "__main__":

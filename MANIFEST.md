@@ -31,7 +31,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
 | `skills/run-issues/run_costs.py` | `~/.claude/skills/run-issues/run_costs.py` |
 | `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (14 files, 271 cases, grading the skill text and its scripts) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (14 files, 299 cases, grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -133,17 +133,18 @@ for them.** That is the whole reason `hooks/README.md` exists: it carries the ex
 who copies the file and skips the block still loses. Publish no hook without a line in
 it.
 
-**Two of the three published hooks ship no test, because neither has one.** Re-measured
-2026-08-31, correcting a line that read "neither hook ships with a test" after
-`test_run_issues_evidence_gate.py` had already been given a row above. Of the three
-hooks published here, only `run-issues-evidence-gate.py` carries a test.
+**Two of the four published hooks ship no test, because neither has one.** Re-measured
+2026-09-03, correcting a line that still counted three hooks two days after
+`retired-phrases-gate.py` got its row above. Of the four hooks published here,
+`run-issues-evidence-gate.py` and `retired-phrases-gate.py` carry a test each.
 `run-issues-foreground-gate.py` and `coderules-gate.py` have none anywhere in the live
-tree: its seven `test_*.py` files cover `machine-preflight.py`,
+tree: its eight `test_*.py` files cover `machine-preflight.py`,
 `worktree-register-guard.py`, `worktree-snapshot-notice.py`, the `settings.json` `env`
-block, the evidence gate, and the two hooks withheld below — and not one of them imports
-either untested hook published here. Every other script in this pack ships its tests
-beside it. Those two do not. That is a gap in the live tree, not a scrub decision, and
-it is written here rather than left for a reader to discover by grepping.
+block, the evidence gate, the retired-phrases gate, and the two hooks withheld below,
+and not one of them imports either untested hook published here. Every other script in
+this pack ships its tests beside it. Those two do not. That is a gap in the live tree,
+not a scrub decision, and it is written here rather than left for a reader to discover
+by grepping.
 
 **Two of the withheld hooks are held back for a different reason, and it is not
 one-machine state.** `run-issues-criteria-fault.py` and `run-issues-parallel-gates.py`

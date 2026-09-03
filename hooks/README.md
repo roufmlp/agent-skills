@@ -9,8 +9,7 @@ So the install is two steps, and the second one is the step that matters.
 ```
 mkdir -p ~/.claude/hooks
 cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
-   hooks/coderules-gate.py ~/.claude/hooks/
-   hooks/retired-phrases-gate.py ~/.claude/hooks/
+   hooks/coderules-gate.py hooks/retired-phrases-gate.py ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
