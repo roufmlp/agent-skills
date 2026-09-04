@@ -31,7 +31,9 @@ Listed in the order the loop runs.
 | `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
 | `skills/run-issues/run_costs.py` | `~/.claude/skills/run-issues/run_costs.py` |
 | `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (14 files, 299 cases, grading the skill text and its scripts) |
+| `skills/run-issues/check_run_rail.py` | `~/.claude/skills/run-issues/check_run_rail.py` (refuses a rail block a renderer could not transcribe) |
+| `skills/run-issues/draw_run_rail.py` | `~/.claude/skills/run-issues/draw_run_rail.py` (draws the rail as SVG from that block; the only road to it) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (17 files, 423 cases, grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |

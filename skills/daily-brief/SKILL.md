@@ -66,6 +66,27 @@ State lives in `~/.claude/daily-brief/`:
 - **`applied.md`** — append-only log: what was written back, when, and what was
   skipped with the reason. This is the only record that an answer landed.
 
+### The human cannot open `brief.md` from here, so link it into the repo
+
+The file pane opens files inside the working directory and nothing else. `brief.md` lives
+under `~/.claude/`, so it fails to open with "it lives outside the working directory" —
+every day, from the day this skill was written until 2026-09-04, when the human finally said
+so. They had been unable to read the brief in the pane the whole time.
+
+**At the end of every build, link the brief into each repo in `repos.md` at
+`.scratch/documents/brief.md`, and name that path when you report.** A symlink, never a
+copy: one file, two names, nothing to drift, and an edit they make through the pane lands
+on the same file the apply half reads.
+
+    ln -sfn ~/.claude/daily-brief/brief.md <repo>/.scratch/documents/brief.md
+
+`.scratch/documents/` is gitignored in the repo this was written for. **Run `git check-ignore`
+before linking into any repo**, and if that path is tracked there, pick one that is not —
+the brief carries workspace UUIDs and project refs and must never reach git.
+
+Link it into the session's own worktree as well when the session runs in one, because
+that is the directory the pane is anchored to.
+
 ## Half one: apply
 
 Read `brief.md`. Every line they changed is an instruction; every line they left is a

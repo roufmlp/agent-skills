@@ -530,8 +530,16 @@ class TestTheLiveFileStillParses(unittest.TestCase):
     """A read-only probe of a real file, when one is named. Point
     `PENDING_ACTIONS_FILE` at your live pending-actions file to run it. It
     asserts no count, because every count in this class of check goes stale
-    inside one working day. It asserts only that the mover reads today's file
-    and reaches a decision on it."""
+    inside one working day.
+
+    An EMPTY plan is a decision, and it is the right one on a file that carries
+    no `#` or `##` closure marker. That is a pending-actions file's ordinary
+    state after a `/daily-brief` sweep, and one live file was in that state on
+    2026-09-04, when the two markers it held were both at `###` — the level the
+    mover refuses on purpose. This case asserted a non-empty plan until then, so
+    it failed on correct behaviour and made a passing run depend on what the
+    file happened to hold that morning. It now asserts only what the mover owes
+    whatever the content is."""
 
     def test_the_mover_plans_the_live_file_without_writing_to_it(self):
         named = os.environ.get("PENDING_ACTIONS_FILE")
@@ -541,12 +549,29 @@ class TestTheLiveFileStillParses(unittest.TestCase):
         if not live.exists():
             self.skipTest(f"no live pending-actions file at {live}")
         before = hashlib.sha256(live.read_bytes()).hexdigest()
-        result = mover.plan(live.read_text(encoding="utf-8"))
-        self.assertTrue(result.archived or result.refused)
         text = live.read_text(encoding="utf-8")
+        result = mover.plan(text)
+        self.assertIsInstance(result, mover.Result)
         for section in result.archived:
             self.assertIn(section.text, text)
         self.assertEqual(before, hashlib.sha256(live.read_bytes()).hexdigest())
+
+    def test_the_code_fences_of_the_live_file_balance(self):
+        """The empty plan has to be empty for the right reason. One unbalanced
+        fence in a file several sessions write makes `headings()` treat the
+        whole tail as code and swallow every heading in it, and the plan then
+        reads empty with nothing wrong in the matcher. An odd fence count is the
+        only way that happens, so this counts fences rather than headings: it
+        needs no marker in the file and no count that can go stale."""
+        named = os.environ.get("PENDING_ACTIONS_FILE")
+        if not named:
+            self.skipTest("PENDING_ACTIONS_FILE is not set")
+        live = Path(named)
+        if not live.exists():
+            self.skipTest(f"no live pending-actions file at {live}")
+        lines = live.read_text(encoding="utf-8").splitlines(keepends=True)
+        fences = [line for line in lines if mover.FENCE.match(line)]
+        self.assertEqual(len(fences) % 2, 0, "a code fence in the live file is unclosed")
 
 
 if __name__ == "__main__":

@@ -180,6 +180,12 @@ Each class has shipped a real defect through green gates.
   citation. Append-only elsewhere; never reflow another section. **Never touch the
   `Status:` or `Hardened:` lines** — the orchestrating session owns those, so a
   half-finished pass is never mistaken for a complete one.
+  - **The `Sentence:` header line is the one exception, and you rewrite it in
+    place.** A missing or over-long one is a finding you fix without asking
+    anybody: the title it compresses is already written, so the fix is a
+    transcription and not a judgement. A subject and a verb, present tense,
+    `59 characters or fewer`. Add no fact the file does not already carry. A file
+    with no such line is legal, and you write one rather than raise a question.
 - **Into `.scratch/<feature>/harden/<issue>.md`:** your per-class report, your
   numbered questions, and your `## Checks for the human` section. The seam agent reads
   this file, not the orchestrator's context. Write it before you return, even if

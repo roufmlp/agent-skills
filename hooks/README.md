@@ -73,9 +73,18 @@ repository's `.claude/settings.json` to cover one.
 
 ## run-issues-foreground-gate.py, on `Agent|Task`
 
-It refuses a spawn whose `subagent_type` starts with `run-issues-` unless
-`run_in_background` is exactly `false`. Every other spawn passes untouched, so
-`parallel-hunt` and ordinary sessions never meet it.
+It judges a spawn whose `subagent_type` starts with `run-issues-` and refuses
+two shapes: a `run-issues-verify-gate` spawn whose `run_in_background` is not
+exactly `true`, and any other `run-issues-*` spawn whose value is not exactly
+`false`. Every other spawn passes untouched, so `parallel-hunt` and ordinary
+sessions never meet it.
+
+The verify gate is the exception because it is the one worker the runner has
+something to do beside: the review gate. A verify gate in the background and a
+review gate in the foreground on the next turn overlap by construction. Before
+2026-09-04 the hook required `false` everywhere and left "both gates in one
+message" as the only concurrent shape; one fifteen-issue run never once produced
+it, at a measured cost of 97 minutes.
 
 Skip it and `skills/run-issues/SKILL.md` still orders the runner to name the
 field, but that order is a reminder, and one run mixed the values anyway. What

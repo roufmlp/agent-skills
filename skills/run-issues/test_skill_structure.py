@@ -27,6 +27,10 @@ from pathlib import Path
 
 RUN_ISSUES = Path(__file__).resolve().parent
 SKILLS = RUN_ISSUES.parent
+# The promotion and attacker briefs live in `agents/` beside `skills/`, so
+# `SKILLS` does not reach them. This file already names
+# `~/.claude/agents/promotion.md` once, but only as a string to search for.
+AGENTS = SKILLS.parent / "agents"
 
 SKILL = RUN_ISSUES / "SKILL.md"
 FINALE = RUN_ISSUES / "finale.md"
@@ -632,6 +636,35 @@ class TheRunPictureLandsOnBothSurfaces(unittest.TestCase):
         self.assertRegex(board_step, r'model: "\w+"')
         self.assertIn("Naming the model is not optional", board_step)
 
+    def test_the_board_step_tells_the_renderer_to_draw_the_rail(self):
+        """Issue 553. The rail is the picture the human reads first, and step 5 is
+        where it is drawn. Naming the block it is copied from is what keeps the
+        transcription rule true of cards as well as figures: the renderer does
+        not read a diff, does not read an issue file, and does not work out
+        which stage a screen belongs to."""
+        board_step = self.board_step()
+        self.assertIn("## The run on the rail", board_step)
+        self.assertIn("draw_run_rail.py", board_step)
+        self.assertTrue((RUN_ISSUES / "draw_run_rail.py").exists())
+
+    def test_the_transcription_rule_covers_cards_and_not_only_figures(self):
+        """`The panel transcribes. It never counts.` predates the rail. A card
+        carries a stage and a kind, which are judgements, and the sentence has
+        to say so in those words or the next renderer infers a stage from a
+        diff and re-creates the fault item 6a removed."""
+        board_step = self.board_step()
+        self.assertRegex(board_step, r"transcribes[^.]*\. It never counts")
+        self.assertRegex(board_step, r"card[s]?\b")
+        self.assertIn("never works out", board_step)
+
+    def test_the_rail_is_drawn_by_a_script_and_not_by_the_model(self):
+        """The human ruled this on 2026-09-04. The drawn shape is computed geometry
+        with two assertions in it, and a subagent briefed in prose cannot
+        assert, so the criterion that an overflowing card must FAIL rather than
+        reach a browser clipped is true on this road and on no other."""
+        board_step = self.board_step()
+        self.assertIn("The script is the only road to it", board_step)
+
     def test_the_model_line_carries_the_two_limits_of_its_measurement(self):
         """The Fable reading is one measurement of a checking task, not a trend
         and not an HTML render. The issue requires both limits stated wherever it
@@ -680,6 +713,223 @@ class TheDailyBriefShowsWhatTheRunCost(unittest.TestCase):
         section."""
         text = read(SKILLS / "daily-brief" / "SKILL.md")
         self.assertNotIn("### 1c.", text)
+
+
+class AnIssueCarriesTheOneLineItsCardWillDraw(unittest.TestCase):
+    """Issue 551. Every card on a run's rail needs a sentence, and until now
+    nothing wrote one.
+
+    Ticket 34 priced two roads for that sentence: the finale compresses sixteen
+    titles at run end, or the author writes one line when the issue is cut and
+    the finale transcribes it. `~/.claude/CLAUDE.md` prefers the second, because
+    a fact written once beats a fact re-derived and a transcription is not a
+    judgement the renderer has to make.
+
+    The bound is `59 characters or fewer`, never "under 60". Issue 552's
+    `check_run_rail.py` refuses at 60, so a sentence of exactly 60 characters is
+    legal under the looser phrase and refused by the only guard that counts.
+
+    These read the live files, like every other check here. A fixture would pass
+    while the real template drifted, which is the whole failure being guarded.
+
+    Three cases, one per author of the field: `/to-issues` writes it, promotion
+    stamps it, `/harden-issues` may repair it.
+    """
+
+    WINDOW = 400
+    # The bound, spelled out. Asserting the bare "59" would be satisfied by a
+    # year, a line number or a percentage that drifts past the field one day.
+    BOUND = "`59 characters or fewer`"
+    # The phrase the batch's only mechanical guard disagrees with. Forbidden
+    # across the whole document, not just beside the field: a rival bound stated
+    # anywhere in these four files is what this issue exists to stop.
+    RIVAL = "under 60"
+
+    def template(self):
+        """Just the `<issue-template>` block.
+
+        Slicing the whole SKILL.md would let a mention in the prose around the
+        template satisfy these checks, and the prose is not what `/to-issues`
+        copies into an issue file.
+        """
+        path = SKILLS / "to-issues" / "SKILL.md"
+        if not path.exists():
+            # This pack does not ship `to-issues` (see MANIFEST.md: it is a fork
+            # of an upstream skill). Where it is installed beside the pack, the
+            # check runs; where it is not, there is no template to grade.
+            self.skipTest("no to-issues skill installed beside this pack")
+        text = read(path)
+        start = text.index("<issue-template>")
+        return text[start:text.index("</issue-template>", start)]
+
+    def rule_after(self, text, where):
+        """The characters that state the field's rule, from the field onward.
+
+        Squashed first, like the class-A and class-B marks above. A markdown
+        paragraph rewraps whenever anyone edits the line before it, and a guard
+        that a rewrap can break is a guard that reports the wrong thing.
+
+        `where` names the document, so a missing field fails with the file that
+        lost it instead of a bare "substring not found".
+        """
+        rule = squash(text)
+        self.assertIn("Sentence:", rule, f"{where} names no `Sentence:` field")
+        self.assertNotIn(self.RIVAL, rule, f"{where} states a rival bound")
+        return rule[rule.index("Sentence:"):][:self.WINDOW]
+
+    def test_the_issue_template_carries_the_field_and_its_rule(self):
+        """`/to-issues` writes the line. A length with no shape gives an author a
+        59-character noun phrase, and a card needs a sentence saying what the
+        change does."""
+        rule = self.rule_after(self.template(), "the `/to-issues` template")
+        self.assertIn(self.BOUND, rule)
+        for word in ("subject", "verb", "present tense"):
+            with self.subTest(word=word):
+                self.assertIn(word, rule)
+
+    def test_promotion_is_told_to_write_the_field(self):
+        """Promotion mints issue files from register rows and a row carries a
+        description it can compress. It already stamps `Owed: unsorted` in the
+        same header, so this is the same stamp in the same place.
+
+        `Owed:` is written only where the project holds a `milestones.md`. Every
+        project's run draws cards, so the sentence carries no such condition, and
+        copying `Owed:`'s wording would silently lose the field on a project with
+        no milestones file.
+        """
+        rule = self.rule_after(read(AGENTS / "promotion.md"), "the promotion brief")
+        self.assertIn(self.BOUND, rule)
+        self.assertIn("milestones.md", rule)
+
+    def test_the_harden_pass_may_rewrite_the_line_in_place(self):
+        """The attacker brief is append-only outside the two graded sections and
+        refuses the `Status:` and `Hardened:` header lines outright. Without an
+        explicit grant a missing or over-long sentence is a finding no attacker
+        may fix, and the title it compresses is already written.
+
+        The grant is one line wide. The two lines the brief never owned stay
+        refused, so a half-finished pass is never mistaken for a complete one.
+        """
+        for path in (SKILLS / "harden-issues" / "SKILL.md",
+                     AGENTS / "harden-issues-attacker.md"):
+            with self.subTest(path=path.name):
+                rule = self.rule_after(read(path), path.name)
+                self.assertIn("in place", rule)
+                self.assertIn(self.BOUND, rule)
+        attacker = read(AGENTS / "harden-issues-attacker.md")
+        self.assertIn("Never touch the", attacker)
+        self.assertIn("`Status:` or `Hardened:` lines", attacker)
+
+
+class TheBriefingSaysWhereEachIssueLanded(unittest.TestCase):
+    """Issue 552. Picture D needs a stage, a kind and a sentence per shipped
+    issue, and deciding those is judgement the renderer may not have.
+
+    `finale.md` step 5 licenses the board's cheap render on "The panel
+    transcribes. It never counts." A renderer that worked out where issue 516
+    lands would break that rule and expire the licence with it. So the finale
+    writes `## The run on the rail` under the one-screen block at the end of
+    step 4, and `check_run_rail.py` refuses a block the renderer could not copy.
+
+    These read the live `finale.md`, like every other check in this file.
+    """
+
+    RAIL_MARK = "**Then write `## The run on the rail`"
+
+    def rail_step(self):
+        """From the rail instruction to the board step, and no further.
+
+        Slicing to the end of the file would let the board step's own command
+        satisfy the no-other-command check below, which is the fault it exists
+        to catch.
+        """
+        finale = read(FINALE)
+        start = finale.index(self.RAIL_MARK)
+        return finale[start:finale.index("**Regenerate the action board**", start)]
+
+    def board_step(self):
+        finale = read(FINALE)
+        start = finale.index("**Regenerate the action board**")
+        after = re.search(r"\n\d\. \*\*", finale[start:])
+        return finale[start:start + after.start()] if after else finale[start:]
+
+    def test_the_finale_is_told_to_write_the_rail_below_the_one_screen_block(self):
+        finale = read(FINALE)
+        one_screen = finale.index("**Then write `## The run in one screen`")
+        rail = finale.index(self.RAIL_MARK)
+        board = finale.index("**Regenerate the action board**")
+        self.assertLess(one_screen, rail)
+        self.assertLess(rail, board)
+        self.assertIn("below the whole of", squash(self.rail_step()))
+
+    def test_the_finale_is_told_to_run_the_check_and_it_is_on_disk(self):
+        step = self.rail_step()
+        self.assertIn("check_run_rail.py", step)
+        self.assertIn("--stages docs/agents/run-picture-stages.md", step)
+        self.assertTrue((RUN_ISSUES / "check_run_rail.py").exists())
+
+    def test_the_rail_step_adds_no_command_but_the_check(self):
+        """Cut the way `board_step()` cuts, then every `python3` invocation in
+        the step must be the one check and there must be no `node` one."""
+        step = self.rail_step()
+        commands = re.findall(r"python3\s+(\S+)", step)
+        self.assertTrue(commands, "the step names no python3 command at all")
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertTrue(command.endswith("check_run_rail.py"), command)
+        self.assertNotRegex(step, r"\bnode\s+\S+\.mjs")
+
+    def test_the_step_states_the_cost_instead_of_denying_it(self):
+        """Ticket 34 priced it at sixteen judgements a run with the sentence as
+        the real cost. "Adds no new measurement" is prose every build satisfies."""
+        step = squash(self.rail_step())
+        self.assertIn("judgements a run", step)
+        self.assertIn("the real cost", step)
+        self.assertNotIn("adds no new measurement", step.lower())
+
+    def test_the_panel_transcribes_sentence_survives_in_the_board_step(self):
+        """`test_the_block_is_named_as_the_only_place_a_figure_is_derived`
+        asserts "never counts". The sentence before it was asserted nowhere,
+        and it is the licence the whole slice exists to keep."""
+        self.assertIn("The panel transcribes.", self.board_step())
+
+    def test_the_shipped_line_is_pinned_as_a_required_field(self):
+        """The check reads the shipped list from the one-screen block's
+        `Shipped:` line and from nowhere else, and that line was absent from
+        the live `batch-44d0a8` briefing."""
+        self.assertIn("`Shipped:` line is a required field", squash(read(FINALE)))
+
+    def test_the_stage_is_judged_from_what_the_change_is_about(self):
+        """The refuted premise was that the verify gate names the screen. It
+        sweeps every route the diff touches: 488's list spans five stages and
+        486's is empty. The gate's list is evidence, never the decision."""
+        step = squash(self.rail_step())
+        self.assertIn("what the change is about", step)
+        self.assertIn("`Drove:`", step)
+        self.assertIn("evidence", step)
+        self.assertNotIn("names the screen it walked", step)
+
+    def test_floor_means_what_no_user_sees_and_a_band_member_never_takes_it(self):
+        step = squash(self.rail_step())
+        self.assertIn("no user", step)
+        self.assertIn("inside its band's span", step)
+
+    def test_the_bound_is_stated_as_a_refusal_and_the_fallback_as_the_normal_case(self):
+        step = squash(self.rail_step())
+        self.assertIn("59 characters or fewer", step)
+        self.assertNotIn("under 60", squash(read(FINALE)))
+        self.assertIn("`Sentence:`", step)
+        self.assertIn("normal case", step)
+
+    def test_the_ledger_chain_is_untouched(self):
+        """The rail is written in step 4 while the ledger reads
+        `finale-promotion`. No stage is added, renamed or reordered."""
+        import check_finale_stage
+        self.assertEqual(
+            check_finale_stage.CHAIN,
+            ["finale-mechanical", "finale-judgment", "finale-promotion",
+             "finale-board", "awaiting-merge"],
+        )
 
 
 if __name__ == "__main__":

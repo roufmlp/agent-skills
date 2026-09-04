@@ -93,6 +93,14 @@ Each file carries:
   of that rule had promotion write `after-pilot` as the null, and it was withdrawn in the
   grilling: a null that reads as a judgement hides the work, which is the fault the ticket
   exists to close.
+- **A `Sentence:` line**, on its own line in the header. A subject and a verb,
+  present tense, `59 characters or fewer`, saying what the change does rather
+  than what the issue is about. It is the line a run's rail card draws. **Unlike
+  `Owed:` this carries no `milestones.md` condition**: every project's run draws
+  cards, so the field belongs on every file you mint. You are compressing the
+  row's own summary, which you have just read, so it is a transcription and not
+  a judgement. Where the row genuinely does not tell you, leave the line off —
+  an absent sentence is legal and the renderer falls back to the title.
 - **A `## Target database` section.** `Writes rows: no` where the work changes code
   only; otherwise the project's default databases, each written as a default. This is
   the same judgement the direct-road stamp already asks of you, recorded where

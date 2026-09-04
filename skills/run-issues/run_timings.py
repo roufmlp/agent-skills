@@ -174,6 +174,45 @@ def deep(path):
             print(f"      {seconds / 60:7.1f}m  {name}")
 
 
+# `901`, `99b`, `413a` — the run's own issue-id shape. Same pattern as
+# ~/.claude/hooks/run-issues-parallel-gates.py, deliberately, because that guard
+# and this report must agree on what a pair is.
+ISSUE_ID = re.compile(r"\b(\d{2,4}[a-z]?)\b")
+
+# `attempt 1`, `**attempt 2**`. FIRST match only, for the reason the hook gives:
+# an attempt-2 label may go on to mention attempt 1.
+ATTEMPT = re.compile(r"\battempt\s*\**\s*(\d{1,2})\b", re.IGNORECASE)
+
+
+def gate_half(text):
+    """Which half of a round this gate is: "verify", "review", or "" if neither.
+
+    A round is one verify and one review. Two verify steps under one key are two
+    ATTEMPTS whose labels lost their attempt marker, not a serialised pair —
+    comparing them reported issue 349 as following itself on run `batch-44d0a8`.
+    """
+    low = (text or "").lower()
+    if "verify" in low:
+        return "verify"
+    if "review" in low:
+        return "review"
+    return ""
+
+
+def pair_key(text):
+    """The pair a gate belongs to: `<issue>@<attempt>`, or "" when unreadable.
+
+    A label naming no issue returns "" and is not reported. That is the safe
+    direction — this function can only lose a true report, never manufacture a
+    false one, which is the whole reason it exists.
+    """
+    issue = ISSUE_ID.search(text or "")
+    if not issue:
+        return ""
+    attempt = ATTEMPT.search(text or "")
+    return f"{issue.group(1)}@{attempt.group(1) if attempt else '?'}"
+
+
 def serial_gates(labelled):
     """Flag gate pairs that ran one after the other instead of together.
 
@@ -186,22 +225,60 @@ def serial_gates(labelled):
     returned, while run `416-419-421-d167e0` the day before spawned all thirteen pairs within
     30 seconds of each other. The cost is the shorter gate's whole runtime, every round —
     roughly three to four hours on a ten-issue run.
+
+    **Corrected 2026-09-04, and the old shape reported a fault that did not exist.**
+    It sorted every gate by time and compared each to the PREVIOUS gate in that order,
+    calling them a pair whenever the second started within 20 minutes of the first ending.
+    Proximity in time was its only test. Measured on run `batch-44d0a8` it printed
+    "3 ran one after the other / ROUGHLY 39 MINUTES", and all three were false:
+
+        11.9m  Verify gate issue 312d     after  Review gate 312b attempt 2
+        12.6m  Verify gate 250 attempt 2  after  Review gate issue 250
+        14.7m  Verify gate 392 attempt 2  after  Review gate issue 392
+
+    The first pairs two DIFFERENT ISSUES. The other two pair attempt 2 against attempt 1,
+    which can never overlap, because attempt 2 does not exist until attempt 1's gates have
+    returned a rejection. True cost that run: zero. The runner had obeyed on every real pair.
+
+    That false reading reached the merge briefing, became a `[rule, nothing live]` proposal
+    to build a new refusal, and reached the human in the daily brief of 2026-09-03.
+
+    `~/.claude/hooks/run-issues-parallel-gates.py` had this identical defect and was fixed on
+    2026-08-30 by filing state per `<issue>@<attempt>`. This is the same correction, one tool
+    later. Gates are now grouped by that key, so only two halves of the same round are ever
+    compared, and a label naming no issue is dropped rather than guessed at.
     """
     gates = sorted((s, e, text) for s, e, text in labelled if "gate" in text.lower())
-    serial, parallel = [], 0
-    for i in range(1, len(gates)):
-        prev_start, prev_end, prev_text = gates[i - 1]
-        start, end, text = gates[i]
-        # a pair, not two unrelated gates: the second starts within 20 minutes of the first
-        if (start - prev_end).total_seconds() > 1200:
-            continue
-        if start >= prev_end:
-            serial.append((prev_text, text, (min(end - start, prev_end - prev_start)).total_seconds()))
-        else:
-            parallel += 1
     if not gates:
         return
+
+    rounds = {}
+    unreadable = 0
+    for start, end, text in gates:
+        key, half = pair_key(text), gate_half(text)
+        if not key or not half:
+            unreadable += 1
+            continue
+        rounds.setdefault(key, {}).setdefault(half, []).append((start, end, text))
+
+    serial, parallel = [], 0
+    for key in sorted(rounds):
+        halves = rounds[key]
+        # A round is one verify and one review. A key holding only one half, or two
+        # of the same half, is not a pair: the second case is two attempts whose
+        # labels lost their marker, and comparing them makes an issue follow itself.
+        if "verify" not in halves or "review" not in halves:
+            continue
+        first, second = sorted([min(halves["verify"]), min(halves["review"])])
+        (first_start, first_end, first_text), (start, end, text) = first, second
+        if start >= first_end:
+            serial.append((first_text, text, min(end - start, first_end - first_start).total_seconds()))
+        else:
+            parallel += 1
+
     print(f"\ngate concurrency: {parallel} pair(s) overlapped, {len(serial)} ran one after the other")
+    if unreadable:
+        print(f"  {unreadable} gate step(s) named no issue and were not graded.")
     if serial:
         wasted = sum(row[2] for row in serial)
         print(f"  SERIAL GATES COST THIS RUN ROUGHLY {wasted / 60:.0f} MINUTES.")

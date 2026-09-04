@@ -303,6 +303,13 @@ re-checking its number can read `holds` and still be wrong.
 
 - Evidence-backed sharpenings are edited into `## Acceptance criteria` and
   `## Must still be true` directly, each carrying its citation.
+- **The `Sentence:` header line may be rewritten in place.** A missing or
+  over-long one is a finding the pass fixes without asking anybody, because the
+  title it compresses is already written and the fix is a transcription. The rule
+  is a subject and a verb, present tense, `59 characters or fewer`. This is the
+  one header line the pass owns: `Status:` and `Hardened:` stay with the
+  orchestrating session, and an issue file carrying no such line is legal and
+  gets one written rather than a refusal.
 - **Say how many citations were repaired** in the stamp line below, so a reader
   can tell a quiet pass from one that found nothing.
 - **Every question follows `~/.claude/questionrules.md`.** That file sets the two

@@ -305,8 +305,9 @@ resolves it — and the board render is safe to repeat:
    Both readings existed and neither was wired to anything.
 
    **Then write `## The run in one screen` at the very top of the briefing, above
-   every other section.** This is the last thing written before the board renders,
-   because it is the first moment every figure in it exists.
+   every other section.** It is written this late because it is the first moment
+   every figure in it exists. The rail block below it follows, and the board renders
+   only after both are written and `check_run_rail.py` has passed.
 
    Six things are read after a run. On run `batch-88624c` three of them sat past line
    1700 of a 1963-line file and the human found none of them; the second time that happened
@@ -355,6 +356,92 @@ resolves it — and the board render is safe to repeat:
    deliberate: the two are read at different moments, and a brief may not run before
    the human merges.
 
+   **The `Shipped:` line is a required field of this block, and `check_run_rail.py`
+   below exits 2 without it.** It is the only place the shipped list is read from.
+   Measured across five real briefings on 2026-09-03, `## What shipped` is not stable in
+   name or in shape: `batch-45c8b1` headed it `## What shipped, per issue` and listed
+   sixteen inside one prose sentence, `batch-375cbf` used `### 161 —` sub-headings,
+   `batch-88624c` bold lines. One line of comma-separated ids is what a reader can read.
+   A run that shipped nothing writes `Shipped:      none`.
+
+   **Then write `## The run on the rail` directly below the whole of that block**, after
+   its last line and before every other `## ` heading. Never between the one-screen
+   heading and its table: `check_run_picture.py` ends the one-screen block at the next
+   `## `, so a rail heading above the table leaves it zero figures and it exits 2 on
+   `no-block-figures` on every run. This is still step 4, while the ledger reads
+   `finale-promotion`. No ledger stage is added for it.
+
+   The block carries the run's headline, the lit stages, and one row per shipped issue:
+
+   ```
+   ## The run on the rail
+
+   Headline: The database now refuses a viewer's direct write on every table this batch
+   touched. The money road is still open.
+   Lit: workspace, quotation, needs-you, zoho
+
+   | Issue | Stage     | Kind  | Sentence                                      |
+   |-------|-----------|-------|-----------------------------------------------|
+   | 517   | workspace | new   | Admin adds a person and changes a seat        |
+   | 517a  | workspace | guard | Database keeps the last admin in place        |
+   | 516   | needs-you | new   | Admin is told a customer waits to be verified |
+   | 503   | floor     | fix   | Citation checker refuses without a clean bill |
+   ```
+
+   **This is sixteen judgements a run, and it is not free.** Ticket 34 priced it: the
+   finale decides a stage, a kind and a sentence for every shipped issue, plus one
+   headline, and the sentence is the real cost. The judgement sits here because the
+   board renderer may have none (step 5), and by this point the finale has read every
+   issue file, every diff and every gate verdict.
+
+   - **Headline** is required, and the story starts on the `Headline:` line or on
+     the line under it. A run with no story writes the sentence saying so. A run that shipped nothing writes an honest rail: the headline
+     says nothing shipped, `Lit: none`, and the table has its header row and no rows.
+     Never a missing block, which reads as a finale that crashed.
+   - **Issue** is every id on the `Shipped:` line, one row each, no more and no fewer.
+   - **Stage** is one key from `docs/agents/run-picture-stages.md` in the repository the
+     run is on, and the finale judges it from what the change is about. The verify gate's
+     `Drove:` list and the issue's title are evidence, never the decision: the gate sweeps
+     every route the diff touches, so on `batch-45c8b1` issue 488's list names nine
+     routes across five stages and issue 486's names none. `floor` means an issue no user
+     can see the effect of, such as agent tooling and guards on the build itself. It does
+     not mean the gate drove no route: the four migrations 486 to 489 drove none and
+     changed what a viewer can do on every screen, so they sit on the rail. A band member
+     (issue 555's `### Bands` table) takes a stage inside its band's span, never `floor`.
+   - **Kind** is one of `new`, `fix`, `guard`, `harness`, one per shipped issue. The
+     `harness` kind and the `floor` stage are two judgements: on that run 485b read
+     `catalogue | harness` and 503 read `floor | fix`. Never derive one from the other.
+   - **Sentence** is the issue file's `Sentence:` line where it has one, copied. Where it
+     has none, compress the title into a sentence with a subject and a verb. The fallback
+     is the normal case until issue 551's field has been on files for several runs: on
+     2026-09-04 the project it was written for held 585 issue files and none carried the
+     line. `59 characters or fewer`; the check refuses at 60.
+   - **Lit** is the stages the board draws with a bordered name: every stage holding at
+     least one shipped card. A band chip lights nothing, so on `batch-45c8b1` `catalogue`
+     was unlit while 485 shipped there. The finale states the set; the renderer never
+     works it out.
+
+   **Then run the guard from the repository root, and do not go on to the board while
+   it refuses:**
+
+   ```
+   python3 ~/.claude/skills/run-issues/check_run_rail.py \
+       --briefing .scratch/<feature>/merge-briefing.md \
+       --stages docs/agents/run-picture-stages.md
+   ```
+
+   It refuses a stage or `Lit:` key outside the vocabulary, a kind outside the four, a
+   row with fewer than four cells, a sentence of 60 characters or more, a shipped issue
+   with no row or a row for an issue that did not ship, a missing headline, a missing
+   `Lit:` line, and a rail placed anywhere but directly below the whole one-screen block,
+   its `Shipped:` and sibling field lines included. Exit 2 means it could grade nothing:
+   no one-screen block, no rail, no `Shipped:` line, or a vocabulary file that exists and
+   holds no table. It prints every refusal, not the first. A relative `--stages` path is
+   tried from the git top level too, so the command also works from `.scratch/<feature>/`. **It grades keys, counts and lengths and nothing else.** Whether a sentence is
+   true or 516 belongs on `needs-you` passes unread, so never cite it as cover for the
+   judgement. Where the repository has no `docs/agents/run-picture-stages.md` it says so,
+   skips the stage rule and grades the rest, which is that file's own rule 4.
+
 5. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
    human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
    what and one of why each, ticks persisted in localStorage, **and the run panel
@@ -383,6 +470,40 @@ resolves it — and the board render is safe to repeat:
    the run has a blocked chain. Where it has none, no chain is drawn. Zero shipped reads
    as a red figure and a sentence saying nothing shipped, never as a blank panel.
 
+   **Above the panel goes the rail, drawn from `## The run on the rail` by a script.**
+   It is the picture the human opens first: eight columns left to right, one card per
+   shipped issue on the stage its rail row names, a floor row beneath them, and the
+   run's headline across the top. **The script is the only road to it.** Run it from the
+   repository root and paste what it prints into `board.html`:
+
+   ```
+   python3 ~/.claude/skills/run-issues/draw_run_rail.py \
+       --briefing .scratch/<feature>/merge-briefing.md \
+       --stages docs/agents/run-picture-stages.md
+   ```
+
+   It prints four blocks, each with a comment saying where it goes: seven CSS tokens for
+   `:root`, the same seven for the `@media (prefers-color-scheme: dark)` block, the
+   rail's own CSS, and the `<svg>`. The rail goes inside `<div class="rail-bleed">`,
+   directly above the `## The run in one screen` panel. Everything else on the board
+   keeps its 720-pixel reading column; the rail keeps its natural 1040 units and scrolls
+   sideways, which the human ruled on 2026-09-04 after being shown that scaling it to fit
+   draws the card text at 6.5 CSS pixels.
+
+   **Why a script and not your own SVG**, ruled by the human on 2026-09-04: the shape is
+   computed geometry carrying two assertions, and a card whose sentence will not fit
+   stops the finale here with the issue named, rather than reaching the human as clipped
+   text. Prose cannot assert. `check_run_picture.py` below measures the drawn lines and
+   refuses a board that came from anywhere else. Exit 1 from the script means a sentence
+   is too long: shorten it in the rail block, re-run step 4's guard, and draw again. The
+   render is safe to repeat.
+
+   **The rail transcribes too. It never works out a stage, a kind or a lit column.**
+   Every card's stage, kind and sentence is copied from the row step 4 wrote, and the
+   bordered column heads are the block's own `Lit:` line. The script reads that block
+   and nothing else: no diff, no issue file, no guess about which screen a change
+   touched. That judgement was made one step earlier, where the whole run was in view.
+
    Every figure carries `data-figure` on the element whose own text is the number, and
    the key is the block's row label slugged — `Shipped, unmerged` becomes
    `shipped-unmerged`:
@@ -392,7 +513,7 @@ resolves it — and the board render is safe to repeat:
      <div class="l">Shipped</div></div>
    ```
 
-   **The panel transcribes. It never counts.** Every figure is copied out of the
+   **The panel transcribes. It never counts, and neither does the rail.** Every figure is copied out of the
    briefing's `## The run in one screen` block, which is the single place a figure is
    derived. The renderer used to read all 1963 lines, count the bold issue headings
    under `## What shipped`, notice which of them also sat under `## Skipped or blocked`
@@ -405,14 +526,27 @@ resolves it — and the board render is safe to repeat:
    ```
    python3 ~/.claude/skills/run-issues/check_run_picture.py \
        --briefing .scratch/<feature>/merge-briefing.md \
-       --board .scratch/<feature>/board.html
+       --board .scratch/<feature>/board.html \
+       --stages docs/agents/run-picture-stages.md
    ```
 
-   It reads the figures from both files and compares them. A disagreement exits 1 and
-   the finale stops; exit 2 means it could read neither the block nor a panel, which is
-   also a stop. **This is the only part of the change that catches a false number at
-   any model.** It catches numbers alone: a wrong sentence in a `why` line is not a
-   figure and passes, so never cite this guard as cover for the prose.
+   It reads the figures from both files and compares them, and it does the same for the
+   rail's cards: every `data-card` must carry the stage and the kind its rail row holds,
+   every shipped row must be drawn, and every drawn line must fit its box. A
+   disagreement exits 1 and the finale stops; exit 2 means it could read neither the
+   block nor a panel, which is also a stop. Each refusal names the issue, the attribute
+   and the row it disagreed with, so the repair is one edit and one re-render.
+
+   **The cards obey the OPPOSITE rule from the figures, and both are wanted.** The board
+   may carry fewer figures than the block, because the panel is a summary and a figure
+   it leaves out is a choice. The rail is not a summary: a row with no card is an issue
+   that vanished from the picture, and it is refused.
+
+   **This is the only part of the change that catches a false number at any model.** It
+   catches numbers, keys and widths alone: a wrong sentence on a card, like a wrong
+   sentence in a `why` line, passes, so never cite this guard as cover for the prose.
+   Where the repository has no `docs/agents/run-picture-stages.md` it says so, skips the
+   stage-key rule and grades the rest, which is that file's own rule 4.
 
    **Why Fable, and why the model line had to be settled here.** The old sentence
    justifying Haiku read "there is no judgement in the render". A panel carrying

@@ -35,12 +35,17 @@ is the return path: `/harden-issues` takes it as in-scope.
 Each role is a registered agent type carrying its own brief, model and effort.
 Spawn by `subagent_type`; the runner never pastes a brief.
 
-**Every spawn in this run carries `run_in_background: false`. Name the field on
-the call. Do not take the tool's default.** The runner has nothing to do while a
-worker runs — it cannot open the gates until the implementer returns, and it
-cannot judge until both gates answer — so the Agent tool's own rule applies: pass
-`false` when the next action depends on the result and nothing else could usefully
-happen meanwhile.
+**Every spawn in this run names `run_in_background` on the call. Do not take the
+tool's default. The verify gate carries `true`; every other spawn carries
+`false`.** The runner has nothing to do while an implementer or a review gate
+runs — it cannot open the gates until the implementer returns, and it cannot judge
+until both gates answer — so the Agent tool's own rule applies: pass `false` when
+the next action depends on the result and nothing else could usefully happen
+meanwhile. The verify gate is the one exception, because something else CAN
+happen while it runs: the review gate. Spawn the verify gate in the background,
+then spawn the review gate in the foreground on the next turn, and the two overlap
+by construction. Ruled 2026-09-04 after run `batch-b5e96d` spawned zero of fifteen
+gate pairs together at a measured cost of 97 minutes.
 
 **The measurement first recorded here was wrong, and the rule survives on the
 paragraph above alone.** The 2026-08-17 audit of run `cab74e` blamed eight 17-to-23
@@ -59,10 +64,14 @@ ended its turn, and never made the Agent call; the cron caught the 24-minute gap
 the interval buys nothing.
 
 **The field is enforced, not remembered.** A `PreToolUse` hook,
-`~/.claude/hooks/run-issues-foreground-gate.py`, refuses any `run-issues-*` spawn
-whose `run_in_background` is not exactly `false`, and its message says how to
-reissue. The two gates still run concurrently: spawned in one message, two
-foreground calls run in parallel.
+`~/.claude/hooks/run-issues-foreground-gate.py`, refuses a `run-issues-verify-gate`
+spawn whose `run_in_background` is not exactly `true` and any other `run-issues-*`
+spawn whose value is not exactly `false`, and its message says how to reissue.
+Before 2026-09-04 it required `false` everywhere and left "spawn both gates in
+one message" as the only concurrent shape. Run `batch-b5e96d` on CLI 2.1.255
+never once produced that shape across fifteen pairs, accepted a correction and
+repeated the fault a turn later. A reminder failed twice, so the shape is now one
+the hook can refuse.
 
 **This is also what row 23 guards.** A runner that does not block can mark an
 issue done before the work lands. `skills/lib/check_verdict.py` refuses on a gate
@@ -305,9 +314,13 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    review gate to confirm that claim only; if confirmed, set the issue
    `needs-harden` with the evidence and move on. Never build to criteria a worker
    has shown to be wrong.
-3. Spawn **both gates in one message, concurrently.** Neither reads the other's
-   verdict — verify drives the app, review reads the diff — so serialising them
-   buys nothing and the wall clock is the slower of the two rather than their sum.
+3. Spawn **the verify gate with `run_in_background: true`, then the review gate
+   with `run_in_background: false` on the next turn, without waiting for the
+   verify notification.** Neither reads the other's verdict — verify drives the
+   app, review reads the diff — so serialising them buys nothing and the wall
+   clock is the slower of the two rather than their sum. The round ends when
+   both verdicts are in: the review gate's return and the verify gate's task
+   notification, in either order. Read both before step 4.
    Use the review `-critical` variant when the diff **changes** money computation,
    auth or secret handling (touching a file that has a price field does not
    count). If verify rejects, read the review anyway: its findings still route,
@@ -736,8 +749,9 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    unmerged` (gate history goes in the body — `all` runs parse that line).
 7. A gate rejects → re-spawn the implementer with the written reasons. If **both**
    reject, that is still ONE retry carrying both verdicts, and one strike, not two.
-   Then re-run step 3 in full: both gates, on the new diff. A gate that passed the
-   previous attempt has not seen this one.
+   Then re-run step 3 in full: verify in the background, review in the foreground
+   on the next turn, both on the new diff. A gate that passed the previous
+   attempt has not seen this one.
 
    **The retry brief's not-yours list is checked, not asserted:** every item the
    runner excludes cites the criterion or executable-record line that excludes
