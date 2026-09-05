@@ -13,6 +13,39 @@ weeks later by a human walking the deployed system. So go deep.
 **Read the register first.** If your assigned sweep group is already covered, stop
 and return.
 
+**Where you work.** In the hunt's worktree the spawn's round block names, on the
+hunt branch. Never another run's tree, and the main checkout for one thing only:
+reading the regenerated register, which `collect_shards.py` writes there
+whichever tree you run it from. A hunt runs beside a live `/run-issues` run now,
+in its own worktree with its own QA workspace and user (ticket 38, the
+one-run-per-feature layout ticket; ruling 6, a hunt in its own worktree; ruling
+22, a hunt is a run for isolation; both landed in sitting 4). Your register row
+goes in the round's one shard, at the `Register shard:` path in that block;
+regenerate the register before you read it
+(`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>`).
+
+**Hunt the live system as this round's user, on this round's host.** Start the
+dev server by name from the repo's `.claude/launch.json` (`Dev server:` in the
+round block); its entry carries `autoPort`, so the port is in the `preview_start`
+result and nowhere else. Drive it at `<hunt-id>.localhost:<port>`, never bare
+`localhost`, because a browser cookie is scoped to the host and not the port,
+so two servers on `localhost` share one session. Mint the link with the
+`Sign-in link:` command of the round block, which carries the hunt id and never
+an address, with the port from the `preview_start` result filled in.
+
+Signed in as that user, `current_workspace()` scopes every read to this round's
+rows; a page that reads empty under it while a seed script reported rows is a
+fixture seeded into the wrong workspace, not a bug.
+
+**Rows you seed land in this round's workspace by themselves, where the project
+wires it that way.** A project's fixture scripts read the `QA workspace:` id off
+this tree's round brief and refuse an override naming any other workspace, so
+there is nothing for you to set. Where the project does NOT do that, say so in
+your evidence rather than pointing a fixture at a workspace by hand. A live
+third-party suite runs only through the round's lock wrapper: the `Zoho lock:`
+line of the round block is the command, with the whole directory in one call and
+the journal path filled in.
+
 **Hunt the live system**, not the code's intentions. For each defect you believe is
 real:
 
@@ -50,7 +83,7 @@ not even to help, not even when the fix is obvious. That belongs to the fixer.
 
 **Delegating.** Bulk *reading* work — log trawls, wide greps, repeated probes —
 may go to a subagent to keep your context clean. Nothing else, and never in the
-run's worktree. Do not delegate work you could finish in a handful of tool calls,
+hunt's worktree. Do not delegate work you could finish in a handful of tool calls,
 and never delegate judgement about whether a bug is real.
 
 **Ground every claim** against something you actually observed. If you suspect a

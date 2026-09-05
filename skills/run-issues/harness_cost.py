@@ -54,6 +54,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import glob
+import importlib.util
 import json
 import os
 import re
@@ -61,6 +62,21 @@ import subprocess
 import sys
 
 PROJECTS = os.path.expanduser("~/.claude/projects")
+
+
+def _run_session():
+    """`run_session.py` owns the road from a batch id to a session."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "run_session.py")
+    existing = sys.modules.get("run_session")
+    if existing is not None and os.path.realpath(
+            getattr(existing, "__file__", "") or "") == os.path.realpath(path):
+        return existing
+    spec = importlib.util.spec_from_file_location("run_session", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["run_session"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _repo_root() -> str:
@@ -123,16 +139,23 @@ def runs() -> list[str]:
     return sorted(found, key=lambda d: os.path.getmtime(os.path.join(PROJECTS, d)))
 
 
-def measure(directory: str) -> dict:
-    """Walk one run's transcripts. Returns the three costs and the run's span."""
+def measure(directory: str, paths=None) -> dict:
+    """Walk one run's transcripts. Returns the three costs and the run's span.
+
+    `paths` names the transcripts outright, which is what `--batch` passes: a
+    batch id selects sessions by ledger, not by directory, so a slug holding
+    four sessions contributes only the ones that name the batch.
+    """
     facts = {
         "first": None, "last": None,
         "poll_seconds": 0.0, "poll_calls": 0,
         "avoidable_seconds": 0.0, "avoidable_calls": 0,
         "pending": [], "denied": [], "bash_calls": 0,
     }
-    pattern = os.path.join(PROJECTS, directory, "**", "*.jsonl")
-    for path in glob.glob(pattern, recursive=True):
+    if paths is None:
+        paths = glob.glob(
+            os.path.join(PROJECTS, directory, "**", "*.jsonl"), recursive=True)
+    for path in paths:
         try:
             handle = open(path, errors="replace")
         except OSError:
@@ -236,11 +259,40 @@ def report(name: str, facts: dict) -> None:
         print("        A denial costs the agent one turn. It is not the thing to fix first.")
 
 
+def batch_paths(batch: str, repo=None):
+    """Every transcript belonging to a batch: its sessions and their subagents."""
+    session = _run_session()
+    mains, why = session.sessions_for_batch(batch, repo=repo)
+    if not mains:
+        return [], why
+    paths = list(mains)
+    for main in mains:
+        folder = session.subagents_dir(main)
+        paths += sorted(glob.glob(os.path.join(folder, "*.jsonl")))
+    return paths, ""
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--run", default=None, help="fragment of a run worktree name")
+    parser.add_argument("--batch", default=None,
+                        help="a run or hunt batch id; the sessions are found "
+                             "from that batch's ledger, whatever the worktree "
+                             "is called (ticket 39, ruling 12)")
+    parser.add_argument("--repo", default=None,
+                        help="checkout whose worktrees hold the ledger")
     parser.add_argument("--all", action="store_true", help="one row per run, newest last")
     args = parser.parse_args(argv)
+
+    if args.batch:
+        paths, why = batch_paths(args.batch, repo=args.repo)
+        if not paths:
+            print(f"NO READING TAKEN for batch `{args.batch}`: {why}")
+            print("\nThis is a missing measurement, not a failed run. Carry on.")
+            return 0
+        report(f"batch `{args.batch}`  ({len(paths)} transcript(s))",
+               measure("", paths=paths))
+        return 0
 
     every = runs()
     if not every:

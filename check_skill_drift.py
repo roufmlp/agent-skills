@@ -233,15 +233,24 @@ CATALOGUE: list[Predicate] = [
         "The home of the refutation.",
         line=705,
     ),
-    # --- C7. WAS a genuine contradiction, closed by Abdul's ruling of
+    # --- C7. WAS a genuine contradiction, closed by the human's ruling of
     # 2026-08-22: the prohibition is scoped to roles that HAVE an agent file,
     # and each side points at the other. Guard the two SCOPING sentences, not
     # the "never" sentence. Delete either one and the contradiction returns.
+    #
+    # AMENDED 2026-09-06. The prohibition itself is gone: every loop role now
+    # takes its model from the ledger's map, so there is no "never pass a
+    # `model:` value" rule left to scope. What still has to hold is the OTHER
+    # half — that the board render, which has no agent file and no map row, is
+    # named as the one spawn outside the rule. So the needle moves from the
+    # scoping sentence to the carve-out sentence. Delete that and the finale's
+    # explicit `model: "opus"` reads as a breach again, which is the fault this
+    # predicate has always guarded.
     Predicate(
         "C7", "present", RUN_ISSUES,
-        'The scope of that prohibition is exactly "roles that HAVE an agent file"',
-        "The scoping half. Without it, finale.md's board spawn reads as a breach.",
-        line=774,
+        "One spawn falls outside all of this, and it is the one with no agent file",
+        "The carve-out. Without it, finale.md's board spawn reads as a breach.",
+        line=1182,
     ),
     Predicate(
         "C7", "present", "skills/run-issues/finale.md",
@@ -336,13 +345,19 @@ CATALOGUE: list[Predicate] = [
         "Same rule, run-issues side.",
         line=95,
     ),
+    # AMENDED 2026-09-06. The register stopped being one file in the main
+    # checkout: it is generated from one shard per writer, each committed on
+    # its own tree's branch. "In the main checkout, not any worktree" is now
+    # false, and the fault it guarded — two writers, one file, a row lost with
+    # nothing reporting it — is closed by the shard rule instead. The needle
+    # moves to the sentence that carries that rule.
     Predicate(
         "INV-27", "present", PARALLEL_HUNT,
-        "In **the main checkout**, not any worktree",
-        "A brief naming no register path sent two gates to the worktree copy.",
+        "`register.md` is GENERATED.",
+        "One writer, one shard. A shared file loses a row and reports nothing.",
         line=39,
     ),
-    # --- C8. Was a contradiction; ruled by Abdul on 2026-08-23. The pinned
+    # --- C8. Was a contradiction; ruled by the human on 2026-08-23. The pinned
     # model name is gone and both files carry the same rule. NOTE: the string
     # "The session model is Opus 5" is still in parallel-hunt/SKILL.md, quoted
     # inside the replacement as the text it retired, so it can never be used as
@@ -367,7 +382,7 @@ CATALOGUE: list[Predicate] = [
 #
 # EMPTY, and that is a result. C8 was the one entry here: parallel-hunt pinned
 # "The session model is Opus 5" while run-issues permitted any recorded tier.
-# Abdul generalised it on 2026-08-23 -- the pin is gone, and both files now
+# the human generalised it on 2026-08-23 -- the pin is gone, and both files now
 # carry the same rule. The two guards for it sit in CATALOGUE above.
 CONTRADICTIONS: list[Contradiction] = []
 

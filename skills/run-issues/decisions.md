@@ -491,7 +491,7 @@ canonical (`/to-issues` publishes to a real tracker; everything downstream appen
 
 The last piece of the 30-minute design. Every skill in the chain now defaults and
 queues instead of asking; `/daily-brief` is where those queues become one file
-the human reads once a day, and where their answers become writes.
+The human reads once a day, and where their answers become writes.
 
 **It closes three resting states this file already recorded as dead ends.**
 `awaiting-merge` had no owner, no expiry and no reminder — an unmerged branch had

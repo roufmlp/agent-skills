@@ -15,7 +15,7 @@ Both readings already existed and neither was wired to anything:
 
 So a run states what other runs cost and never records its own. There is nothing
 to compare a skill change or a version change against, which is exactly what
-the human wanted the comparison for.
+The human wanted the comparison for.
 
 WHAT IT COSTS THE RUN: nothing measurable. Two Python scripts read files that are
 already on disk. No agent is spawned, no database is read, no repository is
@@ -57,10 +57,34 @@ looked exactly like the cells it filled rightly.
 
 import argparse
 import datetime
+import importlib.util
+import os
 import pathlib
 import re
 import subprocess
 import sys
+
+
+def _module(name):
+    """Load a sibling script by path. One instance per file, whoever loads it:
+    two would diverge on any module state, and a caller pointing one of them at
+    a different transcript root would be patching a copy nobody reads."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")
+    existing = sys.modules.get(name)
+    if existing is not None and os.path.realpath(
+            getattr(existing, "__file__", "") or "") == os.path.realpath(path):
+        return existing
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_session():
+    """`run_session.py` owns the road from a batch id to a session, and the
+    per-model accounting the four cost scripts share (ticket 39, ruling 12)."""
+    return _module("run_session")
 
 HERE = pathlib.Path(__file__).resolve().parent
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
@@ -179,8 +203,32 @@ def transcript(run: str):
     return chosen, ""
 
 
+def in_process(call) -> str:
+    """Take one reading in this process. A failure becomes text, as `run` does.
+
+    Used for the batch reading, which `orchestrator_cost.py` already holds in
+    memory: a subprocess would re-walk every transcript on the machine to
+    answer a question this process has already answered, and could not be told
+    where the transcripts are.
+
+    The guarantee is unchanged and it is the important part. The human ruled on
+    2026-08-30 that nothing stops a run for their input, and a measurement that
+    could break a finale would be worse than no measurement.
+    """
+    import contextlib
+    import io
+
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out):
+            call()
+    except Exception as error:  # noqa: BLE001 - a measurement never raises
+        return (out.getvalue() + f"\n(this reading failed: {error})").strip()
+    return out.getvalue().rstrip() or "(this reading printed nothing)"
+
+
 def run(args: list) -> str:
-    """Run one reading. A failure becomes text, never an exception."""
+    """Run one reading in a subprocess. A failure becomes text, never an exception."""
     try:
         done = subprocess.run(args, capture_output=True, text=True, timeout=300)
     except Exception as error:
@@ -223,6 +271,13 @@ def main(argv=None) -> int:
     parser.add_argument("--run", default="",
                         help="the run's own name, e.g. batch-88624c; derived from "
                              "the branch when this runs in the run's worktree")
+    parser.add_argument("--batch", default="",
+                        help="a run or hunt batch id. The ledger names the "
+                             "worktree and the worktree names the transcripts, "
+                             "so nothing depends on what the worktree is called "
+                             "(ticket 39, ruling 12). Prefer this to --run.")
+    parser.add_argument("--repo", default="",
+                        help="checkout whose worktrees hold the ledger")
     parser.add_argument("--days", type=int, default=2,
                         help="window for orchestrator_cost.py; 2 covers a run "
                              "that started yesterday and ended today")
@@ -230,6 +285,29 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     cwd = pathlib.Path.cwd()
+    session = _run_session()
+
+    # `--batch` is the road ruling 12 asks for and it needs no worktree name.
+    # `--run` stays because `finale.md` passes it, and because a hand reading
+    # of a run whose ledger is gone still has to work.
+    spawns = []
+    if args.batch:
+        mains, why = session.sessions_for_batch(args.batch, repo=args.repo or None)
+        if not mains:
+            print("## What this run cost\n")
+            print(f"NO READING TAKEN for batch `{args.batch}`: {why}")
+            print("\nThis is a missing measurement, not a failed run. Carry on.")
+            print("NO ROW WAS APPENDED. A row from a transcript this could not "
+                  "identify is worse than no row: run `batch-88624c` appended "
+                  "one on 2026-08-31 reading 1.01 h for an 8.4 h run.")
+            return 0
+        this_run, path = args.batch, pathlib.Path(mains[-1])
+        spawns = session.spawn_rows(mains)
+        print("## What this run cost\n")
+        print(f"Batch `{this_run}`. {len(mains)} session(s) read; "
+              f"timings from `{path}`.\n")
+        return report(args, session, this_run, path, spawns, cwd, mains=mains)
+
     this_run, why = (args.run, "") if args.run else run_name(cwd)
 
     print("## What this run cost\n")
@@ -260,14 +338,90 @@ def main(argv=None) -> int:
               "reading 1.01 h for an 8.4 h run.")
         return 0
     print(f"Run: `{this_run}`. Transcript read: `{path}`, which names the run.\n")
+    return report(args, session, this_run, path, session.spawn_rows([str(path)]), cwd)
 
-    cost = run([sys.executable, str(HERE / "orchestrator_cost.py"), "--days", str(args.days)])
+
+def weighted_cell(session, spawns):
+    """The `Weighted` cell: every model, named beside its own figure.
+
+    A bare `96.6M` on a mixed run is two models added together, and
+    `.scratch/workflow-audit/run-costs.md` holds two such cells already --
+    `run-issues-resume-6a2355` at fable 50.6M against opus-4-8 43.4M, and
+    `mint-settlement-batch-28b482` at opus-4-8 85.0M against fable 16.1M.
+    Neither says anything, because a weighted fable token and a weighted opus
+    token are not the same quantity.
+
+    Ruled by the human 2026-09-06: record everything, display everything per model,
+    and refuse only the merged total. The model rides in the cell rather than in
+    a new column, so no reader ever has the number without it, and the table
+    keeps the ten columns every row since 2026-08-18 was written with.
+    """
+    found = session.by_model(spawns)
+    real = {m: v for m, v in found.items() if m not in session.NOT_A_MODEL}
+    if not real:
+        return None
+    return " / ".join(
+        f"{session.tier_of(model) or model} {slot['weighted'] / 1e6:.1f}M"
+        for model, slot in sorted(real.items(), key=lambda kv: -kv[1]["weighted"]))
+
+
+def per_issue_cell(session, spawns, issues):
+    """`Per issue`, per model, for the same reason `Weighted` is."""
+    if not issues:
+        return None
+    found = session.by_model(spawns)
+    real = {m: v for m, v in found.items() if m not in session.NOT_A_MODEL}
+    if not real:
+        return None
+    return " / ".join(
+        f"{session.tier_of(model) or model} {slot['weighted'] / issues / 1e6:.2f}M"
+        for model, slot in sorted(real.items(), key=lambda kv: -kv[1]["weighted"]))
+
+
+def share_cell(session, mains, spawns):
+    """The `Orchestrator` cell, per model. `not read` where nothing was read."""
+    orchestrator = {}
+    for one in mains:
+        for model, weighted in session.main_thread_by_model(one).items():
+            orchestrator[model] = orchestrator.get(model, 0.0) + weighted
+    shares = {m: v for m, v in session.share_by_model(orchestrator, spawns).items()
+              if m not in session.NOT_A_MODEL}
+    if not shares:
+        return None
+    return " / ".join(f"{session.tier_of(m) or m} {v * 100:.0f}%"
+                      for m, v in sorted(shares.items(), key=lambda kv: -kv[1]))
+
+
+def report(args, session, this_run, path, spawns, cwd, mains=None):
+    """The whole reading, and the one row it appends.
+
+    With a batch id the orchestrator reading is THIS batch, not the week
+    window. The window exists to state what OTHER runs cost at each batch size,
+    which is a launch-time question; reading it here made the appended row
+    borrow another run\'s issue count, its agent count and its share -- and on
+    2026-09-06 it borrowed all three from a fifteen-issue run into a two-spawn
+    fixture without a word.
+    """
+    if mains:
+        orchestrator = _module("orchestrator_cost")
+        cost = in_process(
+            lambda: orchestrator.report_batch(this_run, repo=args.repo or None))
+    else:
+        cost = run([sys.executable, str(HERE / "orchestrator_cost.py"),
+                    "--days", str(args.days)])
     timings = run([sys.executable, str(HERE / "run_timings.py"), str(path)])
 
     print("### Orchestrator share, this run\n")
     print("```\n" + cost + "\n```\n")
     print("### Where the clock went, per step\n")
     print("```\n" + timings + "\n```\n")
+
+    # Ruling 15: a model column per role, and one row per subagent carrying
+    # role, model, effort, tokens by kind, wall clock and rows.
+    print("### What each role ran on, per role and per model\n")
+    print("```\n" + session.render_roles(spawns) + "\n```\n")
+    print("### One row per subagent\n")
+    print("```\n" + session.render_spawns(spawns) + "\n```\n")
 
     # run_timings.py's own three header lines, and nothing else.
     hours = number(r"wall clock\s+([\d.,]+)\s*h", timings)
@@ -296,6 +450,20 @@ def main(argv=None) -> int:
         if isinstance(value, int):
             return f"{value:,}{suffix}"
         return f"{value:g}{suffix}"
+
+    # Per model, because a single figure across two models needs a
+    # cross-model multiplier and that is a price with the currency taken off
+    # (ruling 11). Where this run's spawns could not be read, the old
+    # week-window figure stands and says which model it belongs to nowhere --
+    # which is why the fall-back is the LESS trusted of the two.
+    if spawns and not args.issues:
+        args.issues = session.issue_count(spawns)
+    tokens = weighted_cell(session, spawns) or tokens
+    per_issue = per_issue_cell(session, spawns, args.issues) or per_issue
+    if spawns:
+        agents = len(spawns)
+    if mains:
+        share = share_cell(session, mains, spawns) or share
 
     stamp = datetime.date.today().isoformat()
     row = (

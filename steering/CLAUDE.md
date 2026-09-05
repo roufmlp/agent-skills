@@ -137,7 +137,9 @@ step is not starting it.
 
 **Nothing in that chain ever stops mid-run to ask me.** Every skill defaults its
 open questions, records each default as a default rather than a decision, and
-queues it to `.scratch/decisions-queue.md`. Only genuinely irreversible calls wait:
+queues it to its own shard of `.scratch/decisions-queue.d/`, which
+`collect_shards.py` concatenates into `.scratch/decisions-queue.md`. Only
+genuinely irreversible calls wait:
 a split, a `wontfix` close, a migration's direction, a money or auth rule, anything
 that ships data or commits a public contract. `daily-brief` collects the queues and
 carries my answers back out.

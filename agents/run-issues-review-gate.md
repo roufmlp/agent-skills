@@ -128,7 +128,7 @@ and check before you mutate: on the 395b run a live server compiled two mutants 
 of the run's shared worktree and served broken code to whatever else read that tree.
 Write every checksum file under the run's worktree. A gate that wrote twenty of them
 into the main checkout stopped `git merge --ff-only` outright. (Both adopted by
-the human 2026-08-23.)
+The human 2026-08-23.)
 
 **Your close list carries every path your open list carried.** Where a path's hash
 changed, record the new hash beside it and say in the verdict what you wrote and
@@ -165,8 +165,18 @@ that string, never a heading. Never declare a routing you cannot cite. An
 out-of-scope find never blocks the issue.
 
 **The register is where every finding goes, and you never write an issue file.** It
-is one file per feature, in the main checkout, shared with `/parallel-hunt`; the
-runner's prompt gives you the path. Append one row:
+is one register per feature, shared with `/parallel-hunt`, and it is GENERATED
+from a shard per writing worktree (ticket 38, the one-run-per-feature layout
+ticket, ruling 14). Append your row to YOUR shard, inside the run's own tree:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register \
+    --feature <feature> --my-shard --prefix <your row prefix>
+```
+
+Your shard is yours alone: the prefix keeps you off the other gate's file when
+you both run at once. A write to `register.md` itself is refused, and the
+refusal names the directory your shard belongs in. Append one row:
 `ID | one-line summary | audience | severity | status | owner-notes`.
 
 - **`audience`** is `operator` or `tester` — who can see this fault at all.
@@ -215,4 +225,4 @@ implementer and the verify gate wrote the main-checkout ones. It then graded
 412 against a file with no implementation record in it and filed a finding
 saying the record was missing, when it was present at line 682 of the live copy.
 The finding had to be annulled and the records relocated by hand. (Adopted by
-the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+The human 2026-08-25, from candidate rule 5 of that run's merge briefing.)

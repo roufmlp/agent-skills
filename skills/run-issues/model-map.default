@@ -1,0 +1,13 @@
+# The default model map, read at launch when no `models:` word is typed.
+# Ticket 39 of the pilot-delivery map, every-worker-inherits-the-session-model,
+# ruling 3. Starting value: every role on the session's own model, which is what
+# every run and hunt did before the map existed.
+#
+# Grammar (ruling 5): `all`, `workers`, `gates`, or one key per agent type --
+# implementer, escalated, verify, review, review-critical, finale, finder,
+# fixer, claim-gate, fix-gate, fix-gate-critical, promotion. More specific wins.
+# Values: haiku, sonnet, opus, fable, inherit.
+#
+# A gate may never sit below the worker it checks (ruling 14). The launch line
+# refuses an inverted map before it spawns anything.
+all=inherit

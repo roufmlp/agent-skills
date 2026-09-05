@@ -42,6 +42,10 @@ EVERYTHING = [
     "Bash(npm run lint*)",
     "Bash(npm run typecheck*)",
     "Bash(npm run build*)",
+    # A project's own isolation commands ride one prefix rule, and they reach the
+    # check through `--classes` rather than through REQUIRED. This entry stands for
+    # that class in the fixture.
+    "Bash(node --env-file=<env file> *)",
 ]
 
 

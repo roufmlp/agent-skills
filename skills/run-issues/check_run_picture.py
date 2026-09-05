@@ -23,7 +23,7 @@ carries the same key as `data-figure` on the element whose own text is the numbe
 The number compared is the number DISPLAYED, read out of that element rather than
 from a second attribute, so a board cannot agree in its markup and lie on screen.
 
-**the human ruled the slug on 2026-09-01, for this guard.** The alternative was an alias
+**The human ruled the slug on 2026-09-01, for this guard.** The alternative was an alias
 table inside this file mapping each board label to a block row. The slug holds no
 vocabulary of its own, so a renamed row moves both files together and a rename that
 moves only one is refused as `not-in-the-block`. Pairing by POSITION was rejected
@@ -75,6 +75,12 @@ import draw_run_rail
 
 BLOCK_HEADING = "## The run in one screen"
 
+# The three shapes this guard grades, each against its own table. A shape
+# outside this tuple is counted and passed over, which is the forward door
+# issue 553 left open and the reason its guard did not halt every run the day
+# these two shipped. Whatever draws next needs the same door.
+GRADED_SHAPES = ("shipped", "minted", "fork")
+
 # A refusal that names a real disagreement between the two files exits 1, which
 # the finale reads as "fix one of them and re-render". Everything else exits 2,
 # meaning the guard could grade nothing, which is a different repair.
@@ -87,6 +93,12 @@ EXIT_ONE = (
     "card-overflows",
     "bad-card-stage",
     "no-card",
+    "band-not-in-the-block",
+    "band-disagrees",
+    "band-overflows",
+    "chip-not-in-the-block",
+    "no-band",
+    "no-chip",
 )
 
 # HTML sends no end tag for these, so counting one as a nesting level leaves the
@@ -267,15 +279,38 @@ class Card:
 
 @dataclass
 class BlockCards:
-    """The rail block as the guard grades cards against it."""
+    """The rail block as the guard grades cards against it.
+
+    Three tables, kept apart. Issue 552's rule refuses a row naming an issue
+    that did not ship, and every row issue 554 adds names an issue that did not
+    ship, so one flat dictionary keyed by issue number would make the two
+    slices refuse each other on the first run that mints anything.
+    """
 
     rows: dict[str, tuple[str, str]] = field(default_factory=dict)
     bands: set[str] = field(default_factory=set)
+    minted: dict[str, str] = field(default_factory=dict)
+    forks: dict[str, str] = field(default_factory=dict)
+    # Issue 555. Each band row keyed by its `Band` cell, holding its `Stages`
+    # cell and the ids of its `Issues` cell in the order it writes them.
+    band_rows: dict[str, tuple[str, tuple[str, ...], str]] = field(
+        default_factory=dict
+    )
 
     @property
     def owed(self) -> dict[str, tuple[str, str]]:
         """The rows that owe a card: every shipped row no band names."""
         return {k: v for k, v in self.rows.items() if k not in self.bands}
+
+    @property
+    def minted_owed(self) -> dict[str, str]:
+        """The holes that owe a card: every minted row no band names.
+
+        A band may carry an issue the run left open — `batch-45c8b1`'s band
+        carries `509` as a dashed chip — and that issue is then drawn inside
+        the band and not as a card beneath it, exactly like a shipped member.
+        """
+        return {k: v for k, v in self.minted.items() if k not in self.bands}
 
 
 def read_block_cards(text: str) -> BlockCards | None:
@@ -291,7 +326,19 @@ def read_block_cards(text: str) -> BlockCards | None:
     rows = {
         cells[0]: (cells[1], cells[2]) for cells in rail.rows if len(cells) >= 3
     }
-    return BlockCards(rows=rows, bands=rail.bands)
+    at = check_run_rail.BAND_ISSUES_AT
+    cap = check_run_rail.BANDS_HEADER.index("caption")
+    return BlockCards(
+        rows=rows,
+        bands=rail.bands,
+        minted={c[0]: c[1] for c in rail.minted if len(c) >= 2},
+        forks={c[0]: c[1] for c in rail.forks if len(c) >= 2},
+        band_rows={
+            c[0]: (c[1], tuple(check_run_rail._band_ids(c[at])), c[cap])
+            for c in rail.band_rows
+            if len(c) > cap
+        },
+    )
 
 
 class _CardReader(HTMLParser):
@@ -394,30 +441,318 @@ def read_board_cards(html: str) -> dict[str, Card]:
         raise ValueError(
             f"the element carrying data-card={reader.open_key!r} never closed"
         )
-    # Only `shipped` cards. `compare_cards` grades no other shape, so this
-    # guard makes no claim about one, and a silence about an ungraded card
-    # hides nothing. Raising for every shape defeated `data-shape` one function
-    # early and would have halted every run at exit 2 the day issue 554's fork
-    # cards shipped.
+    # Every GRADED shape, and no other. `compare_cards` measures these three
+    # against their boxes, so a card of one whose lines cannot be found cannot
+    # be measured. A shape outside the three is passed over: raising on it
+    # would defeat `data-shape` one function early, which is what would have
+    # halted every run at exit 2 the day issue 554's cards shipped.
     unmarked = [
         key for key, card in reader.cards.items()
-        if card.shape == "shipped" and not card.lines
+        if card.shape in GRADED_SHAPES and not card.lines
     ]
     if unmarked:
         raise ValueError(
             f"card {unmarked[0]!r} marks no sentence line; each line of the "
-            f"sentence carries data-line, and a shipped card whose lines "
+            f"sentence carries data-line, and a graded card whose lines "
             f"cannot be found cannot be measured against its box"
         )
     return reader.cards
 
 
+@dataclass(frozen=True)
+class Band:
+    """One band as the board draws it.
+
+    `stages` is the `Stages` cell verbatim and `issues` the ids of the `Issues`
+    cell in the order it writes them. `chips` is each chip's drawn lines, keyed
+    by issue, and it is read for one purpose: measuring the words against the
+    space the band's own arithmetic gives them.
+    """
+
+    stages: str
+    issues: tuple[str, ...]
+    chips: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
+
+class _BandReader(HTMLParser):
+    """Every `data-band` element, its attributes and the chips inside it.
+
+    Measured 2026-09-03 against the live readers in this file, and both
+    findings are enforced here rather than written down and hoped for:
+    `read_board_figures('<svg><rect data-figure="a" width="5"/></svg>')` raises
+    `no number in ''`, so a self-closing carrier is refused; and
+    `'<div data-figure="a">7<span data-figure="b">9</span></div>'` returns
+    `{'a': 79.0}`, silently concatenating the digits, so no `data-figure` may
+    sit inside a band.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.bands: dict[str, Band] = {}
+        self._key: str | None = None
+        self.open_key: str | None = None
+        self._depth = 0
+        self._attrs: dict[str, str] = {}
+        self._chips: dict[str, list[str]] = {}
+        self._chip: str | None = None
+        self._text: list[str] | None = None
+
+    @staticmethod
+    def _found(attrs: list[tuple[str, str | None]]) -> dict[str, str]:
+        return {name: (value or "").strip() for name, value in attrs}
+
+    def handle_startendtag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        found = self._found(attrs)
+        if found.get("data-band"):
+            raise ValueError(
+                f"data-band={found['data-band']!r} sits on a self-closing "
+                f"<{tag}/>, which wraps nothing; it goes on the container "
+                f"element that holds the band's shapes, caption and chips"
+            )
+        if self._key is not None and "data-figure" in found:
+            raise ValueError(
+                f"data-figure={found['data-figure']!r} sits inside the band "
+                f"{self._key!r}; the figure reader takes every nested "
+                f"data-figure and concatenates their digits, so a band holds none"
+            )
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        found = self._found(attrs)
+        if self._key is not None:
+            if "data-figure" in found:
+                raise ValueError(
+                    f"data-figure={found['data-figure']!r} sits inside the band "
+                    f"{self._key!r}; the figure reader takes every nested "
+                    f"data-figure and concatenates their digits, so a band "
+                    f"holds none"
+                )
+            if found.get("data-band"):
+                raise ValueError(
+                    f"data-band={found['data-band']!r} sits inside the element "
+                    f"carrying data-band={self._key!r}; bands do not nest"
+                )
+            if tag.lower() not in VOID_TAGS:
+                self._depth += 1
+            if found.get("data-chip"):
+                self._chip = found["data-chip"]
+                self._chips.setdefault(self._chip, [])
+            if tag.lower() == "text" and "data-line" in found:
+                self._text = []
+            return
+        if found.get("data-band"):
+            self._key = found["data-band"]
+            self.open_key = self._key
+            self._depth, self._attrs = 0, found
+            self._chips, self._chip, self._text = {}, None, None
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._key is None:
+            return
+        if tag.lower() == "text" and self._text is not None:
+            if self._chip is not None:
+                self._chips[self._chip].append("".join(self._text).strip())
+            self._text = None
+        if self._depth:
+            self._depth -= 1
+            if self._depth == 0:
+                self._chip = None
+            return
+        self.bands[self._key] = Band(
+            stages=self._attrs.get("data-stages", ""),
+            issues=tuple(self._attrs.get("data-issues", "").split()),
+            chips={k: tuple(v) for k, v in self._chips.items()},
+        )
+        self._key = None
+        self.open_key = None
+
+    def handle_data(self, data: str) -> None:
+        if self._text is not None:
+            self._text.append(data)
+
+
+def read_board_bands(html: str) -> dict[str, Band]:
+    """Every `data-band` element on the board, keyed by the attribute verbatim.
+
+    Raises ValueError where a band carries markup this guard cannot read, which
+    exits 2 for the same reason the figure and card readers do: a band the
+    reader silently loses looks exactly like a band the render never drew.
+    """
+    reader = _BandReader()
+    reader.feed(html)
+    reader.close()
+    if reader.open_key is not None:
+        raise ValueError(
+            f"the element carrying data-band={reader.open_key!r} never closed"
+        )
+    return reader.bands
+
+
+def _drawn_badly(key: str, card: Card, stages: list[str] | None) -> str | None:
+    """What is wrong with the card as DRAWN, before any table is consulted.
+
+    Stage vocabulary and box measurement apply to all three shapes: a dashed
+    card and an amber card draw text exactly as a shipped one does, so a
+    sentence that would reach the browser clipped is refused on any of them.
+    """
+    if stages is not None and card.stage not in stages:
+        return (
+            f"bad-card-stage: the board draws {key} on `{card.stage}`, "
+            f"which is not a stage in the vocabulary; the key is the "
+            f"`Key` cell of docs/agents/run-picture-stages.md verbatim and "
+            f"never the column name slugged"
+        )
+    if len(card.lines) > draw_run_rail.MAX_LINES:
+        return (
+            f"card-overflows: the board draws {key} on {len(card.lines)} "
+            f"lines and a card holds {draw_run_rail.MAX_LINES}; the "
+            f"sentence is shortened in the rail block, never here"
+        )
+    for line in card.lines:
+        need = len(line) * draw_run_rail.PX
+        if need > draw_run_rail.LINE_W:
+            return (
+                f"card-overflows: the board draws {key}'s line "
+                f"{line!r} at {need:.0f} units and the card gives "
+                f"{draw_run_rail.LINE_W}; it would reach the browser "
+                f"clipped"
+            )
+    return None
+
+
+def _compare_stage_only(
+    shape: str,
+    table: str,
+    rows: dict[str, str],
+    board: dict[str, Card],
+    stages: list[str] | None,
+) -> str | None:
+    """Grade one shape whose table carries an issue, a stage and a text.
+
+    Issue 554's two tables both take this form, and neither has a `Kind`
+    column: a hole has no diff to have a kind of, and neither does a question.
+    Grading one would demand a column that does not exist.
+
+    Every row owes a card and every card owes a row. There is no band rule
+    here: a band replaces the cards for the SHIPPED issues it spans, and a hole
+    or a fork is not one of them.
+    """
+    drawn = {key: card for key, card in board.items() if card.shape == shape}
+    for key, card in sorted(drawn.items()):
+        bad = _drawn_badly(key, card, stages)
+        if bad is not None:
+            return bad
+        stage = rows.get(key)
+        if stage is None:
+            return (
+                f"card-not-in-the-block: the board draws {key} as a {shape} "
+                f"card on `{card.stage}` and the rail's `{table}` table holds "
+                f"no row for it, so the render derived it"
+            )
+        if card.stage != stage:
+            return (
+                f"card-disagrees: the board draws {shape} card {key} on "
+                f"`{card.stage}` and its `{table}` row reads `{stage}`"
+            )
+    missing = [key for key in rows if key not in drawn]
+    if missing:
+        return (
+            f"no-card: {', '.join(sorted(missing))} under `{table}` and not "
+            f"drawn on the board; every row in that table is drawn exactly "
+            f"once, and a row with no card is a thing that vanished from the "
+            f"picture"
+        )
+    return None
+
+
+def _compare_bands(
+    block: BlockCards,
+    bands: dict[str, Band],
+    stages: list[str] | None,
+) -> str | None:
+    """Whether every band drawn agrees with the row it was copied from.
+
+    The band is where the run's whole story lands when it has one, so both
+    directions bite: a band on the board with no row is a subject the render
+    INVENTED, and a row with no band is the story missing from the picture.
+
+    The `Stages` cell is compared verbatim and the `Issues` cell as its list of
+    ids in order. Spacing inside a markdown cell is the writer's, and a rule
+    that made a wider column a refusal would refuse a correct briefing.
+    """
+    for key, band in sorted(bands.items()):
+        row = block.band_rows.get(key)
+        if row is None:
+            return (
+                f"band-not-in-the-block: the board draws band {key} over "
+                f"`{band.stages}` and the rail's `{check_run_rail.BANDS_HEADING}` "
+                f"table holds no row for it, so the render derived it"
+            )
+        span, issues, caption = row
+        if band.stages != span:
+            return (
+                f"band-disagrees: the board draws band {key} over "
+                f"`{band.stages}` and its row reads `{span}`"
+            )
+        if band.issues != issues:
+            return (
+                f"band-disagrees: the board draws band {key} over "
+                f"{', '.join(band.issues) or 'no issues'} and its row names "
+                f"{', '.join(issues)}"
+            )
+        drawn = set(band.chips)
+        invented = sorted(drawn - set(issues))
+        if invented:
+            return (
+                f"chip-not-in-the-block: the board draws {invented[0]} as a chip "
+                f"inside band {key} and its row does not name it, so the render "
+                f"put an issue in the run's story that the block does not"
+            )
+        for issue in issues:
+            lines = band.chips.get(issue)
+            if lines is None:
+                return (
+                    f"no-chip: band {key} names {issue} and the board draws no "
+                    f"chip for it; the band is there and one of its members is "
+                    f"not, so the issue vanished from the picture"
+                )
+            if stages is None:
+                continue
+            columns, why = check_run_rail._span(span, stages)
+            if columns is None:
+                continue
+            budget = draw_run_rail.chip_width(
+                len(columns), len(issues), caption
+            )
+            for line in lines:
+                need = len(line) * draw_run_rail.PX
+                if need > budget:
+                    return (
+                        f"band-overflows: the board draws {issue}'s chip line "
+                        f"{line!r} at {need:.0f} units and the band gives "
+                        f"{budget:.0f}; the space a chip has falls out of the "
+                        f"band's span and its chip count, so shorten the text "
+                        f"in `{check_run_rail.CHIPS_HEADING}`"
+                    )
+    missing = [key for key in block.band_rows if key not in bands]
+    if missing:
+        return (
+            f"no-band: {', '.join(sorted(missing))} under "
+            f"`{check_run_rail.BANDS_HEADING}` and not drawn on the board; a "
+            f"band carries the run's story and a row with no band is that "
+            f"story missing from the picture"
+        )
+    return None
+
+
 def compare_cards(
     block: BlockCards | None,
     board: dict[str, Card],
-    stages: set[str] | None,
+    stages: list[str] | None,
+    bands: dict[str, Band] | None = None,
 ) -> tuple[bool, str]:
-    """Whether every shipped card agrees with the row it was copied from.
+    """Whether every card agrees with the row it was copied from.
 
     `stages` None means the repository has no `docs/agents/run-picture-stages.md`
     and the stage-vocabulary rule is not run, which is rule 4 of that file.
@@ -427,30 +762,19 @@ def compare_cards(
             f"no-rail: the briefing carries no `{check_run_rail.RAIL_HEADING}` "
             f"heading, so there is nothing for the cards to be checked against"
         )
+    # **The bands are compared first**, because they decide which rows owe a
+    # card at all. A board and a block that disagree about a band disagree
+    # about every card under it too, and `no-card: 517, 516` on a run whose
+    # band row was deleted names the symptom while the band names the cause.
+    bad = _compare_bands(block, bands or {}, stages)
+    if bad is not None:
+        return False, bad
+
     shipped = {key: card for key, card in board.items() if card.shape == "shipped"}
     for key, card in sorted(shipped.items()):
-        if stages is not None and card.stage not in stages:
-            return False, (
-                f"bad-card-stage: the board draws {key} on `{card.stage}`, "
-                f"which is not a stage in the vocabulary; the key is the "
-                f"`Key` cell of docs/agents/run-picture-stages.md verbatim and "
-                f"never the column name slugged"
-            )
-        if len(card.lines) > draw_run_rail.MAX_LINES:
-            return False, (
-                f"card-overflows: the board draws {key} on {len(card.lines)} "
-                f"lines and a card holds {draw_run_rail.MAX_LINES}; the "
-                f"sentence is shortened in the rail block, never here"
-            )
-        for line in card.lines:
-            need = len(line) * draw_run_rail.PX
-            if need > draw_run_rail.LINE_W:
-                return False, (
-                    f"card-overflows: the board draws {key}'s line "
-                    f"{line!r} at {need:.0f} units and the card gives "
-                    f"{draw_run_rail.LINE_W}; it would reach the browser "
-                    f"clipped"
-                )
+        bad = _drawn_badly(key, card, stages)
+        if bad is not None:
+            return False, bad
         row = block.rows.get(key)
         if row is None:
             return False, (
@@ -483,9 +807,20 @@ def compare_cards(
             f"once, and a row with no card is an issue that vanished from the "
             f"picture"
         )
+
+    for shape, table, rows in (
+        ("minted", check_run_rail.MINTED_HEADING, block.minted_owed),
+        ("fork", check_run_rail.FORKS_HEADING, block.forks),
+    ):
+        bad = _compare_stage_only(shape, table, rows, board, stages)
+        if bad is not None:
+            return False, bad
+
     return True, (
         f"ok: {len(shipped)} of the block's {len(block.owed)} card-owing rail "
-        f"rows are drawn on the board and every one agrees"
+        f"rows are drawn on the board, with {len(block.minted_owed)} minted and "
+        f"{len(block.forks)} fork cards and {len(block.band_rows)} bands beside "
+        f"them, and every one agrees"
     )
 
 
@@ -521,7 +856,13 @@ def main() -> int:
         print(f"REFUSED unreadable-card: {error}", file=sys.stderr)
         return 2
 
-    stages: set[str] | None = None
+    try:
+        bands = read_board_bands(board_html)
+    except ValueError as error:
+        print(f"REFUSED unreadable-band: {error}", file=sys.stderr)
+        return 2
+
+    stages: list[str] | None = None
     graded = "NOT graded, no vocabulary"
     if args.stages:
         located = check_run_rail.locate_stages(args.stages)
@@ -544,7 +885,7 @@ def main() -> int:
 
     figures_ok, figures_why = compare(read_block_figures(briefing), board)
     cards_ok, cards_why = compare_cards(
-        read_block_cards(briefing), cards, stages
+        read_block_cards(briefing), cards, stages, bands
     )
     if figures_ok and cards_ok:
         print(figures_why)

@@ -36,16 +36,71 @@ batch size. Everything stable already lives in the agent file, where it caches.
 
 ## The register — all state in files
 
-In **the main checkout**, not any worktree, so every agent reads and writes the
-same absolute path with no git sync. Four files, split on one test: a thing belongs
-in the register only if another agent must read it to do its own job.
+**`register.md` is GENERATED.** Its content lives in shards — one per WRITER,
+under a directory named for the worktree that owns it — and every writer appends
+to its own shard inside its own tree and commits it on that tree's branch.
+`collect_shards.py` concatenates them. This is ticket 38 of the pilot-delivery
+map, the one-run-per-feature layout ticket, rulings 5, 14 and 15, 2026-09-05: one
+file with many writers loses a row silently whenever two of them write at once,
+and nothing reports the loss.
+
+**One writer is one shard, not one tree.** A run's two gates run at once in one
+tree, and two agents editing one file rebuild the fault. Your shard is named
+after the row prefix you stamp.
+
+**A hunt is the exception, on purpose: the whole round shares ONE shard, named
+after the round, inside the hunt's own worktree.** The finder writes a row and
+the fixer and both gates then change its `status` and `owner-notes` in place,
+so the row has to sit in a file they all hold. That is the status machine this
+skill has always had, and sitting 3 neither widened nor narrowed it — two of
+them writing at the same moment can still lose an edit, as they could when the
+register was one file. What sitting 4 changed is where the file sits: the
+hunt's worktree, so no run and no other session holds it. Named as a fact.
+
+Ask for it rather than working the path out:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register \
+    --feature <feature> --my-shard --prefix <your row prefix>
+```
+
+Read the whole register by regenerating it first. Run this from anywhere; it
+writes the generated file into the main checkout, and reading that one file
+there is the only thing a hunt's worker does in the main checkout:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>
+```
+
+**Writers append to a shard. Readers regenerate, then read.** A write to
+`register.md` itself is refused by `generated-file-guard.py` in the hooks, which
+names your shard in the refusal.
+
+Five paths, split on one test: a thing belongs in the register only if another
+agent must read it to do its own job.
 
 ```
-<main-repo-root>/.scratch/<feature>/register.md      # the index table, live findings only
-<main-repo-root>/.scratch/<feature>/round-brief.md   # this round's brief, scope, sweep groups
-<main-repo-root>/.scratch/<feature>/leads.md         # standing leads and rulings
-<main-repo-root>/.scratch/<feature>/bugs/<ID>.md     # evidence, reproducer, verdicts
+<hunt-worktree>/.scratch/<feature>/register.d/<hunt-id>/<prefix>.md  # this round's rows, one shard
+<main-repo-root>/.scratch/<feature>/register.md           # generated: every shard, in order
+<hunt-worktree>/.scratch/<feature>/round-brief.md         # this round's ledger: header, round block, brief, scope, sweep groups
+<hunt-worktree>/.scratch/<feature>/round-journal.md       # lock waits and breaks, halts, anything the brief must not carry
+<hunt-worktree>/.scratch/<feature>/leads.md               # standing leads and rulings; reaches main at merge
+<hunt-worktree>/.scratch/<feature>/bugs/<ID>.md           # evidence, reproducer, verdicts
 ```
+
+The shard directory is `<hunt-id>` because `collect_shards.py` names a shard
+directory after the worktree's own directory name, and the worktree is cut at
+`.claude/worktrees/<hunt-id>`. Move the worktree and the shard directory moves
+with it.
+
+Everything a round writes lives in the hunt's own worktree and lands in main when
+The human merges the hunt branch (ticket 38, the one-run-per-feature layout ticket,
+ruling 6, sitting 4). The one exception is the generated register, which the
+collector always writes into the main checkout and which nobody commits. A hunt
+cut from main before a run merges hunts the code as main holds it, without that
+run's fixes; that is a fact about the cut, not a wait. Name any run at
+`awaiting-merge` in the brief text at launch, so a finder that reproduces one of
+its fixes on the old code is read against it.
 
 `register.md` is a table:
 `ID | one-line summary | audience | severity | status | owner-notes`.
@@ -116,10 +171,88 @@ assigned tasks, and **not one was a wrong diff**. All four were prose, and three
 them were caught only because a gate re-measured a sentence nobody had asked it to
 check (`decisions.md:91-108`).
 
-At round end commit `register.md`, `leads.md`, `bugs/` and `tests/regressions/` —
-those paths only — and delete `round-brief.md`. Never commit the whole
+At round end, in the hunt's worktree on the hunt branch, commit
+`register.d/<hunt-id>/`, `round-journal.md`, `leads.md`, `bugs/` and
+`tests/regressions/`, those paths only, and delete `round-brief.md`. **Never commit the generated `register.md`**: it falls out of
+the shards, and committing it puts one tree's snapshot of every other tree's
+rows on the branch. Never commit the whole
 `.scratch/<feature>/` directory: a run's ledger, journal and issue files live there
 too, and committing them mid-run puts half-written run state on main.
+
+## The round block — built at launch, pasted into every spawn
+
+A hunt is a run for isolation (ticket 38, the one-run-per-feature layout
+ticket, ruling 22): it takes a hunt id, a worktree, a QA workspace and user, the
+dev server by name, and the Zoho lock, exactly as `/run-issues` does, and its
+round end deletes the workspace. So `round-brief.md` is a ledger with the same
+header a run's `run.md` carries, and the places a role needs travel in one
+block below that header, pasted verbatim into every spawn prompt.
+
+**The header is the first thing in the file, and the block follows it.** Every
+script that reads a ledger stops at line 60, so a project's own seed script should
+refuse a brief whose title line and `Worktree:` line are not inside it. The brief
+text, the scope and the sweep groups come after.
+
+```
+# Round brief — <scope> (hunt `<hunt-id>`)
+
+Owner: session <session id> (orchestrator)
+Worktree: `<absolute path of the hunt's worktree>`
+Branch: `hunt/<hunt-id>`
+```
+
+**`model_map.py` writes two more header lines at launch, under `Worktree:`:**
+`Model map at launch:` and `Role effort at launch:`, all twelve loop roles named
+in each (ticket 39 of the pilot-delivery map,
+every-worker-inherits-the-session-model, rulings 4, 7 and 8). Ruling 8 asks a
+hunt for a ledger carrying the same header a run's `run.md` carries; ticket 38
+already made `round-brief.md` that ledger, so the lines go here and no second
+hunt state file is minted. Run this before the first spawn and paste what it
+prints:
+
+```
+python3 ~/.claude/skills/run-issues/model_map.py "<everything after /parallel-hunt>"
+```
+
+**A hunt takes its map with the same word and the same parser** (ruling 20):
+
+```
+/parallel-hunt <scope> models: finder=fable claim-gate=fable fixer=opus
+```
+
+The grammar, the default file, the resolution and the refusals are all the run's,
+documented in `~/.claude/skills/run-issues/SKILL.md` under "Run state". Two of
+the twelve keys matter most here — `finder` and `fixer` — and the gates that
+check them are `claim-gate` and `fix-gate`/`fix-gate-critical`. **No gate may sit
+below the worker it checks** (ruled 2026-08-15,
+`~/.claude/rulings.md:99-121`), so `finder=fable` needs `claim-gate=fable` beside
+it: the bare `finder=fable fixer=opus` line is refused on any session below
+`fable`. Exit 1 is a launch-time stop — spawn nothing and hand the human the refusal.
+
+The seed then writes `QA workspace:` and `Sign-in user:` under `Worktree:`
+itself, so no uuid passes through a keyboard. The fenced id on the title line is
+what `find_live_ledger.py`, `sweep-run-workspaces.mjs` and `dev-signin-link.mjs`
+read; the `Owner:` line is what makes the round live to all three, under the
+one rule a run's ledger already follows. Then the block:
+
+```
+Hunt:             <hunt-id>
+Worktree:         <absolute path of the hunt's worktree; every role works here, and reads the regenerated register in the main checkout>
+Branch:           hunt/<hunt-id>
+QA workspace:     <the id on round-brief.md's QA workspace: line, seeded for this round alone; every fixture script run in this worktree reads it off round-brief.md itself>
+Sign-in user:     <the email on round-brief.md's Sign-in user: line>
+Sign-in link:     <the dev-signin-link.mjs command from the pre-flight, with this hunt id filled in; the port comes from the preview_start result>
+Dev server:       <the launch.json entry by name; it carries autoPort, so the port exists only in the preview_start result of the spawn that started it>
+Zoho lock:        <the zoho-live-lock.mjs command from the pre-flight, with this hunt id and the journal path filled in>
+Register shard:   <absolute path from collect_shards.py --my-shard, run inside the worktree>
+Bugs:             <absolute path of <hunt-worktree>/.scratch/<feature>/bugs/>
+Journal:          <absolute path of <hunt-worktree>/.scratch/<feature>/round-journal.md>
+Leads:            <absolute path of <hunt-worktree>/.scratch/<feature>/leads.md>
+```
+
+A field you cannot fill stops the spawn. Two of them are refused rather than
+remembered: the seed will not write into a brief with no header, and the
+sign-in script will not mint on any host but this hunt's.
 
 ## Promotion — the only door into `issues/`
 
@@ -135,7 +268,10 @@ A finding is out by default. Promotion is the work that gets it in.
 files is repetitive file work arriving at the moment the orchestrator's context is
 most expensive, and the orchestrator would be reading rows it has no other reason to
 hold. It spawns the agent, gets two lists and a count back, and puts them in the
-round report.
+round report. The spawn names the issue directory; the agent takes each number from
+`python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for "promotion <hunt id>"`, which is
+atomic across every worktree, and the hook `number-claim-guard.py` refuses a file under
+an unclaimed number (ticket 38, rulings 7 and 16).
 The rule below lives in the agent file too, where it caches.
 
 Promotion runs on that rule and applies its own answer. It never waits. Every row is
@@ -244,12 +380,15 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
 1. **Never read bug-file contents or diffs.** Read `register.md` status lines and
    worker return summaries. Judgement belongs to the gates; the moment the
    orchestrator starts forming opinions about bugs, it stops being thin.
-2. Write `round-brief.md` with the brief, the target scope and the sweep groups,
-   create an empty `register.md` if the feature has none, then spawn finder and
-   fixer concurrently. The fixer idles politely until entries reach `open`.
+2. Write `round-brief.md` in the hunt's worktree with the round block, the
+   brief, the target scope and the sweep groups, then spawn finder and fixer
+   concurrently, each prompt carrying the block. Nothing has to create a
+   register: the shards make it, and a feature with no shard has no register to
+   make. The fixer idles politely until entries reach `open`.
 3. On each worker return, spawn the right gate and/or successor.
 4. **On each gate return, check it wrote a verdict, before you act on the
-   status.** One command against the bug file in the main checkout:
+   status.** One command against the bug file in the hunt's worktree, at the
+   `Bugs:` path in the round block:
 
    ```bash
    python3 ~/.claude/skills/lib/check_verdict.py --file <bugs/ID.md> --section "## Claim gate"
@@ -273,11 +412,68 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    and one line.
 5. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
-6. Round end, in this order: mark leftovers `deferred`; spawn one `promotion` agent
-   over every row; delete the heartbeat cron; delete `round-brief.md`; commit. Then
-   report — verified fixes, rejected fixes, retracted claims, and the two lists
-   promotion returned. Say plainly what was left undone; a round that reports only
-   its wins is not a report.
+6. Round end, in this order: mark leftovers `deferred`; spawn one `promotion`
+   agent over every row, **carrying `model:` set to the `promotion=` value on
+   `round-brief.md`'s `Model map at launch:` line** — it is a mapped role, so
+   `model-map-gate.py` refuses a spawn that omits it (ticket 39, ruling 10);
+   **take the five readings below, which must happen before the brief is
+   deleted**; delete this round's QA workspace; delete the heartbeat
+   cron; delete `round-brief.md`; commit. Then report — verified fixes, rejected
+   fixes, retracted claims, the two lists promotion returned, and the branch and
+   worktree the human merges. Say plainly what was left undone; a round that reports
+   only its wins is not a report.
+
+   **What a round cost, and what each role ran on.** Until ticket 39 of the
+   pilot-delivery map, every-worker-inherits-the-session-model, a hunt had no cost
+   script at all, so a hunt's cost was not measured whatever the model. Its sitting 3
+   gave the run's four scripts a `--batch` and one set now serves both (ruling 12).
+   Run all five with this round's hunt id and paste the output into the round report:
+
+   ```
+   python3 ~/.claude/skills/run-issues/run_costs.py --batch <hunt-id> --no-append
+   python3 ~/.claude/skills/run-issues/harness_cost.py --batch <hunt-id>
+   python3 ~/.claude/skills/run-issues/orchestrator_cost.py --batch <hunt-id>
+   python3 ~/.claude/skills/run-issues/run_timings.py --batch <hunt-id>
+   python3 ~/.claude/skills/run-issues/run_quality.py --batch <hunt-id>
+   ```
+
+   **The fifth is sitting 4's, and it answers a different question from the other
+   four** (ticket 39, deliverable 4, rulings 21.3 and 22). They say what the round
+   cost. It says whether the round's model trial may be READ: the per-role table
+   built from the transcripts, and the verdict `holds`, `VOID` or `not measured`.
+   `VOID` means at least one mapped spawn ran on something other than what
+   `round-brief.md` asked for, and `~/.claude/hooks/model-landed-check.py` wrote the
+   `**MISMATCH**` line naming it. **A void trial stops nothing and reverses nothing**
+   — the fixes are still good fixes, the branch still goes to the human, and the only
+   thing void is the comparison against another round. Paste it into the round report
+   whole. It prints no per-issue figures, because a hunt has no issues.
+
+   **`--no-append` on the first one.** `.scratch/workflow-audit/run-costs.md` is one
+   row per RUN and its columns are a run's — issues shipped, per issue, correction
+   rounds. A hunt has none of those, and a hunt row in that table would be read as a
+   run for as long as the table lives.
+
+   **The order above is not a preference. Every one of them finds the session by
+   reading `round-brief.md`**, so all five must run while it still exists. Once it is
+   deleted no ledger names this hunt and the round can never be measured — unlike a
+   run, whose `run.md` is committed and readable for ever. **`run_quality.py` loses
+   more than the others do**: it also reads `round-journal.md`, which sits beside the
+   brief, so a round that deletes first can never say whether its own trial held.
+   **A reading that refuses is never a halt**: it prints what it could not read, exits
+   0, and the round end carries on.
+
+   **No figure any of them prints is added across models** (ruling 11, and the human's
+   ruling of 2026-09-06). Every token cell names its own model. To read a model trial,
+   compare the SAME ROLE across rounds; for spend, read `/usage` by hand.
+
+   Whatever the round seeded outside git goes BEFORE the brief is deleted, because
+   the brief is where its id is. Where the project has a teardown script, run it
+   here and let it read the id off the brief rather than taking one by hand: it
+   should delete only a row whose name carries this hunt id, and it should refuse
+   rather than orphan child rows. **A refusal is not a stop**: put its printed
+   remedy in the round report as an action on the human, with the id, and go on.
+   Once the brief is deleted no ledger names that row, so nothing can sweep it
+   later and the human clears it by id.
 
    Do not promote rows yourself. Rule 1 holds all the way to the end of the round,
    and spawning is what keeps it holding: the agent reads the rows, and you read two
@@ -290,22 +486,31 @@ further than a five-hour window the same session sits through. A weekly limit
 resetting days out is resumed by a human re-invoking `/parallel-hunt resume`.
 
 **Staleness is a FILE's mtime, never worker progress.** Every status transition
-writes `register.md`, so its mtime moves whenever the round moves and nobody can
-forget to write it. A long finder sweep, or a long fix, moves no status line for an
+writes a register shard, so a shard's mtime moves whenever the round moves and
+nobody can forget to write it. Read the shards, never the generated
+`register.md`: that file's mtime moves when the collector last ran, which is not
+when the round last moved. `collect_shards.py --mtime` answers with the newest
+shard's, in epoch seconds. A long finder sweep, or a long fix, moves no status line for an
 hour — so "no worker progress" cannot mean "dead", and only a stale mtime can.
 `/run-issues` refuted the handwritten alternative twice in one run, on a runner who
 had already diagnosed the failure mode (`run-issues/SKILL.md`, the paragraph
 beginning "The ledger carries an owner line").
 
 Create the wakeup anyway at launch (CronCreate, every ~30 min): "Check that
-`<main-repo-root>/.scratch/<feature>/round-brief.md` exists, and read
-`stat -f %m <main-repo-root>/.scratch/<feature>/register.md` — do not read the rest
-of either file. If the brief is there and the register's mtime is over 60 minutes
-old, resume from register state; otherwise do nothing." `round-brief.md` is the
+`<hunt-worktree>/.scratch/<feature>/round-brief.md` exists, and read
+`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --mtime`
+— do not read the rest of either file. If the brief is there and the register's
+mtime is over 60 minutes old, resume from register state; otherwise do nothing." `round-brief.md` is the
 marker because it is written at launch and deleted at round end, so its presence is
 what "a round is open" means. Firings that land while rate-limited simply fail; the
 first after the reset revives the round. Delete the cron at round end. Remind the
 user once that the machine must stay awake (`caffeinate -dimsu`).
+
+**`/parallel-hunt resume` is typed inside the hunt's own worktree.** The listing
+is `python3 ~/.claude/skills/run-issues/find_live_ledger.py --list`, which prints
+every live ledger with its kind in the last column, `hunt` for a round brief.
+Nothing picks a round by freshness, and a resume from the wrong tree would spawn
+workers into a tree that holds no round.
 
 Every agent file opens with its own idempotency check — read the register first,
 stop if the assigned work is already past this stage — which is what makes resume
@@ -313,16 +518,47 @@ safe.
 
 ## Pre-flight
 
-- **One skill per checkout.** Refuse to start if `git status` is dirty, or if
-  `.scratch/<feature>/run.md` shows a run that is not at `awaiting-merge` with its
-  branch merged. A hunt beside a live run puts two writers in one tree and lands
-  deliberately failing tests in the run's finale.
-- **One tree, one branch.** Finder and fixer both work in the main checkout on
-  `hunt/<scope>`, cut at launch. A second worktree hides the finder's pinning
-  tests from the fixer. Exactly one finder and one fixer live at a time. The
-  branch goes to the human at round end; the orchestrator never merges to main.
-- **Record the session model in the register, and check it before spawning.**
-  Agent files use `model: inherit`, so every worker inherits the session's tier.
+- **One hunt at a time, and a hunt beside a live run is allowed.** Refuse to
+  start while a `round-brief.md` is live in any worktree. The old refusal — no
+  hunt beside a run — existed because both worked in the main checkout, and the
+  next bullet removes that cause. Refuse to start only if the MAIN checkout's
+  `git status` is dirty, because the hunt's worktree is cut from it.
+- **Mint the hunt id and cut the hunt's own worktree.** The id is `hunt-` plus
+  six hex characters (`openssl rand -hex 3`), and it is the same id the branch
+  carries and the shard directory carries. Then, from the main checkout:
+
+  ```
+  git worktree add <main-repo-root>/.claude/worktrees/<hunt-id> -b hunt/<hunt-id> main
+  ```
+
+  Finder and fixer both work in that one tree, on that one branch. They stay
+  together on purpose: a second tree would hide the finder's pinning tests from
+  the fixer, and a failing pinning test lives on the hunt branch until merge and
+  never enters a run's finale. Exactly one finder and one fixer live at a time.
+  The branch goes to the human at round end; the orchestrator never merges to main.
+- **Isolate whatever the round writes outside the repo, under the hunt id.** A
+  round that seeds a database, drives a dev server or takes a third-party
+  sandbox needs its own row, its own host and its own lock, all named by the
+  hunt id, or two rounds — or a round beside a run — collide in a place git
+  cannot separate. What that takes is the project's to say, so it belongs in
+  the project's own scripts and its `CLAUDE.md`, not here. Three shapes worth
+  copying: one workspace row per round, named `run-workspace <hunt-id>` and
+  deleted at round end; a dev server driven at `<hunt-id>.localhost:<port>`
+  rather than bare `localhost`, because a browser cookie is scoped to the host
+  and not the port, so two servers on `localhost` share one session; and any
+  live third-party suite serialised behind one lock file outside every repo,
+  keyed by the account it writes to.
+- **Every spawn carries its own role's model, read off `round-brief.md`.** The
+  five hunt roles — `finder`, `fixer`, `claim-gate`, `fix-gate`,
+  `fix-gate-critical` — plus `promotion` are named on the brief's
+  `Model map at launch:` line, which the launch line writes. Take this role's
+  value and pass it in the Agent call's `model` field.
+
+  This bullet said the opposite until 2026-09-05: agent files use
+  `model: inherit`, so every worker inherits the session's tier. The agent files
+  still say `inherit`, so a spawn by hand outside a round is unchanged, but a
+  round with a brief takes its models from the brief.
+- **Record the session model in the register, and qualify a null result by it.**
   A round on any tier is a valid round, and it is also the first evidence at that
   tier. **A null result -- "no bugs found" -- from a tier with no track record is
   not evidence of absence, and may not be reported as one.** This loop has no
@@ -350,10 +586,16 @@ safe.
   - **Finder** — the test runner on single files, wide greps, and **starting the
     dev server** by name from the repo's `.claude/launch.json`, because it hunts
     the live system rather than the code's intentions. On this repo that is
-    `spine-dev-qa-auto`, port 3101. **It probes that server through the repo's
+    `spine-dev-qa-auto`; its entry carries `autoPort: true`, so **the port exists
+    only in the `preview_start` result of the spawn that started it** (ticket 38, the one-run-per-feature layout ticket,
+    sitting 2). **It probes that server through the repo's
     probe script, never with a bare `curl`** — on this repo,
     `node scripts/http-probe.mjs "<label>" <url>`, allowed by one prefix rule.
-  - **Fixer** — typecheck, lint, the relevant test files, git stage and commit.
+    It also mints its sign-in link and runs any live Zoho suite through the lock
+    wrapper, both `node --env-file=<canonical env> scripts/...` forms, allowed
+    by one prefix rule on that spelling.
+  - **Fixer** — typecheck, lint, the relevant test files, git stage and commit,
+    and the same lock wrapper for a live Zoho suite.
   - **Claim gate** — whatever the reproducers it runs need, plus
     `git clone --shared` into the session scratchpad.
   - **Fix gate, and fix gate critical** — `git clone --shared` into the

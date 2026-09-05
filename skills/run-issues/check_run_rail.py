@@ -36,7 +36,7 @@ in the repository the run is working on, passed as `--stages`, because this
 guard ships in the skills repository and `/run-issues` runs on other
 repositories too. A relative path that does not exist from the working
 directory is tried again from the git top level, so the finale's command works
-from the repo root and from `.scratch/<feature>/` alike. Where no file exists
+from the repo root and from `.scratch/<feature>/runs/<batch-id>/` alike. Where no file exists
 in either place the stage rule is not run at all and the guard says so and
 carries on, which is that file's own rule 4. A file that exists and holds no
 readable table is a different state and is refused.
@@ -102,11 +102,36 @@ from dataclasses import dataclass, field
 ONE_SCREEN_HEADING = "## The run in one screen"
 RAIL_HEADING = "## The run on the rail"
 BANDS_HEADING = "### Bands"
+MINTED_HEADING = "### Minted and left open"
+FORKS_HEADING = "### Forks waiting on you"
 KINDS = ("new", "fix", "guard", "harness")
 # A sentence of this many characters or more is refused. The bound as a
 # sentence is `59 characters or fewer`, and the rail card cannot draw a longer one.
 SENTENCE_LIMIT = 60
 SHIPPED_HEADER = ("issue", "stage", "kind", "sentence")
+# Issue 554's two tables, each found by its own header row for the same reason
+# the shipped table is: a heading can be renamed and a header row states what
+# the columns mean.
+MINTED_HEADER = ("issue", "stage", "sentence")
+FORKS_HEADER = ("fork", "stage", "question")
+# Issue 555's two tables, found the same way. The band row carries the whole
+# band and the chip row carries one issue's own words, because a chip's text
+# holds numbers of its own — `99 reads fail closed now` is one the generator
+# draws — and ids read out of a cell holding both would find issue 99.
+BANDS_HEADER = ("band", "stages", "kind", "issues", "caption", "seats")
+CHIPS_HEADER = ("band", "issue", "text")
+CHIPS_HEADING = "### Band chips"
+# A band spans `first..last` over the rail's columns.
+SPAN = re.compile(r"^([A-Za-z0-9_-]+)\.\.([A-Za-z0-9_-]+)$")
+# The three seats, in the order the pills draw them, and the three marks.
+SEATS = ("admin", "member", "viewer")
+MARKS = ("ok", "no", "dash")
+# The smallest band. Below either number the shape is a card, not a band.
+BAND_MIN_ISSUES = 2
+BAND_MIN_COLUMNS = 2
+DECIDE_HEADING = re.compile(r"^## Decide\b", re.M)
+# The one-screen row whose figure the fork rows are counted against.
+FORKS_FIGURE = "forks to decide"
 # The one-screen block's field lines. Any of them found inside the rail body
 # means the rail heading was written inside the block rather than below it.
 ONE_SCREEN_FIELDS = ("Shipped", "Did not ship", "Minted", "Register", "Waiting")
@@ -131,11 +156,18 @@ def _heading_at(text: str, heading: str) -> int:
     return found.start() if found else -1
 
 
-def read_stages(text: str) -> set[str] | None:
+def read_stages(text: str) -> list[str] | None:
     """The stage keys from the vocabulary table, or None when it holds no table.
 
     The table is found by its `Key` header. The key is the first cell with its
     backticks removed. Nothing else in that file is read.
+
+    **The order is the table's, and issue 555 needs it.** A band names its span
+    as `first..last` and the columns between them are the ones it covers, so a
+    reader holding a set could tell that both keys exist and never that
+    `tender..workspace` runs backwards. Rule 1 of `run-picture-stages.md`
+    already makes the table order the drawn order, which is why the order is
+    read here rather than stated a second time.
     """
     lines = text.splitlines()
     header = next(
@@ -143,18 +175,20 @@ def read_stages(text: str) -> set[str] | None:
     )
     if header is None:
         return None
-    keys: set[str] = set()
+    keys: list[str] = []
     for line in lines[header + 2 :]:
         if not line.strip().startswith("|"):
             break
-        keys.add(_cells(line)[0].strip("`"))
+        key = _cells(line)[0].strip("`")
+        if key not in keys:
+            keys.append(key)
     return keys or None
 
 
 def locate_stages(path: str) -> pathlib.Path | None:
     """The vocabulary file at `path`, or at `path` under the git top level, or
     None where neither exists. The finale's command names the path relative to
-    the repo root and may run from `.scratch/<feature>/`."""
+    the repo root and may run from `.scratch/<feature>/runs/<batch-id>/`."""
     given = pathlib.Path(path)
     if given.exists():
         return given
@@ -222,17 +256,24 @@ def _keys(text: str) -> list[str]:
     return [key for key in re.split(r"[,\s]+", text.strip()) if key]
 
 
-def _shipped_rows(body: str) -> list[list[str]] | None:
-    """The rows of the table headed `| Issue | Stage | Kind | Sentence |`.
+def _table_rows(body: str, header: tuple[str, ...]) -> list[list[str]] | None:
+    """The rows of the table whose header row is `header`, or None.
 
-    None where the block holds no such header. The read stops at the first
-    line that is not a table row, so a `###` sub-heading ends it.
+    Each of the block's tables is found by its OWN header row rather than by
+    position or by the `###` heading above it. That is what keeps the three
+    apart: issue 552's rule refuses a row naming an issue that did not ship,
+    and every row issue 554 adds names an issue that did not ship, so a reader
+    taking one flat list of issue numbers over the widened block would refuse a
+    correct briefing.
+
+    The read stops at the first line that is not a table row, so a `###`
+    sub-heading ends it.
     """
     lines = body.splitlines()
     for i, line in enumerate(lines):
         if line.strip().startswith("|") and tuple(
             cell.lower() for cell in _cells(line)
-        ) == SHIPPED_HEADER:
+        ) == header:
             rows = []
             for row in lines[i + 2 :]:
                 if not row.strip().startswith("|"):
@@ -242,26 +283,59 @@ def _shipped_rows(body: str) -> list[list[str]] | None:
     return None
 
 
-def _band_members(body: str) -> set[str]:
-    """Every issue id a `### Bands` table names. Empty where there is no table."""
-    start = body.find(BANDS_HEADING)
-    if start < 0:
-        return set()
-    lines = body[start:].splitlines()
-    header = next((i for i, line in enumerate(lines) if line.strip().startswith("|")), None)
-    if header is None:
-        return set()
-    columns = [cell.lower() for cell in _cells(lines[header])]
-    if "issues" not in columns:
-        return set()
-    at = columns.index("issues")
+def _shipped_rows(body: str) -> list[list[str]] | None:
+    """The rows of the table headed `| Issue | Stage | Kind | Sentence |`."""
+    return _table_rows(body, SHIPPED_HEADER)
+
+
+def _figure(body: str, label: str) -> float | None:
+    """The `Count` cell of the one-screen row whose label is `label`, or None.
+
+    The label is matched case-folded and stripped of markdown emphasis, so
+    `Forks to decide` and `**Forks to decide**` are the same row. Only this one
+    figure is read here; `check_run_picture.py` owns the whole table.
+    """
+    for line in body.splitlines():
+        if not line.strip().startswith("|"):
+            continue
+        cells = _cells(line)
+        if len(cells) < 2 or cells[0].strip("*` ").lower() != label:
+            continue
+        try:
+            return float(cells[1].replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+# The `Issues` cell's position in a band row, so the one column every other
+# reader needs is named once rather than counted at each use.
+BAND_ISSUES_AT = BANDS_HEADER.index("issues")
+
+
+def _band_ids(cell: str) -> list[str]:
+    """The `Issues` cell read as whole tokens, in the order it writes them.
+
+    Not `_ids`: that finds issue-shaped runs of digits inside a longer string,
+    which is right for a prose `Shipped:` line and wrong here. A band cell is a
+    list, so a token that is not an issue — a fork key, a stray word, a number
+    split by a space — must reach the membership rule as itself and be refused
+    by name, rather than be quietly read as some other issue.
+    """
+    return [token for token in re.split(r"[,\s]+", cell.strip()) if token]
+
+
+def _band_rows(body: str) -> list[list[str]]:
+    """The rows of the `### Bands` table, or empty where the block has none."""
+    return _table_rows(body, BANDS_HEADER) or []
+
+
+def _band_members(rows: list[list[str]]) -> set[str]:
+    """Every issue id the band rows name, over all bands."""
     members: set[str] = set()
-    for row in lines[header + 2 :]:
-        if not row.strip().startswith("|"):
-            break
-        cells = _cells(row)
-        if len(cells) > at:
-            members.update(_ids(cells[at]))
+    for cells in rows:
+        if len(cells) > BAND_ISSUES_AT:
+            members.update(_band_ids(cells[BAND_ISSUES_AT]))
     return members
 
 
@@ -277,6 +351,10 @@ class Rail:
 
     rows: list[list[str]]
     bands: set[str]
+    minted: list[list[str]] = field(default_factory=list)
+    forks: list[list[str]] = field(default_factory=list)
+    band_rows: list[list[str]] = field(default_factory=list)
+    chip_rows: list[list[str]] = field(default_factory=list)
 
 
 def read_rail(briefing: str) -> Rail | None:
@@ -290,7 +368,15 @@ def read_rail(briefing: str) -> Rail | None:
     if at < 0:
         return None
     body, _ = _body_after(briefing, at, RAIL_HEADING)
-    return Rail(rows=_shipped_rows(body) or [], bands=_band_members(body))
+    band_rows = _band_rows(body)
+    return Rail(
+        rows=_shipped_rows(body) or [],
+        bands=_band_members(band_rows),
+        minted=_table_rows(body, MINTED_HEADER) or [],
+        forks=_table_rows(body, FORKS_HEADER) or [],
+        band_rows=band_rows,
+        chip_rows=_table_rows(body, CHIPS_HEADER) or [],
+    )
 
 
 @dataclass
@@ -304,6 +390,9 @@ class Result:
     rows: int = 0
     longest: int = 0
     lit: int = 0
+    minted: int = 0
+    forks: int = 0
+    bands: int = 0
     stages_graded: bool = True
 
     def refuse(self, reason: str, fatal: bool = False) -> None:
@@ -312,16 +401,24 @@ class Result:
 
     def summary(self) -> str:
         graded = "graded" if self.stages_graded else "NOT graded, no vocabulary"
+        # `longest` spans all three tables. Every one of them is drawn into the
+        # same box, so a figure that counted a shipped sentence and a minted
+        # one but not a fork's question would move with the table the text sat
+        # in rather than with the text.
         return (
-            f"ok: {self.shipped} shipped, {self.rows} rail rows, longest sentence "
-            f"{self.longest} characters, {self.lit} stages lit, stage keys {graded}"
+            f"ok: {self.shipped} shipped, {self.rows} rail rows, {self.minted} "
+            f"minted rows, {self.forks} fork rows, {self.bands} bands, longest "
+            f"card text {self.longest} characters, {self.lit} stages lit, "
+            f"stage keys {graded}"
         )
 
 
-def check(briefing: str, stages: set[str] | None) -> Result:
+def check(briefing: str, stages: list[str] | None) -> Result:
     """Every refusal the briefing earns, each starting with its reason word.
 
-    `stages` None means no vocabulary exists here, and the stage rule is skipped.
+    `stages` is the vocabulary IN THE TABLE'S ORDER, as `read_stages` returns
+    it, because a band's span is a range over that order. None means no
+    vocabulary exists here and the stage rule is skipped.
     """
     result = Result(stages_graded=stages is not None)
     one_screen = _heading_at(briefing, ONE_SCREEN_HEADING)
@@ -450,7 +547,16 @@ def check(briefing: str, stages: set[str] | None) -> Result:
             f"line does not name them"
         )
 
-    members = _band_members(rail_body)
+    _check_minted(result, rail_body, one_body, shipped, stages)
+    _check_forks(result, briefing, rail_body, one_body, stages)
+    # Every issue the block names anywhere, with the stage its own row states.
+    # A band member may be shipped or may be a hole the run left: the
+    # generator's band on `batch-45c8b1` carries `509`, which was minted.
+    known = {c[0]: c[1] for c in _table_rows(rail_body, MINTED_HEADER) or [] if len(c) >= 2}
+    known.update({c[0]: c[1] for c in rows if len(c) >= 2})
+    _check_bands(result, rail_body, stages, known)
+
+    members = _band_members(_band_rows(rail_body))
     for cells in rows:
         if len(cells) >= 4 and cells[1] == "floor" and cells[0] in members:
             result.refuse(
@@ -459,6 +565,352 @@ def check(briefing: str, stages: set[str] | None) -> Result:
             )
 
     return result
+
+
+def _span(cell: str, stages: list[str] | None) -> tuple[list[str] | None, str | None]:
+    """The columns a `first..last` cell covers, or a reason it covers none.
+
+    The vocabulary's order is the drawn order, so the span is the slice between
+    the two keys and a reversed pair is not the same span read backwards: it is
+    a cell nobody can draw. `floor` is never spannable, because the floor row
+    is drawn beneath every band rather than beside one.
+
+    Returns `(None, reason)` on a bad cell and `(columns, None)` on a good one.
+    Where there is no vocabulary the cell's shape is still graded and its keys
+    are not, which is rule 4 of `run-picture-stages.md`.
+    """
+    found = SPAN.match(cell.strip())
+    if not found:
+        return None, (
+            f"`{cell}` is not a span; a span is two stage keys as `first..last`"
+        )
+    first, last = found.group(1), found.group(2)
+    if stages is None:
+        return None, None
+    for key in (first, last):
+        if key not in stages:
+            return None, f"`{key}` is not a stage in the vocabulary"
+        if key == "floor":
+            return None, (
+                "`floor` is never spannable; the floor row is drawn beneath "
+                "every band, so a band cannot reach it"
+            )
+    start, end = stages.index(first), stages.index(last)
+    if start > end:
+        return None, (
+            f"`{first}..{last}` runs backwards; a span is a contiguous range "
+            f"in the order docs/agents/run-picture-stages.md sets"
+        )
+    return [key for key in stages[start : end + 1] if key != "floor"], None
+
+
+def _bad_seats(cell: str) -> str | None:
+    """Why the `Seats` cell cannot be drawn, or None where it can.
+
+    An EMPTY cell is a band with no pills, which is the normal case: two of the
+    three banded runs the generator draws carry no seats. A cell that holds
+    anything states all three, in the order the pills draw them.
+    """
+    if not cell.strip():
+        return None
+    marks = [part.strip() for part in cell.split(",") if part.strip()]
+    if len(marks) != len(SEATS):
+        return (
+            f"`{cell.strip()}` names {len(marks)} seats; a `Seats` cell states "
+            f"all three, in the order {', '.join(SEATS)}, or it is empty"
+        )
+    for seat, mark in zip(SEATS, marks):
+        parts = mark.split()
+        if len(parts) != 2 or parts[0] != seat:
+            return (
+                f"`{mark}` is not `{seat} <mark>`; the seats are drawn in the "
+                f"fixed order {', '.join(SEATS)} and the cell states that order"
+            )
+        if parts[1] not in MARKS:
+            return (
+                f"`{parts[1]}` is not a mark; a seat takes one of "
+                f"{', '.join(MARKS)}"
+            )
+    return None
+
+
+def _check_chips(result: Result, rail_body: str, held: dict[str, str]) -> None:
+    """Every band member has one line of its own words, and no line is spare.
+
+    `held` maps each issue a band names to the band that names it, so a chip
+    row is graded against the band it claims: a row under `B9` where no band
+    `B9` exists is as wrong as a row for an issue the band never named.
+    """
+    rows = _table_rows(rail_body, CHIPS_HEADER) or []
+    seen: dict[str, int] = {}
+    for cells in rows:
+        if len(cells) < len(CHIPS_HEADER):
+            result.refuse(
+                f"bad-chip-row: `{' | '.join(cells)}` has {len(cells)} cells and "
+                f"a chip row is {', '.join(CHIPS_HEADER)}"
+            )
+            continue
+        band, issue, text = cells[:3]
+        if held.get(issue) != band:
+            result.refuse(
+                f"chip-not-in-the-band: `{CHIPS_HEADING}` gives {issue} to band "
+                f"{band}, and that band's `Issues` cell does not name it"
+            )
+            continue
+        seen[issue] = seen.get(issue, 0) + 1
+        if not text.strip():
+            result.refuse(
+                f"no-chip-text: {issue}'s chip row holds no text; a chip draws "
+                f"its own words under it and a blank cell draws a bare number"
+            )
+        result.longest = max(result.longest, len(text))
+    for issue, count in seen.items():
+        if count > 1:
+            result.refuse(
+                f"duplicate-chip: {issue} has {count} rows under "
+                f"`{CHIPS_HEADING}` and draws one chip"
+            )
+    missing = [issue for issue in held if issue not in seen]
+    if missing:
+        result.refuse(
+            f"no-chip-text: {', '.join(sorted(missing))} named by a band and "
+            f"given no row under `{CHIPS_HEADING}`; every chip draws its own "
+            f"words, and the space one has is 12 to 23 characters a line"
+        )
+
+
+def _check_bands(
+    result: Result,
+    rail_body: str,
+    stages: list[str] | None,
+    known: dict[str, str],
+) -> None:
+    """Every band row is a shape the board can draw, and nothing more.
+
+    **A band is stated, never derived.** Nothing here finds a subject, and a
+    run that states no bands passes every rule below. So the floor is only ever
+    a refusal of a shape — one issue, or one column, which is a card — and it
+    is not what stops a finale inventing a subject. The membership rule is:
+    every issue a band names has a row elsewhere in the block, so a band cannot
+    carry an issue the run never touched.
+    """
+    rows = _band_rows(rail_body)
+    result.bands = len(rows)
+    held: dict[str, str] = {}
+    keys: dict[str, int] = {}
+    for cells in rows:
+        if len(cells) < len(BANDS_HEADER):
+            result.refuse(
+                f"bad-band-row: `{' | '.join(cells)}` has {len(cells)} cells and "
+                f"a band row is {', '.join(BANDS_HEADER)}"
+            )
+            continue
+        key, span_cell, kind, issues_cell = cells[:4]
+        keys[key] = keys.get(key, 0) + 1
+        issues = _band_ids(issues_cell)
+        columns, why = _span(span_cell, stages)
+        if why is not None:
+            result.refuse(f"bad-band-span: band {key}: {why}")
+        width = len(columns) if columns is not None else None
+        if len(issues) < BAND_MIN_ISSUES or (
+            width is not None and width < BAND_MIN_COLUMNS
+        ):
+            # The column half is stated only where it was measured. With no
+            # vocabulary the span's keys go ungraded, and `0 columns` there
+            # would send a reader after a span fault nobody looked for.
+            across = (
+                f"{width} column{'' if width == 1 else 's'}"
+                if width is not None
+                else "a span this guard could not measure"
+            )
+            result.refuse(
+                f"band-too-small: band {key} names {len(issues)} issue"
+                f"{'' if len(issues) == 1 else 's'} across {across}; a band is "
+                f"{BAND_MIN_ISSUES} issues across {BAND_MIN_COLUMNS} columns or "
+                f"it is a card"
+            )
+        for issue in issues:
+            stage = known.get(issue)
+            if stage is None:
+                result.refuse(
+                    f"band-not-in-the-block: band {key} names {issue} and neither "
+                    f"the shipped table nor `{MINTED_HEADING}` holds a row for "
+                    f"it; a band groups what the run touched and states nothing "
+                    f"the block does not"
+                )
+            elif columns is not None and stage not in columns:
+                result.refuse(
+                    f"member-outside-span: band {key} spans `{span_cell}` and "
+                    f"names {issue}, whose row reads `{stage}`; a member's stage "
+                    f"is inside its band's span"
+                )
+            if issue in held:
+                result.refuse(
+                    f"issue-in-two-bands: {issue} is named by band {held[issue]} "
+                    f"and by band {key}; an issue is drawn once, as a chip in one "
+                    f"band"
+                )
+            else:
+                held[issue] = key
+        if kind not in KINDS:
+            result.refuse(
+                f"bad-band-kind: band {key} names `{kind}`; a band's kind is one "
+                f"of {', '.join(KINDS)}, the same four a card takes"
+            )
+        why = _bad_seats(cells[BANDS_HEADER.index("seats")])
+        if why is not None:
+            result.refuse(f"bad-seats: band {key}: {why}")
+    for key, count in keys.items():
+        if count > 1:
+            result.refuse(
+                f"duplicate-band: band `{key}` has {count} rows and takes one; "
+                f"both guards key a band by that cell, so a second row of the "
+                f"same name overwrites the first and one band leaves the picture"
+            )
+    _check_chips(result, rail_body, held)
+
+
+def _check_minted(
+    result: Result,
+    rail_body: str,
+    one_body: str,
+    shipped: list[str],
+    stages: set[str] | None,
+) -> None:
+    """Every issue the run left open has one dashed row, and no row has no issue.
+
+    The set of holes is the `Minted:` line UNION the `Did not ship:` line, both
+    fields of the one-screen block. A dashed card is an issue the run named and
+    did not close, and the definition has two halves on purpose: promotion
+    minted it, OR the run left it open. On `99b-99e-6e11ba` promotion minted
+    nothing and the rail draws `99f` dashed, so a check comparing the rows
+    against the minted list alone refuses that run's own correct board.
+
+    An absent line reads as an empty list, which is the strict direction: a
+    dashed row with no line naming it is refused rather than passed.
+    """
+    rows = _table_rows(rail_body, MINTED_HEADER) or []
+    result.minted = len(rows)
+    holes = set(_ids(_field(one_body, "Minted") or ""))
+    holes |= set(_ids(_field(one_body, "Did not ship") or ""))
+
+    seen: dict[str, int] = {}
+    for cells in rows:
+        if len(cells) < 3:
+            result.refuse(
+                f"bad-minted-row: `{' | '.join(cells)}` has fewer than three "
+                f"cells; a minted row is issue, stage, sentence"
+            )
+            continue
+        issue, stage, sentence = cells[:3]
+        seen[issue] = seen.get(issue, 0) + 1
+        if stages is not None and stage not in stages:
+            result.refuse(
+                f"bad-stage: minted row {issue} names `{stage}`, which is not a "
+                f"stage in the vocabulary"
+            )
+        result.longest = max(result.longest, len(sentence))
+        if len(sentence) >= SENTENCE_LIMIT:
+            result.refuse(
+                f"sentence-too-long: minted row {issue}'s sentence is "
+                f"{len(sentence)} characters; the bound is 59 characters or fewer"
+            )
+    for issue, count in seen.items():
+        if count > 1:
+            result.refuse(
+                f"duplicate-minted: issue {issue} has {count} minted rows and takes one"
+            )
+
+    missing = [i for i in sorted(holes) if i not in seen]
+    if missing:
+        result.refuse(
+            f"no-minted-row: {', '.join(missing)} on the `Minted:` or `Did not "
+            f"ship:` line and no row under `{MINTED_HEADING}`; a hole the run "
+            f"left is drawn or it vanished from the picture"
+        )
+    extra = sorted(set(seen) - holes)
+    if extra:
+        shipped_too = [i for i in extra if i in shipped]
+        result.refuse(
+            f"not-minted: minted rows for {', '.join(extra)} and neither the "
+            f"`Minted:` nor the `Did not ship:` line names them"
+            + (f"; {', '.join(shipped_too)} shipped, and a shipped issue takes a "
+               f"card in the table above" if shipped_too else "")
+        )
+
+
+def _check_forks(
+    result: Result, briefing: str, rail_body: str, one_body: str,
+    stages: set[str] | None,
+) -> None:
+    """Every fork waiting on the human has one amber row, and the count agrees.
+
+    **The `## Decide` prose is read for one thing: whether it exists.** The
+    criterion this was cut from asked for the items under every `## Decide`
+    heading to be counted and compared. Measured 2026-09-05 across the five
+    runs the picture draws, that cannot be built. All five carry TWO `## Decide`
+    headings in three item formats, and two of the five defeat any counter:
+    `batch-88624c`'s own first section says "Six open forks, in two places in
+    this file", four under the second heading and TWO under `### Refused - 37,
+    and two of them are worth your veto`, which is not a `## Decide` heading at
+    all; and `99b-99e-6e11ba`'s first section holds one `- **` bullet that is a
+    verify gate's REJECT report rather than a fork. A counter over that prose
+    refuses two of five correct briefings, which is the fault the criterion
+    itself names on `batch-375cbf`.
+
+    So the count comes from the one-screen table's `Forks to decide` row. Both
+    it and the fork rows are figures the finale WROTE, in one file, and a
+    disagreement is a fork drawn and not counted, or counted and not drawn.
+    """
+    rows = _table_rows(rail_body, FORKS_HEADER) or []
+    result.forks = len(rows)
+
+    seen: dict[str, int] = {}
+    for cells in rows:
+        if len(cells) < 3:
+            result.refuse(
+                f"bad-fork-row: `{' | '.join(cells)}` has fewer than three "
+                f"cells; a fork row is fork, stage, question"
+            )
+            continue
+        key, stage, question = cells[:3]
+        seen[key] = seen.get(key, 0) + 1
+        if stages is not None and stage not in stages:
+            result.refuse(
+                f"bad-stage: fork row {key} names `{stage}`, which is not a "
+                f"stage in the vocabulary"
+            )
+        result.longest = max(result.longest, len(question))
+        if len(question) >= SENTENCE_LIMIT:
+            result.refuse(
+                f"question-too-long: fork row {key}'s question is "
+                f"{len(question)} characters; the bound is 59 characters or "
+                f"fewer, and the card's question is a compression the finale "
+                f"writes rather than a `## Decide` heading copied"
+            )
+    for key, count in seen.items():
+        if count > 1:
+            result.refuse(
+                f"duplicate-fork: fork `{key}` has {count} rows; a fork key is "
+                f"unique across the whole briefing, or two amber cards collide "
+                f"and the board's guard cannot tell which row a card came from"
+            )
+
+    counted = _figure(one_body, FORKS_FIGURE)
+    if counted is None:
+        return
+    if len(rows) != int(counted):
+        result.refuse(
+            f"fork-count: {len(rows)} rows under `{FORKS_HEADING}` and the "
+            f"one-screen table counts {int(counted)} forks to decide; one fork "
+            f"is one row"
+        )
+    if counted >= 1 and not DECIDE_HEADING.search(briefing):
+        result.refuse(
+            f"no-decide: the one-screen table counts {int(counted)} forks to "
+            f"decide and the briefing carries no `## Decide` heading, so the "
+            f"questions themselves are not in the file"
+        )
 
 
 def main() -> int:

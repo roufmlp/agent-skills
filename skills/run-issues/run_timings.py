@@ -46,11 +46,29 @@ WHAT IT MEASURES, and the one thing it deliberately does not:
     in mind, and do not report a Bash total as though it were the whole story.
 """
 
+import argparse
 import collections
 import datetime
+import importlib.util
 import json
+import os
 import re
 import sys
+
+
+def _run_session():
+    """`run_session.py` owns the road from a batch id to a transcript."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "run_session.py")
+    existing = sys.modules.get("run_session")
+    if existing is not None and os.path.realpath(
+            getattr(existing, "__file__", "") or "") == os.path.realpath(path):
+        return existing  # One instance per file; two would diverge on any state.
+    spec = importlib.util.spec_from_file_location("run_session", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["run_session"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def parse(stamp):
@@ -287,10 +305,36 @@ def serial_gates(labelled):
             print(f"    {cost / 60:5.1f}m  {second_text[:40]}  followed  {first_text[:40]}")
 
 
-def main():
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        sys.exit("usage: run_timings.py <transcript.jsonl> [--deep]")
-    calls, spans, first, last, spans_by_label = read(sys.argv[1])
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("transcript", nargs="?", default=None,
+                        help="a transcript path; the finale passes one")
+    parser.add_argument("--batch", default=None,
+                        help="a run or hunt batch id; the transcript is found "
+                             "from that batch's ledger (ticket 39, ruling 12)")
+    parser.add_argument("--repo", default=None,
+                        help="checkout whose worktrees hold the ledger")
+    parser.add_argument("--deep", action="store_true")
+    args = parser.parse_args(argv)
+
+    if bool(args.transcript) == bool(args.batch):
+        parser.error("give exactly one of <transcript> or --batch")
+
+    path = args.transcript
+    if args.batch:
+        session = _run_session()
+        found, why = session.sessions_for_batch(args.batch, repo=args.repo)
+        if not found:
+            sys.exit(f"no transcript for batch `{args.batch}`: {why}")
+        # The newest session. A resumed run has two, and the clock this reports
+        # is one session's own span; adding two spans would count the gap
+        # between them as run time.
+        path = found[-1]
+        print(f"batch `{args.batch}`, transcript `{path}`"
+              + (f"  (resumed: {len(found)} sessions, newest read)"
+                 if len(found) > 1 else ""))
+
+    calls, spans, first, last, spans_by_label = read(path)
     if not calls or first is None:
         sys.exit("no completed tool calls with timestamps in that transcript")
 
@@ -347,9 +391,18 @@ def main():
         for word, seconds in kinds.most_common(10):
             print(f"  {seconds / 3600:6.2f} h  {word}")
 
-    if "--deep" in sys.argv:
-        deep(sys.argv[1])
+    if args.batch:
+        session = _run_session()
+        rows = session.spawn_rows([path])
+        print("\n\nper role, with the model column ticket 39 ruling 15 asks for\n")
+        print(session.render_roles(rows))
+        print("\n\none row per subagent\n")
+        print(session.render_spawns(rows))
+
+    if args.deep:
+        deep(path)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

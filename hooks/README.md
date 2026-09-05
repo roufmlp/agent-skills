@@ -183,3 +183,21 @@ two that must refuse and two that must pass.
 That drill proves the script. It says nothing about the registration, which is
 the half that fails silently. For that, start a session and make an edit or a
 spawn the hook should refuse. If nothing is refused, step 2 did not take.
+
+## Hooks the skills name and this pack does not carry
+
+Read `skills/` and you will meet other hook names — `machine-preflight.py`,
+`model-map-gate.py`, `model-landed-check.py`, `number-claim-guard.py`,
+`run-state-path-guard.py`, `generated-file-guard.py`, `gate-source-write-guard.py`,
+`run-issues-parallel-gates.py`, `run-issues-criteria-fault.py`. **None of them is in
+this directory.** Where a skill says one of those refuses something, read it as a
+rule the loop holds and not as a control you have: `MANIFEST.md` says why each is
+withheld and which of them a later sync should publish.
+
+Nothing here calls them, so nothing breaks. What you lose is the refusal. A rule an
+agent is asked to remember is weaker than a rule that answers a tool call, and the
+gap is worth knowing about before you rely on one of those sentences. Every one of
+these is a `PreToolUse` or `SubagentStop` hook of about a hundred lines, so the road
+open to you is to write your own against the rule the skill states, with the shape
+the four published hooks carry: payload on stdin, reason on stderr, exit 2 to refuse,
+exit 0 on anything it cannot read.

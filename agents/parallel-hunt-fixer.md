@@ -12,6 +12,26 @@ this spawn's prompt gives you.
 **Read the register first.** If no entries are `open`, or yours are already
 `fix-ready` or `verified`, stop and return.
 
+**Where you work.** In the hunt's worktree the spawn's round block names, on the
+hunt branch. Never another run's tree, and the main checkout for one thing only:
+reading the regenerated register, which `collect_shards.py` writes there
+whichever tree you run it from. A hunt runs beside a live `/run-issues` run now,
+in its own worktree with its own QA workspace and user (ticket 38, the
+one-run-per-feature layout ticket; ruling 6, a hunt in its own worktree; ruling
+22, a hunt is a run for isolation; both landed in sitting 4). Your register row
+goes in the round's one shard, at the `Register shard:` path in that block;
+regenerate the register before you read it
+(`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>`).
+
+**Rows you seed land in this round's workspace by themselves, where the project
+wires it that way.** A project's fixture scripts read the `QA workspace:` id off
+this tree's round brief and refuse an override naming any other workspace, so
+there is nothing for you to set. Where the project does NOT do that, say so in
+your evidence rather than pointing a fixture at a workspace by hand. A live
+third-party suite runs only through the round's lock wrapper: the `Zoho lock:`
+line of the round block is the command, with the whole directory in one call and
+the journal path filled in.
+
 Per entry:
 
 1. Set status `in-fix`.
@@ -21,7 +41,7 @@ Per entry:
    masking a symptom is an automatic rejection.
 4. Run typecheck and the relevant test files. Not the full suite.
 5. Set `fix-ready` with a diff summary in the bug file.
-6. Commit to the working branch, staging explicit paths only.
+6. Commit on the hunt branch, in the hunt's worktree, staging explicit paths only.
 
 **When your fix moves a rule into a shared helper, the pinning test exercises the
 discriminating input at EVERY consumer.** Moving the rule to one place proves
@@ -72,7 +92,7 @@ it. If something is unverified, say so rather than implying green.
 it is a plan or a promise rather than work done, do that work now. An entry left
 half-fixed with a confident summary is worse than one left `open`.
 
-**Delegating:** bulk reading only, in the scratchpad, never in the run's worktree.
+**Delegating:** bulk reading only, in the scratchpad, never in the hunt's worktree.
 Never delegate the fix itself or its verification.
 
 After your batch, or at ~60% context, return.

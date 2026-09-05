@@ -97,8 +97,11 @@ wrong tier is visible, and the stamp does not carry it. Not a wait, an interrupt
 window — do not ask, and do not stall for an answer.
 
 **Never attack an issue a run holds.** The guard keys on the run, not on the
-issue's status: skip anything whose row in the same directory's `run.md` is past
-`queued`, and skip everything if that ledger's owner line names a live session.
+issue's status: skip anything whose row in any `runs/<batch-id>/run.md` in the same
+directory is past `queued`, and skip everything if any ledger's owner line names a
+live session — `find_live_ledger.py --list` prints them, and there can be two
+(ticket 38, the one-run-per-feature layout ticket). Everything, not only the issues
+a ledger names: a live run's promotion mints issue files no ledger title carries.
 `needs-harden` and `ready-for-agent` are both in scope — `needs-harden` is what a
 run sets when it finds criteria that are wrong or stale, so those issues are
 exactly what this pass exists to serve, and a status-shaped guard would tell it to
@@ -364,9 +367,12 @@ it — cut, harden both halves, stamp both — and records it; a split the sessi
 cannot complete leaves the issue unstamped until the human rules. This pass has no
 `all` of its own; it takes the batch it was given.
 
-Every defaulted question is also appended to `.scratch/decisions-queue.md`, the
-one place `/to-prd`, `/to-issues`, `/triage` and this pass all queue decisions, so
-they reach the human in a single list rather than scattered across issue files.
+Every defaulted question is also appended to this pass's own queue shard —
+`collect_shards.py --kind queue --my-shard --prefix <pass id>`, with an id on
+each item's heading, because `decisions-queue.md` is generated and refuses a
+direct write. The queue is the one place `/to-prd`, `/to-issues`, `/triage` and
+this pass all queue decisions, so they reach the human in a single list rather
+than scattered across issue files.
 
 Where an answer needs input nobody here has — a third party, a credential, a
 product call with no defensible default — set `needs-harden` instead, so the issue
@@ -414,7 +420,7 @@ hardening session is attended. Settle it here.
   file, or the criterion is rewritten so the implementer and the gates settle it
   alone.
 - **If they are away, or waves the list off**, the default road applies unchanged: take
-  the default, write it as a default, queue it to `.scratch/decisions-queue.md`. A
+  the default, write it as a default, queue it to this pass's queue shard. A
   check nobody ran never holds the batch.
 
 ## Scope notes
@@ -423,12 +429,17 @@ Issue trackers are per-project (this repo: `.scratch/<feature>/issues/`). The pa
 edits issue files only — never code, never the tracker board, never another
 skill's state.
 
-**The pass never mints.** It sharpens the issues it was given and creates none;
+**The pass never mints.** It sharpens the issues it was given and creates none.
+A split it completes keeps the parent's number with a letter suffix (`216b`), which
+needs no claim; a genuinely new file, which this pass does not write, takes its
+number from `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for <who>`, and
+`number-claim-guard.py` refuses an unclaimed one (ticket 38, rulings 7 and 16).
 `decisions.md` holds the pass that ran ahead of this rule. Where the pass finds
 work that belongs in no issue in its batch — a gap between two of them, a surface
 nobody owns — it writes **a register row**, the one specified in
-`parallel-hunt/SKILL.md`, into the project's
-main-checkout register, never a worktree copy, carrying an `audience` of
+`parallel-hunt/SKILL.md`, into its own register shard (`collect_shards.py --kind
+register --my-shard --prefix <yours>`; the generated `register.md` refuses a write),
+carrying an `audience` of
 `operator`, `tester` or `agent`, a severity, and `owner-notes` inside 200
 characters. Promotion turns the rows that earn it into issues, at the end of the
 next run or hunt. A finding is out by default, and promotion is the work that gets

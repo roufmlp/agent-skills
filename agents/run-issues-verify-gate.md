@@ -26,6 +26,35 @@ well the criteria are met.
 
 **Then drive it.** Invoke /run to get the app up, and drive ONLY this issue's
 acceptance path.
+
+**Sign in as this run's user, on this run's port.** The round header's
+`Sign-in user:` line names the account, `run-<batch id>@example.test`, and
+`current_workspace()` scopes what you read to the rows this run wrote. Mint the
+link with the batch id, which derives the address, and with `--site` naming this
+run's own host, `<batch-id>.localhost`, on the port `preview_start` returned when
+you started the server — the entry carries `autoPort`, so a second run may hold
+the default and the result is the only place the port exists. Drive the browser
+and the probe at that host too, never at bare `localhost`: a cookie is scoped to
+the host and not the port, so two runs on `localhost` share one session, and the
+script refuses a bare-localhost `--site`:
+
+```
+node --env-file=<env file> scripts/dev-signin-link.mjs --batch <batch-id> --site http://<batch-id>.localhost:<port from the preview_start result>
+```
+
+Inside a run's worktree that script refuses a bare email that is not this run's
+user, and where the project wires it that way its fixture scripts seed into the
+header's `QA workspace:` id by themselves, read off `run.md`, refusing an override
+that names any other. A page that reads empty under this user while the
+implementer's record shows rows was seeded from outside this worktree, which is a
+finding about the implementation record, not about the code. A live third-party
+suite runs only through the lock wrapper, which the harness verifies by reading
+the lock file for the account it writes:
+
+```
+node --env-file=<env file> scripts/zoho-live-lock.mjs --batch <batch-id> --journal <run-journal.md> -- npx vitest run src/lib/zoho/live
+```
+
 For server-rendered surfaces, drive over HTTP and read the served HTML — it is the
 whole truth and costs no browser. Open a real browser for what genuinely lives
 client-side: hydration handlers, client navigation, visual layout. Never use
@@ -129,8 +158,18 @@ for that string, never a heading. Never declare a routing you cannot cite. An
 out-of-scope find never blocks the issue.
 
 **The register is where every finding goes, and you never write an issue file.** It
-is one file per feature, in the main checkout, shared with `/parallel-hunt`; the
-runner's prompt gives you the path. Append one row:
+is one register per feature, shared with `/parallel-hunt`, and it is GENERATED
+from a shard per writing worktree (ticket 38, the one-run-per-feature layout
+ticket, ruling 14). Append your row to YOUR shard, inside the run's own tree:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register \
+    --feature <feature> --my-shard --prefix <your row prefix>
+```
+
+Your shard is yours alone: the prefix keeps you off the other gate's file when
+you both run at once. A write to `register.md` itself is refused, and the
+refusal names the directory your shard belongs in. Append one row:
 `ID | one-line summary | audience | severity | status | owner-notes`.
 
 - **`audience`** is `operator` or `tester` — who can see this fault at all.
@@ -186,4 +225,4 @@ implementer and the verify gate wrote the main-checkout ones. It then graded
 412 against a file with no implementation record in it and filed a finding
 saying the record was missing, when it was present at line 682 of the live copy.
 The finding had to be annulled and the records relocated by hand. (Adopted by
-the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+The human 2026-08-25, from candidate rule 5 of that run's merge briefing.)

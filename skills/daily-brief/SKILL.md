@@ -93,8 +93,13 @@ Read `brief.md`. Every line they changed is an instruction; every line they left
 default they accepted, which needs no action because the default already applied
 upstream.
 
-**Before writing anything into a repo, re-read its `run.md`.** Skip any issue whose
-row is past `queued`, and say so in the brief tomorrow. A live run holds that file,
+**Before writing anything into a repo, re-read every live ledger.** Run
+`python3 ~/.claude/skills/run-issues/find_live_ledger.py --list --repo <repo>`
+and read each ledger it prints — there can be two runs, and a hunt's `round-brief.md`
+lists too with `hunt` in its last column and holds no issue rows (ticket 38, the
+one-run-per-feature layout ticket, ruling 25). Skip
+any issue whose row in any of them is past `queued`, and say so in the brief
+tomorrow. A live run holds that file,
 and rewriting criteria under a working implementer causes a rejection on correct
 work. This is the same guard `/harden-issues` carries, for the same reason, and it
 has exactly one carve-out — strike-2 mode — which is not this.
@@ -102,18 +107,31 @@ has exactly one carve-out — strike-2 mode — which is not this.
 Then, per answer type:
 
 - **A decision answer** → write it into the issue file, replacing the recorded
-  default and marking it a decision rather than a default. Remove the item from
-  that repo's `.scratch/decisions-queue.md`.
+  default and marking it a decision rather than a default. Then mark the item
+  answered by writing its id into YOUR OWN shard — never by deleting it out of
+  the writer's file, which is another tree's and another session's:
+
+  ```bash
+  python3 ~/.claude/skills/lib/collect_shards.py --kind queue --my-shard --prefix answered --machinery
+  ```
+
+  One id per line. The regenerated queue stops carrying that item. An item with
+  no id cannot be answered this way — give it one on its heading first, in the
+  writer's own shard, and say so in the brief.
 - **An answer that resolves the last open question on an issue** → re-stamp it
   `Hardened:` from `Hardened (provisional):`.
 - **`merge`** → see below. This is the only half that touches main.
 - **An action they ticked off** → strike it from the project's pending-actions
   file, if it has one.
 - **A promotion they overturned** → delete the issue file promotion wrote, and leave
-  the row out of the register. It was refused after all.
+  the row closed in the register: promotion has already written its id into its
+  own `closed.md`, and nothing has to be un-written. It was refused after all.
 - **A refusal they overturned** → write the issue file promotion would have written:
   `Status: needs-harden`, one category role, a link to the finding's bug file, no
-  copied evidence. Then delete the row.
+  copied evidence, under a number from
+  `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for daily-brief`
+  (a number nobody claimed is refused). The row is already closed by promotion, so
+  there is nothing to delete.
 - **A row they refused outright** → delete it from the register, with the reason in
   `applied.md`. This is a refusal they own rather than one promotion took.
 - **A `fixed` row** → nothing. It is not in the brief for a decision and they are offered
@@ -231,8 +249,31 @@ than three: open, done, closed another way, unreadable. A repo with no `mileston
 nothing to read back — say so once and continue. Where the file exists and the script does
 not, say so and continue.
 
-Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every `run.md`, every
-`merge-briefing.md` for a run at `awaiting-merge`, every feature's `register.md`,
+**Fourth, sweep the run workspaces.** In each repo whose checkout carries a
+run-workspace sweeper of its own, run it from the main checkout. A sweeper lists
+every `run-workspace <batch id>` row the project's test database holds, joins each
+to its ledger by the id on its title line across every worktree — a run's `run.md`
+or a hunt's `round-brief.md` alike, because a hunt is a run for isolation — and
+deletes those whose ledger reads merged or has been halted for more than seven
+days. A live run's or hunt's workspace is kept whatever its age, and one no ledger
+names is kept and reported, never deleted. Paste its decision lines into section 3
+when it deleted anything or reported an orphan: the finale deletes its own
+workspace, and this brief sweeps the abandoned ones. A non-zero exit is a section 3
+action naming what refused, not a stop. A repo with no such script is skipped in
+silence.
+
+**Regenerate the queue and every register before you read them.** Both are
+generated from shards, one per writer, and the copy on disk is as old as the last
+regeneration:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind queue --repo <repo>
+python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --repo <repo>
+```
+
+Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every
+`.scratch/<feature>/runs/<batch-id>/run.md`, every `merge-briefing.md` beside a
+ledger at `awaiting-merge`, every feature's `register.md`,
 and the project's pending-actions file, if it has one.
 
 **Never read `decisions-log.md`.** It is the answered half of the queue, kept only so

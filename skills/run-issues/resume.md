@@ -10,14 +10,20 @@ The text below stood in `SKILL.md` until 2026-08-16 and moved here.
 rules it applies, and the incidents behind each one, are in its own docstring:
 
 ```bash
-python3 ~/.claude/skills/run-issues/find_live_ledger.py [--issues 348,345]
+python3 ~/.claude/skills/run-issues/find_live_ledger.py
 ```
 
-It prints one ledger path and exits 0, or exits non-zero having printed every
-copy it examined and why each was refused. **A non-zero exit is a launch-time
-stop:** report what it printed in the launch message and spawn nothing — a stop
-before anything is spawned is not a mid-run stall. Pass `--issues` only to split
-two live ledgers by scope.
+**It keys on the current directory** (ticket 38, the one-run-per-feature layout
+ticket, ruling 11). Run it from inside
+the run's own worktree: it prints the one ledger whose `Worktree:` line names that
+tree and exits 0. Run from the main checkout, or from a tree no live run names,
+it lists every live run by batch id on stderr and exits 1 — that listing is the
+answer, and the human picks by changing directory, never by count and never by
+freshness. **A non-zero exit is a launch-time stop:**
+report what it printed in the launch message and spawn nothing — a stop before
+anything is spawned is not a mid-run stall. `--list` prints every live run, tab
+separated, for a reader that wants all of them; `--overlap <ids>` is the
+pre-flight's range check.
 
 The one way to get this wrong is to overrule the script by picking the freshest
 file. On one measured run the freshest ledger belonged to an already-merged run,

@@ -27,7 +27,7 @@ jump, a reversal and a ledger with no state. **This exists because the finale wr
 `awaiting-merge` with promotion and the board still unrun in three consecutive runs** —
 `dc132b`, `cab74e` and `fd4fa2`, the last at 15:10 on 2026-08-20, where the runner put the
 state back by hand. Promotion is what turns register rows into issue files, so a resume
-that skips it loses them. the human approved the refusal on 2026-08-21. Promotion is safe to re-enter — it deletes each row as it
+that skips it loses them. The human approved the refusal on 2026-08-21. Promotion is safe to re-enter — it deletes each row as it
 resolves it — and the board render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
@@ -184,7 +184,14 @@ resolves it — and the board render is safe to repeat:
    judgment half unrun.
 3. **Promotion — the last phase that resolves findings, and the only door into
    `issues/`.** Spawn one
-   `promotion` agent over every register row this run wrote, **plus every row anywhere in
+   `promotion` agent **carrying `model:` set to the `promotion=` value on the
+   ledger's `Model map at launch:` line** — it is one of the twelve mapped roles,
+   so `model-map-gate.py` refuses a spawn that omits it (ticket 39, ruling 10).
+   Its prompt names the issue directory and the claim command
+   `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for "promotion <batch id>"`, one call per
+   file: the number is claimed atomically across every worktree, never read off a
+   listing, and `number-claim-guard.py` refuses a file under an unclaimed one (ticket
+   38 of the pilot-delivery map, rulings 7 and 16). Run it over every register row this run wrote, **plus every row anywhere in
    the register that already reads `verified`**. A row already at
    `verified` exits as `fixed`, before audience is even read, because the run fixed it
    and the fix is in the commit. That exit takes no judgement, so widening the scope
@@ -215,10 +222,21 @@ resolves it — and the board render is safe to repeat:
    in it. The runner spawns, gets two lists back, and appends them to
    `merge-briefing.md`, one line each. `/daily-brief` carries both to the human and they
    hold the veto over either direction.
-4. **Measure this run, and append its row.** Run
+4. **Tear down what this run seeded outside the repo, then measure the run and
+   append its row.** The judgement step above is the last thing that drives the app,
+   so anything the launch created outside git — a database workspace row, a sandbox
+   tenant — goes first, by the id the ledger itself records. Where the project has a
+   teardown script, run it here and let it read the id off the ledger rather than
+   taking one by hand: deleting by the marker the run itself wrote is what the
+   "delete only rows you marked" rule in `SKILL.md` requires. A teardown that
+   refuses is not a stop — journal the refusal, put its printed remedy into the merge
+   briefing as an action on the human, and go on to the measurement. Nothing else in
+   the finale needs the teardown to have happened.
+
+   Then run
 
    ```
-   python3 ~/.claude/skills/run-issues/run_costs.py --run <run-name> --issues <count> \
+   python3 ~/.claude/skills/run-issues/run_costs.py --batch <batch-id> \
        --version <cc-version> --note "<what changed since the last run>"
    ```
 
@@ -226,20 +244,38 @@ resolves it — and the board render is safe to repeat:
    appends one row to `.scratch/workflow-audit/run-costs.md`, which is the table the human
    reads to compare one run against the one before it.
 
-   **`--run` is this run's own name, `batch-88624c` and the like — the part of the
-   branch after `claude/run-issues-`.** Pass it. Without it the script takes the name
-   from the branch checked out where it is running, which is right only when that is
-   the run's own worktree, and refuses otherwise. Run `batch-88624c` ran this from the
-   MAIN checkout on 2026-08-31; the old rule then took the newest transcript in that
-   directory's slug, which holds 64 sessions of unrelated work, and reported 1.01 hours
-   for an 8.48-hour run with a longest step the run never ran. The row it appended was
-   wrong in both timing columns. It now checks that the transcript it picked names the
-   run, and appends NO row when it cannot identify one.
+   **`--batch` is this run's batch id, `batch-88624c` and the like.** It is the only
+   argument the reading needs. The id names the ledger, the ledger's `Worktree:` line
+   names a path, and the path IS the transcript directory, so nothing depends on what
+   the worktree is called and `--issues` is counted off the spawns rather than typed.
 
-   **Then run these two and paste them too**, in the same section:
+   **That is why `--run` is no longer the road** (ticket 39 of the pilot-delivery map,
+   every-worker-inherits-the-session-model, ruling 12). `--run` matched the run's name
+   against the PROJECT DIRECTORY name, which holds only while a worktree is named after
+   the run inside it. Twice it was not: the 2026-09-02 and 2026-09-05 rows of
+   `run-costs.md` each say the worktree was reused and its name does not match the
+   branch, so `--transcript` had to be passed by hand. Run `batch-b5e96d` ran in a
+   worktree called `run-issues-414a-99f-286335`. `--run` still works, for a run whose
+   ledger is gone.
+
+   Either way the transcript must NAME the run or nothing is read and no row is
+   appended. Run `batch-88624c` ran this from the MAIN checkout on 2026-08-31, whose
+   slug holds 64 sessions of unrelated work; the old rule took the newest and reported
+   1.01 hours for an 8.48-hour run, with a longest step the run never ran, and appended
+   it as though it were measured.
+
+   **Every token figure it prints carries its own model, and none of them is added
+   across models** (ruling 11, and the human's ruling of 2026-09-06). The `Weighted`,
+   `Per issue` and `Orchestrator` cells read `opus 149.7M / fable 0.3M`, so the number
+   cannot be read without the model it belongs to. One figure spanning two models would
+   need a cross-model multiplier, and a multiplier is a price with the currency taken
+   off. **To read a model trial, compare the SAME ROLE across runs** — that is like
+   against like and needs no multiplier at all. For money, read `/usage` by hand.
+
+   **Then run these three and paste them too**, in the same section:
 
    ```
-   python3 ~/.claude/skills/run-issues/harness_cost.py
+   python3 ~/.claude/skills/run-issues/harness_cost.py --batch <batch-id>
    python3 ~/.claude/skills/run-issues/cache_probe.py --days 2
    python3 ~/.claude/skills/run-issues/estimate_accuracy.py \
        --ledger <run.md> --transcript <the run's main .jsonl>
@@ -303,6 +339,63 @@ resolves it — and the board render is safe to repeat:
    `run_timings.py`, built on 2026-08-26 when a fourteen-hour run could not say which step
    ate the clock, was named in no skill file at all and had only ever been run by hand.
    Both readings existed and neither was wired to anything.
+
+   **`run_costs.py` also prints two tables ticket 39 sitting 3 added, and they are the
+   ones a model trial is read from** (ruling 15). `What each role ran on, per role and
+   per model` gives one line per role and model pair — spawns, tokens by kind, weighted
+   tokens and hours. `One row per subagent` gives every spawn: role, model, effort,
+   tokens by kind, rows and minutes. Paste both here. **The per-role table also goes
+   into the briefing as its own section**, by the command below, and the duplication is
+   deliberate for the same reason the one-screen block duplicates the board: this
+   section is a cost reading the human opens when they are asking about cost, and that section
+   is the trial they open when they are asking which model to run next.
+
+   **Then run this one, and paste its whole output as its own section of
+   `merge-briefing.md`:**
+
+   ```
+   python3 ~/.claude/skills/run-issues/run_quality.py --batch <batch-id>
+   ```
+
+   It prints `## What each role ran on, and whether the trial holds` complete, heading
+   and all — the trial verdict, the per-role table, and the three inside-run quality
+   figures per issue. Paste it whole; write none of it yourself (ticket 39 of the
+   pilot-delivery map, every-worker-inherits-the-session-model, sitting 4, deliverable 4
+   and rulings 13, 15, 21.3 and 22).
+
+   **The per-role table is read from the TRANSCRIPTS, never from the ledger** (ruling
+   21.3). The ledger is the thing under test: it records the map the launch line
+   resolved, so a table built from it would agree with the map by construction and
+   could never fail. Every figure in it comes from each subagent's own transcript rows.
+
+   **The verdict has three states and `holds` is only one of them.** `VOID` means at
+   least one mapped spawn ran on something other than what the ledger asked for, and
+   `~/.claude/hooks/model-landed-check.py` wrote a `**MISMATCH**` line saying which.
+   **A void trial halts nothing, unmerges nothing and reopens no issue** (ruling 22):
+   the work is still good work, and the only thing void is the comparison. `not
+   measured` means the journal holds no landed line at all — a run from before that
+   hook, or one whose hook never fired — and it must never be read as a pass. Run
+   `batch-b5e96d` reads `not measured` for exactly that reason, measured 2026-09-06.
+
+   **The per-issue figures PARSE PROSE, and the limit is stated rather than hidden.**
+   Only `attempt N` and `criteria reset` are markers; a gate's verdict and a strike are
+   sentences in the Notes cell. Measured 2026-09-06 over the sixteen ledgers in
+   `.scratch/example-feature` that hold a status table, 143 rows: it grades 141 and
+   prints `unread` on 2, both of which genuinely state no verdict. Reaching that took
+   seven dialects two review passes found, in twelve ledgers the first reading had
+   never opened. **A row it cannot read prints `unread` and
+   never a pass**, so a hole is visible rather than silent. `test_run_quality.py`
+   carries the whole corpus as a regression net.
+
+   **The strike column is derived and says so.** `SKILL.md` step 5's prose-deletion
+   road and a runner-error annulment both cancel a strike in prose and write no
+   marker, so the reader counts rounds rejected since the last criteria reset, marks
+   any row whose own words disagree with a `*`, and prints both rather than choosing.
+   On run `batch-b5e96d` fourteen of fifteen rows agree with their own prose and issue
+   530 is the one that does not.
+
+   **It can never halt the finale.** Every road exits 0 and prints what it could not
+   read, the same rule the cost readings above carry.
 
    **Then write `## The run in one screen` at the very top of the briefing, above
    every other section.** It is written this late because it is the first moment
@@ -421,47 +514,182 @@ resolves it — and the board render is safe to repeat:
      was unlit while 485 shipped there. The finale states the set; the renderer never
      works it out.
 
+   **Then two more tables, under the shipped one, inside the same block.** The rail drew
+   what the run did. These draw what it left: an issue it named and did not close, and a
+   question waiting on the human. Each is found by its own header row, so the three are
+   read apart and a minted row never trips the shipped rule.
+
+   ```
+   ### Minted and left open
+
+   | Issue | Stage     | Sentence                                |
+   |-------|-----------|-----------------------------------------|
+   | 522   | quotation | A failed price read shows as 'no price' |
+   | 524   | floor     | A gate writes a row nothing later reads |
+
+   ### Forks waiting on you
+
+   | Fork | Stage     | Question                                          |
+   |------|-----------|---------------------------------------------------|
+   | F1   | workspace | Tell an admin the email belongs to another space? |
+   | F4   | floor     | Refuse an untracked paste file?                   |
+   ```
+
+   - **A minted row is drawn as a dashed card, and it is a hole rather than a plan.** The
+     rows are the `Minted:` line and the `Did not ship:` line together, every id on each,
+     no more and no fewer. Both halves are wanted: promotion mints an issue from a
+     register row, and a run also leaves an issue open on purpose — a run whose promotion
+     minted nothing can still owe a dashed card. The `Sentence:` rule above is the same
+     one, `59 characters or fewer`, and the wording says the work is not there rather
+     than that somebody has started it.
+   - **A fork row is drawn as an amber card carrying its question.** One row per fork,
+     and the count must equal the one-screen table's `Forks to decide`. The stage is the
+     question's own: a question about the product takes its stage, a question about the
+     harness takes `floor`.
+   - **The `Question` cell is a compression you write, never a `## Decide` heading
+     copied.** Measured 2026-09-05 over the five runs the picture draws: only one writes
+     its Decide items as questions at all, and five of those six headings run 61 to 89
+     characters against a card that holds 60. The other four runs write statements, noun
+     phrases, bold paragraphs or bare bullets. So write the short question here,
+     `59 characters or fewer`, and leave the fork's own item under `## Decide` exactly as
+     it stands — that is the version `/daily-brief` reads, and the card adds no fact it
+     does not carry.
+   - **A fork key is unique across the whole briefing.** Number them `F1`, `F2` and
+     onward in one sequence, in the order you write them, whatever section holds each
+     fork. Every one of the five drawn runs carries TWO `## Decide` headings and each
+     numbers its own items from 1, so an item number alone is not a key: two amber cards
+     would collide and the board's guard could not tell which row a card came from.
+   - **The register is drawn nowhere, and that is deliberate.** Every register row ends
+     as one of four things — promoted, which is now a dashed row; fixed, which is already
+     inside a shipped card; refused; or dropped below the operator floor, which is a
+     refusal — and a fifth road never reaches promotion at all. None of the five gets a
+     card. The only register fact anywhere on the board is the one-screen table's
+     `Register rows left` row and its `Register:` line, and drawing rows a second time
+     would put one fact in two places.
+   - **The one-screen counts do not move.** `Forks to decide`, `Issues minted` and
+     `Register rows left` are what `/daily-brief` reads. These two tables sit below them
+     and change none of them. `Forks to decide` still counts forks WRITTEN, never forks
+     drawn.
+   - **A run with neither omits both headings rather than printing an empty table**, and
+     the rail is shipped cards only. Nothing forces this: an empty table with its header
+     row reads the same to the guard, which grades rows and not headings.
+
+   **Then the bands, where the run has one.** A band is one subject that changed
+   across several stages, drawn as a strip crossing the columns it touches with its
+   issues as chips inside it. On `batch-45c8b1` it is the viewer losing the pen across
+   all eight columns, and it is that run's whole story in drawn form. Without it those
+   runs draw as scattered cards that share a colour and nothing else.
+
+   ```
+   ### Bands
+
+   | Band | Stages               | Kind  | Issues                           | Caption                                      | Seats                          |
+   |------|----------------------|-------|----------------------------------|----------------------------------------------|--------------------------------|
+   | B1   | workspace..catalogue | guard | 486 487 488 489 485 485b 519 509 | Viewer, on every screen, can no longer write | admin ok, member ok, viewer no |
+
+   ### Band chips
+
+   | Band | Issue | Text                  |
+   |------|-------|-----------------------|
+   | B1   | 486   | customers             |
+   | B1   | 509   | money road still open |
+   ```
+
+   - **A run may state no bands, and that is the normal answer.** Two of the five runs
+     the picture draws have none. State a band where the run has one subject that
+     genuinely crossed several stages, and state none otherwise: a picture that must
+     always find a subject will invent one, and an invented subject on a merge briefing
+     is worse than no band at all. A run with no band omits both headings.
+   - **The floor is two issues across two spanned columns, and it is provisional.** It
+     rests on five measured runs and no counter-example, so the first run that draws a
+     silly band is answered by changing that number here rather than by re-arguing the
+     shape. Below either figure the thing is a card, not a band. **The floor is a shape
+     rule and never an invention guard**: nothing derives a band, so a finale minded to
+     invent one names three issues across three stages as easily as two across two. What
+     refuses invention is the paragraph above, plus the membership rule below.
+   - **A band REPLACES the cards for its members.** Its issues are drawn once, as chips
+     inside the band, and never also as cards on their own stages. Measured over all five
+     drawn runs: the card set and the chip set are disjoint every time and their union is
+     the run's shipped count — nine cards plus seven chips for `batch-45c8b1`'s sixteen.
+     That raises the cost of a wrong row rather than lowering it, because an issue
+     swallowed by a band that should not hold it vanishes from its own stage entirely.
+   - **Every issue a band names has a row elsewhere in the block**, in the shipped table
+     or in `### Minted and left open`. Both halves are wanted: a band may carry an issue
+     the run named in its headline and left open, drawn as a dashed chip. An issue in two
+     band rows is refused, and so is a fork key: a fork waits on the human and is not a
+     subject that changed.
+   - **Stages** is `first..last` over the rail's columns, a contiguous range in the order
+     the stage vocabulary sets. `floor` is never spannable, because the floor row is
+     drawn beneath every band. Each member's own stage sits inside its band's span.
+   - **Kind** is one of the same four a card takes and gives the band its colour.
+     **Caption** is the band's story in one line or two, and it is judgement, exactly
+     like a sentence.
+   - **Seats** carries three marks in the fixed order `admin`, `member`, `viewer`, each
+     one of `ok`, `no` or `dash`, and an empty cell draws no pills. That one line carries
+     everything the old seat grid said. **Whether a band is about seats stays your
+     judgement**, like the caption: the cell is what the drawing reads.
+   - **Every member has a row under `### Band chips` holding its own few words.** A chip
+     draws bare without one, and bare numbers are not the picture. **Write these short**:
+     the space a chip has falls out of its band's span and its chip count, and across the
+     five drawn bands that runs from 12.8 characters a line to 23.1. `draw_run_rail.py`
+     computes each band's own budget and refuses a line over it.
+
    **Then run the guard from the repository root, and do not go on to the board while
    it refuses:**
 
    ```
    python3 ~/.claude/skills/run-issues/check_run_rail.py \
-       --briefing .scratch/<feature>/merge-briefing.md \
+       --briefing .scratch/<feature>/runs/<batch-id>/merge-briefing.md \
        --stages docs/agents/run-picture-stages.md
    ```
 
    It refuses a stage or `Lit:` key outside the vocabulary, a kind outside the four, a
-   row with fewer than four cells, a sentence of 60 characters or more, a shipped issue
-   with no row or a row for an issue that did not ship, a missing headline, a missing
-   `Lit:` line, and a rail placed anywhere but directly below the whole one-screen block,
+   row with fewer than four cells, a sentence or a question of 60 characters or more, a
+   shipped issue with no row or a row for an issue that did not ship, an id on the
+   `Minted:` or `Did not ship:` line with no dashed row or a dashed row neither line
+   names, a fork row count that disagrees with `Forks to decide`, a repeated fork key, a
+   band below the floor, a `Stages` cell that is not a contiguous range, a band naming an
+   issue with no row anywhere in the block, an issue in two bands, a `Seats` cell that is
+   not the three marks in order, a band member with no chip text, a missing headline, a
+   missing `Lit:` line, and a rail placed anywhere but directly below the whole one-screen block,
    its `Shipped:` and sibling field lines included. Exit 2 means it could grade nothing:
    no one-screen block, no rail, no `Shipped:` line, or a vocabulary file that exists and
    holds no table. It prints every refusal, not the first. A relative `--stages` path is
-   tried from the git top level too, so the command also works from `.scratch/<feature>/`. **It grades keys, counts and lengths and nothing else.** Whether a sentence is
+   tried from the git top level too, so the command also works from the run's own directory. **It grades keys, counts and lengths and nothing else.** Whether a sentence is
    true or 516 belongs on `needs-you` passes unread, so never cite it as cover for the
    judgement. Where the repository has no `docs/agents/run-picture-stages.md` it says so,
    skips the stage rule and grades the rest, which is that file's own rule 4.
 
-5. **Regenerate the action board** — `.scratch/<feature>/board.html`, the one-page
-   human view of `merge-briefing.md`. Live actions only, grouped by when, one line of
+5. **Regenerate the action board** — `~/Documents/run-boards/<batch-id>.html`, the
+   one-page human view of `merge-briefing.md`. **Every board lives in one folder
+   outside every repository, named by batch id**: one place the human can walk later,
+   and no run ever overwrites another run's board. Never write a board into
+   `.scratch/`. Live actions only, grouped by when, one line of
    what and one of why each, ticks persisted in localStorage, **and the run panel
    described below**. Keep the existing styling; send it with SendUserFile. **A fresh
-   subagent renders it, spawned with `model: "fable"` named explicitly on the Agent
+   subagent renders it, spawned with `model: "opus"` named explicitly on the Agent
    call** — from `merge-briefing.md` plus the old board, never the runner itself, whose
    context is at its most expensive by run end, and the old board's bytes never enter
    the runner.
    Naming the model is not optional and "cheap" is not a model: an unnamed spawn
-   inherits the session model, so this step was paying the top tier to convert one
-   markdown file into HTML on the largest input in the pipeline (283 KB, measured
+   inherits whatever the session runs, and this step converts one markdown file into
+   HTML on the largest input in the pipeline (283 KB, measured
    2026-08-06). `merge-briefing.md` stays the source of truth,
    and `/daily-brief` reads that file, never the board.
 
-   **This is the one spawn `SKILL.md`'s "never pass a `model:` value" rule does not
-   cover, and the two do not conflict.** That rule is scoped to roles that HAVE an
-   agent file, because there a spawn-time value silently defeats the file's
-   `model: inherit`. The board renderer has no agent file, so there is nothing to
-   defeat and nothing to inherit from but the session. (Scoped by the human on
-   2026-08-22, answering C7 of the skills audit.)
+   **The pin is `opus`: the top reasoning tier below the most expensive one, and it
+   does not go lower.** The saving is not what decides it: on one measured run the render cost 0.30M
+   weighted tokens against the run's 149.70M. The tier order in this pack ranks review
+   authority, never price, and this render is the last thing that touches the artefact
+   the human opens first.
+
+   **This is the one spawn the model map does not reach, and the two do not conflict.**
+   `SKILL.md`'s rule was "never pass a `model:` value" until 2026-09-05, when the model
+   map reversed it: every one of the twelve loop roles now takes its model from the
+   ledger's `Model map at launch:` line. The board renderer is not one of the twelve.
+   It has no agent file and no map row, so this paragraph is what governs it. (Scoped
+   by the human on 2026-08-22, answering C7 of the skills audit; rewritten 2026-09-05
+   when the rule it cited was reversed.)
 
    **The panel goes at the top, headed "The run in one screen".** the human named this
    surface themselves: the board is the only artefact a run produces that renders, and it
@@ -472,23 +700,35 @@ resolves it — and the board render is safe to repeat:
 
    **Above the panel goes the rail, drawn from `## The run on the rail` by a script.**
    It is the picture the human opens first: eight columns left to right, one card per
-   shipped issue on the stage its rail row names, a floor row beneath them, and the
-   run's headline across the top. **The script is the only road to it.** Run it from the
-   repository root and paste what it prints into `board.html`:
+   shipped issue on the stage its rail row names, a dashed card under it for every issue
+   the run left open and an amber card for every question waiting on the human, a band
+   across the columns any one subject crossed, a floor row beneath them, and the run's
+   headline across the top. **The renderer draws bands, it never finds them**: it reads
+   the `### Bands` table and draws what it states, the same rule the cards obey.
+   **The script is the only road to it.** Run it from the repository root and paste
+   what it prints into the board:
 
    ```
    python3 ~/.claude/skills/run-issues/draw_run_rail.py \
-       --briefing .scratch/<feature>/merge-briefing.md \
+       --briefing .scratch/<feature>/runs/<batch-id>/merge-briefing.md \
        --stages docs/agents/run-picture-stages.md
    ```
 
-   It prints four blocks, each with a comment saying where it goes: seven CSS tokens for
-   `:root`, the same seven for the `@media (prefers-color-scheme: dark)` block, the
+   It prints four blocks, each with a comment saying where it goes: ten CSS tokens for
+   `:root`, the same ten for the `@media (prefers-color-scheme: dark)` block, the
    rail's own CSS, and the `<svg>`. The rail goes inside `<div class="rail-bleed">`,
-   directly above the `## The run in one screen` panel. Everything else on the board
-   keeps its 720-pixel reading column; the rail keeps its natural 1040 units and scrolls
-   sideways, which the human ruled on 2026-09-04 after being shown that scaling it to fit
-   draws the card text at 6.5 CSS pixels.
+   directly above the `## The run in one screen` panel, and that div is a direct child of
+   `<body>`.
+
+   **The rail takes the WINDOW's width and the prose keeps its reading column.** The CSS
+   block does that by itself: it lifts the 720-pixel column off `body` and puts a
+   680-pixel one on each of body's other children, which is the same width the prose had
+   before. So `.rail-bleed` must be a child of `body` and never of a wrapper, or it
+   inherits the column and the widening is lost. The rail draws at its natural 1040
+   units, centred where the window has room and scrolling inside its own container where
+   it does not; on a window 1080 pixels or wider nothing scrolls at all. The human ruled
+   scroll rather than shrink on 2026-09-04, after being shown that scaling the rail to
+   fit draws the card text at 6.5 CSS pixels, and widened it to the window on 2026-09-05.
 
    **Why a script and not your own SVG**, ruled by the human on 2026-09-04: the shape is
    computed geometry carrying two assertions, and a card whose sentence will not fit
@@ -525,8 +765,8 @@ resolves it — and the board render is safe to repeat:
 
    ```
    python3 ~/.claude/skills/run-issues/check_run_picture.py \
-       --briefing .scratch/<feature>/merge-briefing.md \
-       --board .scratch/<feature>/board.html \
+       --briefing .scratch/<feature>/runs/<batch-id>/merge-briefing.md \
+       --board ~/Documents/run-boards/<batch-id>.html \
        --stages docs/agents/run-picture-stages.md
    ```
 
@@ -555,23 +795,38 @@ resolves it — and the board render is safe to repeat:
    transcription rule in force the render has no judgement in it again, and the guard
    refuses a board that finds some.
 
-   Two facts settle the choice. **Cost is not the constraint.** The 2026-08-06 figure
-   that chose Haiku cites a 283 KB input; measured 2026-09-01, the render reads
-   `merge-briefing.md` at 125 KB plus the old board at 12.5 KB, roughly 35,000 tokens in
-   and 3,000 out. Against a run weighing 56.9M to 88.9M weighted tokens that is under one
-   tenth of one per cent, and one redo costs more than the model saving. **And effort
-   cannot be named on an Agent spawn** — the tool takes a model and no effort argument,
-   so `fable medium` is unbuildable and effort inherits the session.
+   **The pin is `opus`, ruled by the human on 2026-09-06.** It was `haiku`, then `fable`
+   when the board grew a run panel. His words: Fable is not needed for that simple job.
 
-   The evidence for Fable on this class of work is
+   Three facts settle it, and only one of them is about price.
+
+   **Cost is not the constraint.** The 2026-08-06 figure that chose Haiku cites a 283 KB
+   input; measured 2026-09-01, the render reads `merge-briefing.md` at 125 KB plus the
+   old board at 12.5 KB, roughly 35,000 tokens in and 3,000 out. Measured again on run
+   `batch-b5e96d`, 2026-09-06, the render cost 0.30M weighted tokens in 0.08 h against
+   that run's 149.70M — two tenths of one per cent. One redo costs more than any model
+   saving here, which is why the pin is not dropped below Opus.
+
+   **Effort cannot be named on an Agent spawn.** The tool takes a model and no effort
+   argument, and this spawn has no agent file to carry frontmatter — the human refused
+   minting one on 2026-08-22. So `opus medium` is unbuildable and effort inherits the
+   session: the same run measured this render at effort `high`, which was the session's.
+   Anyone asking for a model at an effort here is asking for half of what they said.
+
+   **The tier order ranks review authority, not price.** Ruling 14 of ticket 39 fixed
+   `haiku < sonnet < opus < fable` so that no adversarial gate sits below the worker it
+   checks. Read as a price list it made this pin name the most expensive model for the
+   cheapest job in the pipeline, which is the contradiction `q-t39-s2-1` raised on
+   2026-09-05 and this ruling closes. The order is unchanged; the pin moved.
+
+   **Why not lower than Opus.** The evidence for Fable on this class of work is
    `.scratch/workflow-audit/citation-recheck-fable.md`, taken 2026-08-16: read a source,
    report it faithfully, invent nothing. Of 107 citations it returned 95 correct, 2 off
    by a line number, and 6 mismatches of which 4 were drift that happened after the
    source was written. Two substantive errors in 107. **State both limits wherever this
    is cited: it measured a checking task producing a report rather than an HTML render,
    and it is one reading rather than a trend.** Without the transcription rule and the
-   guard the render is arithmetic, which Fable was not measured on, and Opus is the
-   safer buy.
+   guard the render is arithmetic, which no tier below Opus has been measured on here.
 
 6. **Recommend follow-ups; start none.** One exception is mandatory:
    - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at

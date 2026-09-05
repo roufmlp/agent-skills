@@ -107,7 +107,11 @@ SKILL_MARKS = [
     "A ruling that creates work gets its issue number in the same sitting",
     "staleness is the FILE's mtime",
     "Re-derive every fact the run will carry into its spawns, from source",
-    "never pass a `model:` value on a spawn",
+    # Ticket 39 ruling 10 REVERSED this rule on 2026-09-05. The mark used to be
+    # "never pass a `model:` value on a spawn", which the rewritten bullet still
+    # quotes while describing the reversal -- so the old mark passed while
+    # guarding a sentence that states the opposite of the rule.
+    "Every spawn carries its own role's model, read off the ledger",
     "A green produced without dependencies on disk is",
     "It is a floor, not a definition.",
     # The permission-floor block. The mechanism sentences are the rule: they
@@ -668,10 +672,39 @@ class TheRunPictureLandsOnBothSurfaces(unittest.TestCase):
     def test_the_model_line_carries_the_two_limits_of_its_measurement(self):
         """The Fable reading is one measurement of a checking task, not a trend
         and not an HTML render. The issue requires both limits stated wherever it
-        is cited, or the citation outgrows its evidence."""
+        is cited, or the citation outgrows its evidence. It is still cited: it
+        is why the render is not dropped further than Opus."""
         board_step = self.board_step()
         self.assertIn("citation-recheck-fable.md", board_step)
         self.assertIn("one reading", board_step)
+
+    def test_the_board_render_is_pinned_to_opus(self):
+        """Ruled by the human 2026-09-06, closing `q-t39-s2-1`. The pin was
+        `fable`, and ruling 14 of ticket 39 made `fable` the top tier, so the
+        pin named the most expensive model for the cheapest job in the
+        pipeline. Measured on run `batch-b5e96d`: the render cost 0.30M
+        weighted tokens against the run's 149.70M."""
+        self.assertIn('model: "opus"', self.board_step())
+        self.assertNotIn('model: "fable"', self.board_step())
+
+    def test_the_skill_file_names_the_same_model_as_the_finale(self):
+        """These two drifted apart before. The review of sitting 2 found
+        `SKILL.md` still citing `haiku` and a line number about migration
+        `0086`, months after the finale had moved on. One rule, two files, and
+        nothing compared them until this."""
+        skill = read(SKILL)
+        self.assertIn('model: "opus"', skill)
+        self.assertNotIn('requires\n  `model: "fable"`', skill)
+
+    def test_the_pin_no_longer_justifies_itself_by_the_top_tier(self):
+        """The justifying sentence said an unnamed spawn "pays the top tier",
+        written when the session was Opus and the pin was Haiku. Ruling 14 then
+        fixed the tier order as haiku < sonnet < opus < fable, so that sentence
+        read backwards against its own pin. The tier order ranks REVIEW
+        AUTHORITY, never price, and the sentence has to say which it means."""
+        board_step = self.board_step()
+        self.assertNotIn("pays the top tier", board_step)
+        self.assertNotIn("paying the top tier", board_step)
 
 
 class TheDailyBriefShowsWhatTheRunCost(unittest.TestCase):
@@ -932,5 +965,257 @@ class TheBriefingSaysWhereEachIssueLanded(unittest.TestCase):
         )
 
 
+
+class TheHolesAndTheQuestionsLandOnTheRail(unittest.TestCase):
+    """Issue 554. The rail drew shipped issues only. Two more things belong on
+    it — an issue the run left open, and a question waiting on the human — and one
+    does not, which is the register.
+
+    These read the live `finale.md` and the live promotion brief, like every
+    other check in this file.
+    """
+
+    MINTED_MARK = "### Minted and left open"
+    FORKS_MARK = "### Forks waiting on you"
+
+    def rail_step(self):
+        finale = read(FINALE)
+        start = finale.index("**Then write `## The run on the rail`")
+        return finale[start:finale.index("**Regenerate the action board**", start)]
+
+    def test_the_rail_step_names_both_tables(self):
+        step = self.rail_step()
+        for mark in (self.MINTED_MARK, self.FORKS_MARK):
+            with self.subTest(mark=mark):
+                self.assertIn(mark, step)
+
+    def test_the_register_is_named_as_the_thing_that_is_never_drawn(self):
+        """Criterion 7, and it is the answer to their third question. Every
+        register row ends fixed, promoted, refused or dropped below the floor,
+        and a fifth road never reaches promotion at all. The one fact left over
+        is "none left", which the one-screen block already carries."""
+        step = squash(self.rail_step())
+        self.assertIn("register", step.lower())
+        self.assertIn("Register rows left", step)
+        for bucket in ("refused", "fixed", "dropped"):
+            with self.subTest(bucket=bucket):
+                self.assertIn(bucket, step.lower())
+
+    def test_the_one_screen_counts_are_named_as_unchanged(self):
+        """`Forks to decide`, `Issues minted` and `Register rows left` are what
+        `/daily-brief` reads and issue 506 shipped them. This slice adds rows
+        below them and changes none of them."""
+        step = squash(self.rail_step())
+        self.assertIn("Forks to decide", step)
+        self.assertIn("Issues minted", step)
+
+    def test_the_fork_numbering_rule_is_stated_beside_the_table(self):
+        """The seam pass's finding: a fork key must be unique across the WHOLE
+        briefing. Every one of the five drawn runs carries TWO `## Decide`
+        headings, each numbering its items from 1, so `F1` alone is not a key."""
+        step = squash(self.rail_step())
+        self.assertIn("unique", step)
+        self.assertIn("whole briefing", step)
+
+    def test_the_card_question_is_named_as_a_compression(self):
+        """It is not the `## Decide` heading copied. On `batch-45c8b1`, the one
+        drawn run whose Decide items are questions at all, five of the six
+        headings run 61 to 89 characters against a card that holds 60."""
+        step = squash(self.rail_step())
+        self.assertIn("compression", step)
+        self.assertIn("59 characters or fewer", step)
+        self.assertNotIn("under 60", squash(read(FINALE)))
+
+    def test_a_run_with_neither_omits_the_tables_rather_than_printing_them_empty(self):
+        step = squash(self.rail_step())
+        self.assertIn("omit", step.lower())
+
+    def test_promotion_is_told_to_write_the_stage(self):
+        """Criterion 6. The brief's minting list named no stage, so every issue
+        promotion minted reached the next run's rail with nowhere to land.
+
+        Like `Sentence:` and unlike `Owed:`, the field carries no
+        `milestones.md` condition: every project's run draws a rail, so a
+        project with no milestones file would silently lose it.
+        """
+        brief = squash(read(AGENTS / "promotion.md"))
+        self.assertIn("Stage:", brief)
+        rule = brief[brief.index("Stage:"):][:900]
+        self.assertIn("run-picture-stages.md", rule)
+        self.assertIn("floor", rule)
+        self.assertIn("milestones.md", rule)
+
+    def test_promotion_is_told_the_stage_is_a_transcription_not_a_guess(self):
+        """The brief's own standing rule is that promotion decides on the row
+        and never reads code. A stage it cannot honestly name is `floor`, which
+        is the explicit answer rather than a guess at a journey."""
+        brief = squash(read(AGENTS / "promotion.md"))
+        rule = brief[brief.index("Stage:"):][:900]
+        self.assertIn("transcription", rule)
+
+    def test_the_stage_vocabulary_file_is_never_copied_into_a_brief(self):
+        """Rule 1 of `docs/agents/run-picture-stages.md`: a skill reads that
+        file and never hard-codes a stage key. `floor` is the one exception and
+        it is named as the null, not as a vocabulary."""
+        for path in (FINALE, AGENTS / "promotion.md"):
+            with self.subTest(path=path.name):
+                text = read(path)
+                for key in ("needs-you", "catalogue"):
+                    self.assertNotIn(f"`{key}`", text.split("## The run on the rail")[0])
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheFinaleStatesTheBandAndItsFloor(unittest.TestCase):
+    """Issue 555. `grep -c "band" finale.md` returned 0 on 2026-09-03, so every
+    assertion here failed before this slice.
+
+    Two things must be on the file's face. The floor, because the first run
+    that draws a silly band is then answered by changing one number rather than
+    by re-arguing the shape. And that a run may state NO bands, because two of
+    the five runs the picture draws have none, and a later session reading an
+    absent table as a bug starts lowering the threshold instead.
+    """
+
+    def rail_step(self):
+        finale = read(FINALE)
+        start = finale.index("**Then write `## The run on the rail`")
+        return squash(finale[start:finale.index("**Regenerate the action board**", start)])
+
+    def test_the_bands_table_is_named(self):
+        self.assertIn("### Bands", self.rail_step())
+        self.assertIn("### Band chips", self.rail_step())
+
+    def test_the_floor_is_stated_as_a_number(self):
+        step = self.rail_step()
+        self.assertIn("two issues across two", step)
+
+    def test_no_band_is_stated_as_a_normal_answer(self):
+        step = self.rail_step()
+        self.assertIn("may state no bands", step)
+
+    def test_the_floor_is_marked_provisional_and_not_as_an_invention_guard(self):
+        """It rests on five runs and no counter-example, and nothing derives a
+        band, so the floor is only ever a refusal of a shape. A later session
+        citing it as the thing that stopped a made-up subject would be wrong."""
+        step = self.rail_step()
+        self.assertIn("provisional", step)
+        self.assertIn("nothing derives a band", step)
+
+    def test_the_renderer_is_told_it_draws_bands_and_never_finds_them(self):
+        """The rule the cheap-model licence rests on. A renderer that grouped
+        issues by colour or by shared stage and called the group a band would
+        have broken it, and with it what issues 552 and 553 both stand on."""
+        board = squash(read(FINALE))
+        self.assertIn("never counts, and neither does the rail", board)
+        self.assertIn("draws bands, it never finds them", board)
+
+
+class TheFinaleTakesTheReadingByBatchId(unittest.TestCase):
+    """Ticket 39 of the pilot-delivery map, sitting 3, ruling 12.
+
+    `--run` matched the run's name against the PROJECT DIRECTORY name, which
+    holds only while a worktree is named after the run inside it. Two rows of
+    `.scratch/workflow-audit/run-costs.md` say it did not: 2026-09-02 and
+    2026-09-05 each carry "the worktree was reused and its name does not match
+    the branch, so --transcript had to be passed by hand". Run `batch-b5e96d`
+    ran in a worktree called `run-issues-414a-99f-286335`.
+
+    Prose is asserted against whitespace-collapsed text. A sentence in a
+    markdown file is wrapped where the column runs out, so a raw substring
+    check pins the line breaks as though they were the rule.
+
+    These read the live `finale.md`, like every other check in this file.
+    """
+
+    def setUp(self):
+        self.finale = read(FINALE)
+        self.flat = " ".join(self.finale.split())
+
+    def test_the_cost_reading_is_taken_by_batch_id(self):
+        self.assertIn("run_costs.py --batch <batch-id>", self.finale)
+
+    def test_the_harness_reading_is_taken_by_batch_id_too(self):
+        """It matched a worktree-name fragment against a hard-coded
+        one repository's prefix, so it could measure that repository alone and could not
+        find run `batch-b5e96d` at all."""
+        self.assertIn("harness_cost.py --batch <batch-id>", self.finale)
+
+    def test_the_finale_says_why_a_run_name_is_not_the_road(self):
+        self.assertIn("does not match the branch", self.flat)
+
+    def test_the_finale_states_that_no_figure_spans_two_models(self):
+        """Ruling 11, and the human's ruling of 2026-09-06: record everything,
+        display everything per model, refuse only the merged total."""
+        self.assertIn("cross-model multiplier", self.flat)
+        self.assertIn("compare the SAME ROLE across runs", self.flat)
+
+    def test_the_finale_sends_him_to_usage_for_money(self):
+        """Ruling 11 keeps the dollar figure out of every script, so the
+        finale has to say where the dollar figure actually is."""
+        self.assertIn("For money, read `/usage` by hand", self.flat)
+
+    def test_the_finale_asks_for_both_new_tables(self):
+        """Ruling 15: a model column per role, and one row per subagent."""
+        self.assertIn("One row per subagent", self.flat)
+        self.assertIn("per role and per model", self.flat)
+
+    def test_the_two_table_paragraph_is_written_once(self):
+        """It stood twice, back to back, from sitting 3 until 2026-09-06.
+
+        A rule written twice is a rule that can be repaired in one copy, and
+        the reader then obeys whichever they reach first.
+        """
+        self.assertEqual(self.flat.count("ones a model trial is read from"), 1)
+
+
+class TheFinaleWritesTheTrialTable(unittest.TestCase):
+    """Ticket 39, sitting 4, deliverable 4 and rulings 13, 15, 21.3 and 22.
+
+    `model-landed-check.py` has written one line per spawn into the run journal
+    since sitting 2 and, until this sitting, nothing read them. These pin the
+    three sentences that decide how the finale reads them.
+    """
+
+    def setUp(self):
+        self.finale = read(FINALE)
+        self.flat = " ".join(self.finale.split())
+        self.hunt = " ".join(read(SKILLS / "parallel-hunt" / "SKILL.md").split())
+        self.skill = " ".join(read(SKILL).split())
+
+    def test_the_finale_takes_the_trial_reading_by_batch_id(self):
+        self.assertIn("run_quality.py --batch <batch-id>", self.finale)
+
+    def test_the_hunt_takes_it_too_and_before_the_brief_is_deleted(self):
+        """Ruling 12 gives a hunt the same readings, and sitting 3's lesson
+        holds harder here: this one also reads `round-journal.md`, which sits
+        beside the brief the round end deletes."""
+        self.assertIn("run_quality.py --batch <hunt-id>", self.hunt)
+        self.assertIn("must happen before the brief is deleted", self.hunt)
+
+    def test_the_table_is_named_as_read_from_the_transcripts(self):
+        """Ruling 21.3. The ledger is the thing under test, so a table built
+        from it agrees with the map by construction and could never fail."""
+        self.assertIn("read from the TRANSCRIPTS, never from the ledger",
+                      self.flat)
+
+    def test_a_void_trial_is_named_as_halting_nothing(self):
+        """Ruling 22, and the sentence a reader needs beside the word VOID."""
+        self.assertIn("halts nothing, unmerges nothing", self.flat)
+        self.assertIn("stops nothing and reverses nothing", self.hunt)
+
+    def test_not_measured_is_named_as_not_a_pass(self):
+        """The third state. Silence is a missing reading, never a clean run."""
+        self.assertIn("must never be read as a pass", self.flat)
+        self.assertIn("`not measured`, which is not a pass", self.skill)
+
+    def test_the_strike_column_is_named_as_derived(self):
+        """`SKILL.md` step 5's prose-deletion road and a runner-error
+        annulment both cancel a strike in prose and write no marker."""
+        self.assertIn("The strike column is derived and says so", self.flat)
+
+    def test_the_skill_no_longer_says_nothing_reads_the_landed_lines(self):
+        """It said so, and named sitting 4 as the owner. Sitting 4 has landed."""
+        self.assertNotIn("Nothing yet READS those lines", self.skill)
+        self.assertIn("run_quality.py` is what reads them", self.skill)

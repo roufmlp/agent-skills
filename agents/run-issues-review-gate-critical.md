@@ -70,4 +70,9 @@ implementer and the verify gate wrote the main-checkout ones. It then graded
 412 against a file with no implementation record in it and filed a finding
 saying the record was missing, when it was present at line 682 of the live copy.
 The finding had to be annulled and the records relocated by hand. (Adopted by
-the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+The human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+
+**Half of that has changed, and only half.** A register row now belongs in this
+tree — you write your own shard here and commit it on this branch. The ISSUE
+FILE has not changed: read and grade the live one, and a stale twin in another
+tree still reads like an issue nobody has worked.

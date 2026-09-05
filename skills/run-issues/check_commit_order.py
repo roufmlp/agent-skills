@@ -44,7 +44,7 @@ Two refusals:
 
 Usage:
 
-    python3 check_commit_order.py --ledger .scratch/<feature>/run.md --repo .
+    python3 check_commit_order.py --ledger .scratch/<feature>/runs/<batch-id>/run.md --repo .
 
 Exit 0 when every row holds, 1 on any refusal, 2 when git or the ledger could
 not be read.

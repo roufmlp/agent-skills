@@ -37,7 +37,7 @@ rule is theirs.
 
 Usage:
 
-    python3 estimate_accuracy.py --ledger .scratch/<feature>/run.md \\
+    python3 estimate_accuracy.py --ledger .scratch/<feature>/runs/<batch-id>/run.md \\
         --transcript ~/.claude/projects/<run-dir>/<session>.jsonl
 
 Exit 0 when it graded at least one issue and attributed every per-issue spawn.

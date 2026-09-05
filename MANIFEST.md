@@ -26,6 +26,11 @@ Listed in the order the loop runs.
 | `skills/run-issues/check_paste_file.py` | `~/.claude/skills/run-issues/check_paste_file.py` |
 | `skills/run-issues/check_permission_floor.py` | `~/.claude/skills/run-issues/check_permission_floor.py` |
 | `skills/run-issues/check_run_picture.py` | `~/.claude/skills/run-issues/check_run_picture.py` |
+| `skills/run-issues/check_register_status.py` | `~/.claude/skills/run-issues/check_register_status.py` (refuses a register row whose status cell cannot be read) |
+| `skills/run-issues/model_map.py` | `~/.claude/skills/run-issues/model_map.py` (resolves a launch line's model map to one model per role) |
+| `skills/run-issues/model-map.default` | `~/.claude/skills/run-issues/model-map.default` (the map a launch that names none falls back to) |
+| `skills/run-issues/run_session.py` | `~/.claude/skills/run-issues/run_session.py` (the one road from a batch id to that run's transcript) |
+| `skills/run-issues/run_quality.py` | `~/.claude/skills/run-issues/run_quality.py` (reads a run's own ledger and journal into the finale's trial table) |
 | `skills/run-issues/cache_probe.py` | `~/.claude/skills/run-issues/cache_probe.py` |
 | `skills/run-issues/estimate_accuracy.py` | `~/.claude/skills/run-issues/estimate_accuracy.py` |
 | `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
@@ -37,6 +42,7 @@ Listed in the order the loop runs.
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
+| `skills/parallel-hunt/test_hunt_cost_step.py` | `~/.claude/skills/parallel-hunt/test_hunt_cost_step.py` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
 | `skills/daily-brief/move_closed_sections.py` | `~/.claude/skills/daily-brief/move_closed_sections.py` |
 | `skills/daily-brief/test_move_closed_sections.py` | `~/.claude/skills/daily-brief/test_move_closed_sections.py` |
@@ -44,6 +50,10 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_verdict.py` | `~/.claude/skills/lib/test_check_verdict.py` |
 | `skills/lib/check_decision_ledger.py` | `~/.claude/skills/lib/check_decision_ledger.py` (refuses a decision walk that ends without a costed ledger) |
 | `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
+| `skills/lib/claim_number.py` | `~/.claude/skills/lib/claim_number.py` (claims an issue or migration number atomically across every worktree) |
+| `skills/lib/test_claim_number.py` | `~/.claude/skills/lib/test_claim_number.py` |
+| `skills/lib/collect_shards.py` | `~/.claude/skills/lib/collect_shards.py` (generates `register.md` and `decisions-queue.md` from one shard per writer) |
+| `skills/lib/test_collect_shards.py` | `~/.claude/skills/lib/test_collect_shards.py` |
 | `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
@@ -77,7 +87,18 @@ Those records are listed here, not just described, because `check_manifest_cover
 refuses every live file that no row and no line below names. Withholding a file is a
 decision like publishing one; this is where it gets written down:
 
+**Two test files are withheld, and the reason is the scrub rather than the tests.**
+`run-issues/test_run_isolation.py` and `parallel-hunt/test_hunt_isolation.py` grade
+that the skill text carries four `node --env-file=<canonical env> scripts/*.mjs`
+commands by name — a seed, a sign-in link, a lock wrapper and a teardown. Those
+scripts belong to one project and this pack ships no `scripts/` directory, so rule 3
+turns the commands into a shape the reader's project fills. A test that pins the
+literal commands then grades a machine nobody else has. The rule they exist for
+survives in the published prose; the pinning does not travel.
+
 ```withheld
+~/.claude/skills/run-issues/test_run_isolation.py
+~/.claude/skills/parallel-hunt/test_hunt_isolation.py
 ~/.claude/skills/run-issues/panel-review-*.md
 ~/.claude/skills/run-issues/workflow-redesign-*.md
 ~/.claude/skills/run-issues/harness/*
@@ -148,6 +169,22 @@ this pack ships its tests beside it. Those two do not. That is a gap in the live
 not a scrub decision, and it is written here rather than left for a reader to discover
 by grepping.
 
+**Six hooks arrived in the 2026-09-06 sync and none of them shipped. They are held
+back on the rule that already withheld the two below, not on a new judgement.** Three
+name a person inside the REFUSAL MESSAGE itself: the `AFK` constant in
+`gate-source-write-guard.py` and in `model-map-gate.py`, and the board paragraph in
+`run-state-path-guard.py`. Two of them read "THIS NEVER WAITS FOR <name>". H2
+refuses that outright, and rewriting a refusal message to a role is authoring rather
+than scrubbing. `run-state-path-guard.py` also redirects to one machine's folder. The
+other three — `generated-file-guard.py`, `model-landed-check.py`,
+`number-claim-guard.py` — are closer, and their tests are what stops them: each reads a
+real project checkout or a `.scratch/` layout by name, so it would fail for every
+reader, and a hook whose test cannot run is worse evidence than no test.
+
+All six are worth publishing and a later sync should do it, message by message. The
+skills that rely on them say so in prose instead: `run-issues/SKILL.md` names the model
+map as a rule the runner holds, and says plainly that this pack ships no refusal for it.
+
 **Two of the withheld hooks are held back for a different reason, and it is not
 one-machine state.** `run-issues-criteria-fault.py` and `run-issues-parallel-gates.py`
 are sound hooks with the blast radius H4 asks for, and a later sync should publish
@@ -165,6 +202,18 @@ stranger who installed them would be refused by a description of a machine they 
 have, which is worse than having no hook:
 
 ```withheld
+~/.claude/hooks/gate-source-write-guard.py
+~/.claude/hooks/test_gate_source_write_guard.py
+~/.claude/hooks/generated-file-guard.py
+~/.claude/hooks/test_generated_file_guard.py
+~/.claude/hooks/model-landed-check.py
+~/.claude/hooks/test_model_landed_check.py
+~/.claude/hooks/model-map-gate.py
+~/.claude/hooks/test_model_map_gate.py
+~/.claude/hooks/number-claim-guard.py
+~/.claude/hooks/test_number_claim_guard.py
+~/.claude/hooks/run-state-path-guard.py
+~/.claude/hooks/test_run_state_path_guard.py
 ~/.claude/hooks/run-issues-criteria-fault.py
 ~/.claude/hooks/test_run_issues_criteria_fault.py
 ~/.claude/hooks/run-issues-parallel-gates.py

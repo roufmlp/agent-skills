@@ -28,7 +28,7 @@ symptom — and the same slip happened on the very next attempt because nothing
 named the missing SPAWN.
 
 The block mechanism — read the payload from stdin, write the reason to stderr,
-exit 2 — is the documented PreToolUse contract, and `worktree-register-guard.py`
+exit 2 — is the documented PreToolUse contract, and `coderules-gate.py`
 in this same directory is the shape copied.
 
 It fails open on anything it cannot read, including its own denylist going

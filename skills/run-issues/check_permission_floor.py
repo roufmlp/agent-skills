@@ -89,6 +89,13 @@ REQUIRED = (
     "npm run build",
 )
 
+# A project that isolates its runs outside git — a seeded workspace, a sign-in
+# link, a lock wrapper around a live third-party suite, a teardown — runs those
+# as unattended commands too, and every one needs a rule. They are the project's
+# own, so they are NOT listed above: pass each as `--classes "<command>"`. The
+# seed runs BEFORE this check in pre-flight, so a missing rule stops the launch
+# here on the very next line rather than hours into an unattended run.
+
 TRACKED = ".claude/settings.json"
 LOCAL = ".claude/settings.local.json"
 

@@ -12,8 +12,32 @@ rows.
 
 A finding is out by default. You are the work that gets a few of them in.
 
-**Read the register first.** If it holds no rows, say so and return. If the rows you
-were given are already gone, a previous spawn finished the job — say so and return.
+**Regenerate the register, then read it.** It is generated from shards, one per
+writer, so a copy on disk may be older than the rows it holds (ticket 38 of the
+pilot-delivery map, the one-run-per-feature layout ticket, ruling 14):
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>
+```
+
+If it holds no rows, say so and return. If the rows you were given are already
+gone, a previous spawn finished the job — say so and return.
+
+**Then check the status cells, before you resolve anything.** You take the `fixed`
+exit off the status cell, so a cell holding the wrong value sends a live defect out
+of the loop with no record:
+
+```bash
+python3 ~/.claude/skills/run-issues/check_register_status.py <the register path>
+```
+
+Exit 0 means every status cell reads a legal word and agrees with the status word in
+its own owner-notes. Exit 1 prints one line per offending row: repair those cells in
+the shard that owns them, regenerate, and run it again before you resolve a single
+row. **Never resolve a row the check named.** Rule candidate R1, ruled by the human on
+2026-09-06: run `batch-b5e96d` filed three rows carrying `verified` in the status
+cell and `open` in the notes cell, and all three would have taken the `fixed` exit
+on defects that still reproduce. The check costs 0.05 seconds, measured.
 
 **Stray rows belong to you too.** Two kinds arrive between rounds, written by no run.
 A direct-road fix leaves a row at `verified` (prefix `df-`); it takes the fixed exit
@@ -60,7 +84,15 @@ missing `audience` or `severity`, refuse it and name the missing field as the re
 ## Writing a promotion
 
 One issue file per promoted row, in the project's issue directory. The runner's or
-orchestrator's prompt gives you the path and the numbering rule.
+orchestrator's prompt gives you the path. **The number comes from the claim script,
+one call per file, never from listing the directory:**
+
+    python3 ~/.claude/skills/lib/claim_number.py issue <issue directory> --for "promotion <batch or hunt id>" --slug <slug>
+
+It prints the number; write the file under it. The claim is atomic across every
+worktree and every session, so a hand-minted ticket or another run's promotion cannot
+take the same number, and `number-claim-guard.py` in the hooks refuses a write under
+a number nobody claimed. Ticket 38 of the pilot-delivery map, rulings 7 and 16.
 
 Each file carries:
 
@@ -101,6 +133,19 @@ Each file carries:
   row's own summary, which you have just read, so it is a transcription and not
   a judgement. Where the row genuinely does not tell you, leave the line off —
   an absent sentence is legal and the renderer falls back to the title.
+- **A `Stage:` line**, on its own line in the header, beside `Sentence:`. One key from
+  `docs/agents/run-picture-stages.md` in the project you are working on — read that file,
+  never a key remembered from another project. It is the column a run's rail draws the
+  issue's card in, and issue 554 draws every issue a run leaves open as a dashed card, so
+  an issue with no stage reaches the next rail with nowhere to land. **This is a
+  transcription, like the sentence beside it**: you are reading a register row that
+  already says what the work is about, and you do not open code to decide it. **Where the
+  row does not honestly tell you, write `floor`** — the explicit answer, meaning an issue
+  no user can see the effect of, rather than a guess at a journey. **Unlike `Owed:` this
+  carries no `milestones.md` condition**: every project's run draws a rail, so the field
+  belongs on every file you mint. A project whose repository holds no such vocabulary file
+  is the one case where you leave the line off, and the run's own guard says so and
+  carries on.
 - **A `## Target database` section.** `Writes rows: no` where the work changes code
   only; otherwise the project's default databases, each written as a default. This is
   the same judgement the direct-road stamp already asks of you, recorded where
@@ -108,7 +153,27 @@ Each file carries:
   default that names a database rather than the one that names none — silence is the
   failure that class exists to catch.
 
-Then delete the row.
+Then close the row.
+
+## Closing a row — your own shard, never anybody else's
+
+**You never delete a row out of the file it was written in.** The rows you
+resolve were written by a gate in one worktree, a hardening pass in another and
+the production watcher in the main checkout, and a session writes inside its own
+tree and nowhere else (ruling 15). Deleting across trees is the collision this
+ticket closed.
+
+Write the id into your OWN shard instead, one per line:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind register \
+    --feature <feature> --my-shard --prefix closed --machinery
+```
+
+The regenerated register stops carrying that row. Only the row goes: a heading
+or a paragraph naming the id stays, which is what keeps your own archive
+sections readable. Write your promotion sections into a shard of your own too,
+prefixed with the run or round id, and commit both on this tree's branch.
 
 ## The direct-road stamp
 
@@ -132,8 +197,8 @@ unread diff.
 
 ## Writing a refusal
 
-Delete the row. Record the ID, the audience, the severity and the reason in your
-return. Nothing else — the bug file survives as the record, and a refused finding is
+Close the row, the same way. Record the ID, the audience, the severity and the
+reason in your return. Nothing else — the bug file survives as the record, and a refused finding is
 meant to be out.
 
 **One exception, and it is narrow: a row the production watcher filed.** Those ids carry

@@ -38,6 +38,14 @@ the hard road and comes back rejected hours later; it has happened twice.
 typecheck and the issue's own test files as you go, for speed. You own shipped
 code on the feature branch. Do not merge, do not deploy, do not touch main.
 
+**A migration's number is claimed, never read off `supabase/migrations/`.** Before
+you create one, run `python3 ~/.claude/skills/lib/claim_number.py migration supabase/migrations --for "<batch id> issue <n>"`
+and name the file under the number it prints. The claim is atomic across every
+worktree, so a second run carrying a migration cannot take the same number, and
+`number-claim-guard.py` in the hooks refuses a file under an unclaimed one and names
+the command (ticket 38 of the pilot-delivery map, ruling 19). The same holds for a
+new issue file, with `issue <dir>` in place of `migration`.
+
 **Run the FULL suite before you call the issue gate-ready.** Not the issue's
 directory, not just the files you touched — the whole thing, once, at the end. A
 directory-scoped run cannot see the regression your diff caused somewhere else,

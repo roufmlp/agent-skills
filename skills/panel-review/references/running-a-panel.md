@@ -90,7 +90,8 @@ say something, which is how a report template turns into filler.
    needed a number this pass refused to estimate.
 7. **Scenarios omitted.** What the cap dropped, so the gap is visible.
 
-Unresolved forks append to `.scratch/decisions-queue.md`, so they reach the human in a
+Unresolved forks append to your own queue shard (`collect_shards.py --kind queue
+--my-shard --prefix <your id>`, one id per item heading), so they reach the human in a
 single list via `daily-brief` rather than sitting in a report they have to remember
 to reopen.
 

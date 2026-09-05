@@ -193,6 +193,8 @@ commit the gate was reading; nothing re-reads the row. Promotion reads neither t
 bug file nor the diff, so it mints an issue for shipped work. You hold the commits
 already: for every row this run wrote, check whether its issue committed after the
 row was filed, read that commit, and set the row to `verified` where the fix landed.
+Those rows sit in this run's own shards, under `register.d/<this tree>/`, so you
+edit files this tree owns and nothing anybody else is writing.
 Promotion's `fixed` exit then takes it. Say in the briefing how many rows you swept
 and name each. Three of seventeen issues minted on 2026-08-09 were stale this way,
 each costing a run slot and a hardening pass (`seam-h04`; adopted by the human
@@ -263,8 +265,21 @@ reason as the queue rule below it.
 
 ## Every `Decide` item also goes in the decisions queue
 
-Append each `Decide` block to `.scratch/decisions-queue.md`, one section each, in
-the form `~/.claude/questionrules.md` sets. Read that file before you write the
+Append each `Decide` block as one section, in the form
+`~/.claude/questionrules.md` sets. The queue is generated from shards, one per writer (ticket 38 of the
+pilot-delivery map, the one-run-per-feature layout ticket, rulings 14 and 18).
+Append to YOUR shard, never to `decisions-queue.md`, which refuses the write:
+
+```bash
+python3 ~/.claude/skills/lib/collect_shards.py --kind queue \
+    --my-shard --prefix <your id>
+```
+
+**Every item carries an id** — `` `q-<your prefix>-NN` `` at the end of its `## `
+heading — because that is how `/daily-brief` marks it answered without touching
+your file.
+
+ Read that file before you write the
 first block: it decides which items take one line and which take the full eight
 parts, and an item that is irreversible, touches money, authentication or data
 loss, or costs more than an hour to undo takes the full form. Add a line pointing at this briefing for the reasoning. Never

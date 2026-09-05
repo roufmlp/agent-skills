@@ -50,17 +50,43 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import importlib.util
 import json
+import os
 import pathlib
 import re
 import sys
 
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
+
+
+def _run_session():
+    """`run_session.py` owns the road from a batch id to a session, and the
+    per-model accounting the four cost scripts share (ticket 39, ruling 12)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "run_session.py")
+    existing = sys.modules.get("run_session")
+    if existing is not None and os.path.realpath(
+            getattr(existing, "__file__", "") or "") == os.path.realpath(path):
+        return existing
+    spec = importlib.util.spec_from_file_location("run_session", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["run_session"] = module
+    spec.loader.exec_module(module)
+    return module
 DEFAULT_WINDOW_DAYS = 7
 MIN_SUBAGENTS = 25  # a hardening pass runs 12 to 14; a run has not gone below 35
 
+# A row the harness wrote, not a model that answered. `run_session.py` owns the
+# measurement behind this and the name is repeated here only so this function
+# does not have to load that module per file.
+SYNTHETIC = "<synthetic>"
+
 
 def effective(usage: dict) -> float:
+    """Weighted tokens WITHIN one model. `run_session.weigh` is the same
+    formula on the same four kinds, and owns the reason nothing weights
+    ACROSS models (ticket 39, sitting 3)."""
     return (
         usage.get("input_tokens", 0)
         + usage.get("cache_creation_input_tokens", 0)
@@ -69,17 +95,92 @@ def effective(usage: dict) -> float:
     )
 
 
-def read_transcript(path: pathlib.Path) -> tuple[float, dt.datetime | None, dt.datetime | None]:
-    """Return (effective tokens, first timestamp, last timestamp). Duplicate rows are
-    counted once: the transcript repeats a message when a turn is retried, and both
-    copies carry the same message id."""
+def main_thread_by_model(path) -> dict:
+    """`{model: weighted}` for one session's own transcript.
+
+    `run_session.py` owns it, because `run_costs.py` needs the same reading for
+    the row it appends and two copies of one accounting drift.
+    """
+    return _run_session().main_thread_by_model(path)
+
+
+def report_batch(batch: str, repo=None) -> int:
+    """One run or hunt, per model and per role. Ruling 12's whole shape.
+
+    It measures the batch it is given and nothing else, so the `--days` window
+    -- which reads OTHER runs, at launch, to state what a batch size costs --
+    is untouched beside it.
+
+    **Every road here returns 0.** A measurement that could break a finale
+    would be worse than no measurement (ruled 2026-08-30).
+    """
+    session = _run_session()
+    mains, why = session.sessions_for_batch(batch, repo=repo)
+    if not mains:
+        print(f"NO READING TAKEN for batch `{batch}`: {why}")
+        print("\nThis is a missing measurement, not a failed run. Carry on.")
+        return 0
+
+    print(f"Batch `{batch}`, {len(mains)} session(s) read:")
+    for one in mains:
+        print(f"  {one}")
+
+    orchestrator: dict = {}
+    for one in mains:
+        for model, weighted in session.main_thread_by_model(one).items():
+            orchestrator[model] = orchestrator.get(model, 0.0) + weighted
+
+    spawns = session.spawn_rows(mains)
+    fleet = session.by_model(spawns)
+
+    print("\n\norchestrator against fleet, PER MODEL\n")
+    head = (f"{'model':<26} {'orchestrator':>13} {'fleet':>10} "
+            f"{'total':>10} {'orchestrator share':>19}")
+    print(head)
+    print("-" * len(head))
+    for model in sorted(set(orchestrator) | set(fleet)):
+        main_weighted = orchestrator.get(model, 0.0)
+        fleet_weighted = fleet.get(model, {}).get("weighted", 0.0)
+        total = main_weighted + fleet_weighted
+        share = f"{main_weighted / total * 100:>18.0f}%" if total else "not read"
+        print(f"{model:<26} {main_weighted / 1e6:>12.2f}M "
+              f"{fleet_weighted / 1e6:>9.2f}M {total / 1e6:>9.2f}M {share:>19}")
+
+    print("\nThe orchestrator is the one session that holds the whole run, and every")
+    print("turn re-reads the conversation before it. Each row above is one model's")
+    print("own share; the rows are not added together.")
+
+    if session.mixed(spawns) or len(
+            [m for m in orchestrator if m not in session.NOT_A_MODEL]) > 1:
+        print("\n" + session.MIXED_NOTE)
+
+    print("\n\nper role, with the model column ticket 39 ruling 15 asks for\n")
+    print(session.render_roles(spawns))
+    print("\n\none row per subagent\n")
+    print(session.render_spawns(spawns))
+    return 0
+
+
+def read_transcript(path: pathlib.Path):
+    """Return (effective tokens, first timestamp, last timestamp, models).
+
+    Duplicate rows are counted once: the transcript repeats a message when a turn is
+    retried, and both copies carry the same message id.
+
+    `models` is every distinct `message.model` seen, `<synthetic>` excluded -- that
+    is a row the harness wrote, not a model that answered. It rides on this reading
+    rather than taking one of its own because `main` runs this over every subagent of
+    every session in the window AT LAUNCH, and a second walk of the same files took
+    the reading from 1.79s to 4.05s, measured 2026-09-06.
+    """
     total = 0.0
     first = last = None
+    models: list = []
     seen: set[str] = set()
     try:
         handle = path.open()
     except OSError:
-        return 0.0, None, None
+        return 0.0, None, None, ()
     with handle:
         for line in handle:
             try:
@@ -96,6 +197,9 @@ def read_transcript(path: pathlib.Path) -> tuple[float, dt.datetime | None, dt.d
                     first = when if first is None else min(first, when)
                     last = when if last is None else max(last, when)
             message = row.get("message") or {}
+            named = (message.get("model") or "").strip()
+            if named and named != SYNTHETIC and named not in models:
+                models.append(named)
             usage = message.get("usage")
             if not usage:
                 continue
@@ -105,7 +209,7 @@ def read_transcript(path: pathlib.Path) -> tuple[float, dt.datetime | None, dt.d
                     continue
                 seen.add(key)
             total += effective(usage)
-    return total, first, last
+    return total, first, last, tuple(models)
 
 
 def count_issues(agent_files: list[pathlib.Path]) -> int:
@@ -158,12 +262,31 @@ def find_runs(window_days: int) -> list[dict]:
             main = session_dir.with_suffix(".jsonl")
             if not main.exists():
                 continue
-            main_tokens, first, last = read_transcript(main)
+            main_tokens, first, last, main_models = read_transcript(main)
             if last is None or last < cutoff:
                 continue
+            # Which TIERS answered. The human asked on 2026-09-06 to compare runs
+            # "with different models as well", and a row cannot be compared
+            # along a variable it does not carry. Tiers, not full names, so the
+            # column stays one word per model in a table already six wide.
+            #
+            # Collected in the loop that was already opening these files. A
+            # second walk through `spawn_rows` took this reading from 1.79s to
+            # 4.05s, measured 2026-09-06, and `SKILL.md` runs it AT LAUNCH.
+            session = _run_session()
             fleet = 0.0
+            models: list = []
+            for named in main_models:
+                tier = session.tier_of(named) or named
+                if tier not in models:
+                    models.append(tier)
             for agent in agent_files:
-                fleet += read_transcript(agent)[0]
+                weighted, _, _, seen_models = read_transcript(agent)
+                fleet += weighted
+                for named in seen_models:
+                    tier = session.tier_of(named) or named
+                    if tier not in models:
+                        models.append(tier)
             total = main_tokens + fleet
             if total <= 0:
                 continue
@@ -179,17 +302,27 @@ def find_runs(window_days: int) -> list[dict]:
                     "share": main_tokens / total,
                     "subagents": len(agent_files),
                     "issues": issues,
+                    "models": tuple(models),
                 }
             )
     runs.sort(key=lambda r: r["ended"] or dt.datetime.min.replace(tzinfo=dt.timezone.utc))
     return runs
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=DEFAULT_WINDOW_DAYS)
     parser.add_argument("--issues", type=int, help="how many issues this run is about to take")
-    args = parser.parse_args()
+    parser.add_argument("--batch", default=None,
+                        help="a run or hunt batch id; measures THAT batch, per "
+                             "model and per role, instead of the last N days "
+                             "(ticket 39, ruling 12)")
+    parser.add_argument("--repo", default=None,
+                        help="checkout whose worktrees hold the ledger")
+    args = parser.parse_args(argv)
+
+    if args.batch:
+        return report_batch(args.batch, repo=args.repo)
 
     runs = find_runs(args.days)
     if not runs:
@@ -203,7 +336,7 @@ def main() -> int:
     print(f"Orchestrator cost, runs of the last {args.days} days\n")
     print(
         f"{'ended':<12} {'issues':>6} {'agents':>7} {'weighted':>10} "
-        f"{'orchestrator':>13} {'per issue':>10}"
+        f"{'orchestrator':>13} {'per issue':>10}  {'models'}"
     )
     now = dt.datetime.now(dt.timezone.utc)
     for run in runs:
@@ -212,13 +345,17 @@ def main() -> int:
             f"{run['ended'].date()!s:<12} {run['issues']:>6} {run['subagents']:>7} "
             f"{run['total'] / 1e6:>9.1f}M {run['share'] * 100:>12.0f}% "
             f"{run['main'] / run['issues'] / 1e6:>9.2f}M"
-            f"   ({age}d old)"
+            f"   ({age}d old)  {'/'.join(run['models']) or 'unmeasured'}"
         )
     print(
         "\nThe orchestrator is the one session that holds the whole run. Every turn re-reads\n"
-        "the conversation before it, so a longer batch is re-read more times. The last column\n"
+        "the conversation before it, so a longer batch is re-read more times. `per issue`\n"
         "is what one more issue adds to that re-reading, and it is the column to read."
     )
+    if any(len(run["models"]) > 1 for run in runs):
+        print("\n" + _run_session().MIXED_NOTE)
+        print("\nRun `--batch <id>` on any row above for that run's per-model and\n"
+              "per-role breakdown, where nothing is merged.")
     if args.issues:
         print(f"\nThis run is about to take {args.issues} issues. No reading above is a prediction.")
     return 0

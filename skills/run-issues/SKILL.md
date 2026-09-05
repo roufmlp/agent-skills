@@ -106,7 +106,19 @@ Everything stable already lives in the agent file, where it caches.
 
 ## Run state — files, not contexts
 
-In the main checkout, under `.scratch/<feature>/`:
+In the main checkout, under `.scratch/<feature>/runs/<batch-id>/`. **One directory
+per run, keyed by the batch id**, so two runs on one feature never share a file
+(ticket 38 of the pilot-delivery map, the one-run-per-feature layout ticket, ruling
+10, landed 2026-09-05). The batch id
+is minted at launch: `batch-` plus six hex characters (`openssl rand -hex 3`), and
+it is the same id the branch carries after `claude/run-issues-`, the register
+prefix `rn-<id>-NN`, and every journal line. Create the directory before spawn 1.
+Nothing archives, renames or overwrites another run's state, because no two runs
+have a path in common. The fixed names `.scratch/<feature>/run.md`, `primer.md`,
+`merge-briefing.md` and `run-journal.md` are retired: `find_live_ledger.py` does
+not read them, and `~/.claude/hooks/run-state-path-guard.py` refuses a write to
+them with the right path in its message, so a slip costs one reissued call and
+never a halt.
 
 - **`run.md`** — the ledger. Status table plus a **Carry-forward** section, plus
   the one live halt block if the run is halted. Nothing else. Every spawn reads
@@ -144,6 +156,77 @@ In the main checkout, under `.scratch/<feature>/`:
   unobservable and said it would be left blank or guessed. The value was readable
   all along; nothing had written down how.
 
+  **Two more header lines, written at launch BY `model_map.py`:** `Model map at
+  launch:` and `Role effort at launch:`, a `role=value` list each, all twelve loop
+  roles named in both (ticket 39 of the pilot-delivery map,
+  every-worker-inherits-the-session-model, rulings 4 and 7). Run this before spawn
+  1 and paste what it prints:
+
+  ```
+  python3 ~/.claude/skills/run-issues/model_map.py "<everything after /run-issues>"
+  ```
+
+  Pass the command text exactly as it was typed, scope and all. It measures the
+  session model off `$CLAUDE_PID` the same way the block above does, so the ledger
+  and `machine-preflight.py` cannot disagree. **Exit 1 is a launch-time stop:
+  spawn nothing, write no ledger, and hand the human the refusal.** That is the only
+  stop this ticket has; once a run is live nothing in it ever halts (rulings 10
+  and 22).
+
+  **In practice you should never see that exit 1, and that is deliberate.**
+  `machine-preflight.py` row 14 reads the same map at PROMPT-SUBMIT time, through
+  the same parser, so a bad token, an empty `models:` word and an inverted map
+  are all refused before this step is reached — before the batch id is minted and
+  before the QA workspace is seeded. The human ruled on 2026-09-05 that a map refusal
+  must arrive in the first two minutes, not after the ledger and the workspace
+  exist. This step stays as the second gate and as the writer of the header.
+
+  **The map names a model per role for this run.** It is typed after the issue
+  list, behind the word `models:`:
+
+  ```
+  /run-issues 512 513 models: implementer=opus gates=fable
+  ```
+
+  Keys are `all`, `workers`, `gates`, or one agent type without its prefix —
+  `implementer`, `escalated`, `verify`, `review`, `review-critical`, `finale`,
+  `finder`, `fixer`, `claim-gate`, `fix-gate`, `fix-gate-critical`, `promotion`.
+  More specific wins, whatever the order typed. Values are `haiku`, `sonnet`,
+  `opus`, `fable` and `inherit`. `workers` is the four roles that build and
+  `gates` the six that check; `finale` and `promotion` are reached by `all` or by
+  their own key. With no `models:` word the default file
+  `model-map.default` in this directory is read, and it ships at `all=inherit`, so
+  a launch that types nothing behaves exactly as every run did before the map
+  existed.
+
+  **`inherit` never reaches a ledger.** Every role is resolved to a concrete name
+  at launch, so a resume on a different session model changes the orchestrator
+  only. The twelve agent files stay `model: inherit`, so a spawn by hand is
+  untouched — the map reaches a run through the ledger and nowhere else.
+
+  **An inverted map is refused before anything is spawned.** No adversarial gate
+  runs below the tier of the worker it checks (ruled 2026-08-15,
+  `~/.claude/rulings.md:99-121`); the tier order is `haiku < sonnet < opus <
+  fable` and equal is legal. A wrong reject costs one retry round; a wrong pass
+  has no catcher until the merge. `implementer=opus gates=sonnet` is refused, and
+  so is the hunt line `finder=fable fixer=opus` on any session below `fable`,
+  because it leaves the claim gate under the finder.
+
+  **The effort line is recorded, never set.** The Agent tool takes `model` and has
+  no effort field, so effort lives in each agent file's frontmatter and the launch
+  only reads it. A file it cannot read records `unmeasured`, for the same reason
+  the session model does: a guessed stamp is worse than a missing one, because the
+  next reader treats it as evidence.
+
+  **Two more header lines, written at launch BY the seed script:** `QA workspace:`
+  with the workspace id and `Sign-in user:` with the run user's email,
+  `run-<batch-id>@example.test`. `scripts/seed-run-workspace.mjs --ledger <run.md>`
+  writes them itself, so no uuid passes through a keyboard. Every verify gate signs
+  in as that user, so `current_workspace()` scopes its reads to this run's rows;
+  every fixture script run inside the worktree reads that id off `run.md`
+  itself and refuses a `SEED_WORKSPACE_ID` naming any other (sitting 5); and the finale
+  deletes by it (ticket 38, the one-run-per-feature layout ticket, sitting 2, rulings 3 and 12).
+
   **It is pruned, not appended to.** Three things go in the journal instead, and
   the runner moves them the moment they appear: a **superseded halt block** (the
   new one replaces it — delete the old one, do not mark it), the **finale
@@ -163,13 +246,13 @@ In the main checkout, under `.scratch/<feature>/`:
   is read exactly twice — by a resuming runner, and by the finale.
 - **`primer.md`** — the codebase primer. Fresh subagents read this instead of
   exploring. The first implementer creates it; every implementer appends what it
-  learns. Exploration is paid once per run. **A new run starts a new primer** —
-  rename the old one and never read it. It is written by implementers about
+  learns. Exploration is paid once per run. **A run reads only its own primer** —
+  another run's directory is never read. It is written by implementers about
   implementer-written code, so it is orientation, never authority: what ought to
   be true lives in `docs/patterns.md`, on main, and outranks both the primer and
   the code.
 - **`merge-briefing.md`** — the merge-read briefing, built up as the run goes.
-  **A new run archives the old briefing at launch** — same rule as the primer.
+  It starts empty in the run's own directory; there is no old one to archive.
   Gate verdicts get one summary line each; the full verdict text lives in the
   issue files, which already carry it. It is a thirty-minute read or it has
   failed.
@@ -224,7 +307,7 @@ skipping and run against whatever the variables point at.
 
 Run the full suite clean. Export the `QA_*` variables only when you deliberately
 want the live-database tests, and say so in the ledger when you do. Adopted by
-the human 2026-08-14; `decisions.md` holds the night three agents each discovered it
+The human 2026-08-14; `decisions.md` holds the night three agents each discovered it
 the hard way.
 
 ## Shared external quotas
@@ -233,6 +316,28 @@ Any per-window cap on an external system is run state, owned by the runner.
 Carry-forward holds the last observed status, its timestamp, and who holds the
 window. **Two agents never hold the same quota at once.** Schedule live halves
 first, while the window exists.
+
+**The Zoho organisation is one such quota, and it is held by a lock file, not by the
+runner.** Every live Zoho suite runs through the wrapper, which takes
+`~/.local/state/run-issues/locks/zoho-<org id>.lock` with an exclusive create,
+heartbeats it every minute, waits behind any other holder — a second wrapper of
+this same batch included, so pass the whole directory to ONE wrapper — breaks a
+holder with no heartbeat for thirty minutes with a journal line, and sets
+`ZOHO_LIVE=1` itself. The harness reads that lock file for the organisation it is
+about to write and refuses unless it names this batch:
+
+```
+node --env-file=<env file> scripts/zoho-live-lock.mjs --batch <batch-id> --journal <run-journal.md> -- npx vitest run src/lib/zoho/live
+```
+
+**The wrapper is the project's, not this pack's**, and so are the seed, the sign-in
+link and the teardown named elsewhere here. This pack ships no `scripts/`. What it
+fixes is the shape — one lock outside every repo, keyed by the account written to;
+one command; the journal told. A project with no live third-party suite has nothing
+to serialise and skips this whole section.
+
+(ticket 38, the one-run-per-feature layout ticket, sitting 2, ruling 4: serialise the suites; ruling 13: the lock is a file
+outside every repo, keyed by organisation id).
 
 ## The round header — one block, built once, pasted into every brief
 
@@ -244,6 +349,10 @@ you settle it, you do not leave it out.
 ```
 Browser harness:  <the tool name that PAINTS in this environment>
 Register:         <absolute path>
+Run directory:    <absolute path of .scratch/<feature>/runs/<batch-id>/; run.md, primer.md and the journal are in it>
+QA workspace:     <the id on run.md's QA workspace: line, seeded for this run alone; every fixture script run in this worktree reads it off run.md itself>
+Sign-in user:     <the email on run.md's Sign-in user: line; dev-signin-link.mjs --batch <batch-id> mints it>
+Dev server:       <the launch.json entry by name; it carries autoPort, so the port exists only in the preview_start result of the spawn that started it>
 Issue file:       <absolute path>
 Merge briefing:   <absolute path>
 Verdict goes to:  <absolute path>
@@ -882,12 +991,14 @@ Handoff documents are never the home for any of this.
 a gate. Findings go to the register, and they leave it through promotion, which the
 finale runs once at the end of the run. A finding is out by default; promotion is
 the work that gets it in. The register, the row format and the promotion rule are
-specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — the
-same file for the same feature, in the main checkout, whichever worktree the writer
-is standing in. Two registers for one product rebuilds the problem this closes.
+specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — one
+register per feature, generated from a shard per writing worktree. Every writer
+appends to its own shard inside its own tree; `collect_shards.py --my-shard`
+names it, and a write to `register.md` itself is refused. Two registers for one
+product rebuilds the problem this closes.
 
 **A ruling that creates work gets its issue number in the same sitting as the
-ruling.** A ruling is a decision, not a finding, so this stays a direct issue file
+ruling, from `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for <who>`.** A ruling is a decision, not a finding, so this stays a direct issue file
 and does not go through the register — the same reason `/to-issues` is untouched by
 any of this. Not "that becomes its own issue" — the number, or the file and line
 where the work now lives. A ruling with no artefact cannot be told apart from a
@@ -968,7 +1079,8 @@ how.** Read it on every `resume` invocation and on every revival from a halt,
 before opening any `run.md`. It holds the script that chooses between the copies
 every worktree carries, what a refusal from that script means, and the reading
 order that follows. Guessing here cost 25 minutes once, which is why the
-procedure is a script and not a judgement.
+procedure is a script and not a judgement. Resume keys on the current directory
+(ticket 38, the one-run-per-feature layout ticket, ruling 11); `resume.md` says how.
 
 ## Pre-flight
 
@@ -983,6 +1095,33 @@ procedure is a script and not a judgement.
   it buys is that the interrupt window exists at all. (Adopted by the human
   2026-08-07; `decisions.md` holds the run whose line printed too late to
   interrupt, and the older 11.5-hour misread halt.)
+- **The ceiling and the issue range are refused at the prompt, not checked
+  here.** `~/.claude/hooks/machine-preflight.py` refuses a third `/run-issues`
+  while two runs are live, any `/run-issues` whose typed issue range overlaps a
+  live ledger, `all` beside any live run, and a scope token the grammar cannot
+  read (ticket 38, the one-run-per-feature layout ticket, rulings 20 and 21). It
+  counts live runs the way `find_live_ledger.py --list` does, and it has no
+  override word. Then mint the batch id and create
+  `.scratch/<feature>/runs/<batch-id>/`.
+- **Seed this run's QA workspace; the script writes its two lines into the ledger
+  header.** Inside the run's worktree, once the batch id and `run.md` exist:
+
+  ```
+  node --env-file=<env file> scripts/seed-run-workspace.mjs --batch <batch-id> --ledger <run.md>
+  ```
+
+  It creates one auth user, one `workspaces` row named `run-workspace <batch-id>`
+  and one `admin` membership, idempotently, behind `scripts/lib/db-target.mjs`, and
+  writes `QA workspace:` and `Sign-in user:` into that `run.md`. The round header
+  copies those two lines. Two runs at once then write disjoint rows, which is the
+  collision no diff shows (ticket 38, the one-run-per-feature layout ticket, sitting 2, ruling 3: one workspace row per
+  run). **Every fixture script in `scripts/` run inside the run's worktree reads
+  that `QA workspace:` id off `run.md` itself**, through `seedWorkspaceId` in
+  `scripts/lib/run-workspace.mjs`, and refuses a `SEED_WORKSPACE_ID` naming any
+  other workspace (sitting 5), so an implementer sets nothing and its gate reads
+  the run's rows. The finale deletes the workspace by that id; the
+  daily brief sweeps what a merged or long-halted run left (ruling 12: the finale
+  deletes its own workspace, the brief sweeps abandoned ones).
 - **Run the citation check over the batch's own issue files, and name the broken
   ones in the launch line.** `node scripts/check-issue-citations.mjs --quiet
   <file>` per issue in scope — about ten seconds a file, no `node_modules`
@@ -1014,26 +1153,53 @@ procedure is a script and not a judgement.
   other a silent misfile — so the error stays invisible while it does damage. One
   read of the source at pre-flight catches it; `decisions.md` holds the nine-hour
   instance (209-215).
-- **Workers inherit the session model. Let them.** Agent files use
-  `model: inherit`, so the run takes the tier it was launched on. **For every role
-  that HAS an agent file, never pass a `model:` value on a spawn to override
-  that**: the Agent tool's `model` parameter beats agent-file frontmatter, so a
-  spawn-time value silently defeats both `inherit` and any model an agent file
-  might pin on purpose. No agent file pins one today, so the tier is chosen at
-  launch (`decisions.md`). Never ask, and never stall — the launch line above is
-  where a wrong tier
-  gets caught, one keystroke before spawn #1.
+- **Every spawn carries its own role's model, read off the ledger.** This bullet
+  said the opposite until 2026-09-05: never pass a `model:` value on a spawn for
+  any role that has an agent file. That was right while all twelve loop briefs
+  said `model: inherit` and nothing could name a model per role — a spawn-time
+  value could then only defeat the file by accident. The launch line now resolves
+  a model map, so the rule reverses.
 
-  **The scope of that prohibition is exactly "roles that HAVE an agent file", and
-  one spawn falls outside it.** The finale's board render has no agent file, and
-  `finale.md:147-166` requires `model: "haiku"` named explicitly on the Agent
-  call — an unnamed spawn there inherits the session model and pays the top tier
-  to convert a 283 KB markdown file into HTML, measured 2026-08-06. Read the two
-  together: this bullet governs the briefed roles, where a spawn-time value
-  silently defeats the file; `finale.md` governs the one spawn that has no brief
-  to inherit from. (Scoped by the human on 2026-08-22, answering C7 of the skills
-  audit. The alternative — minting an agent file for the board renderer — was
-  refused, because it adds a file to fix a wording problem.)
+  Read `Model map at launch:` in `run.md`, take this role's value, and pass it in
+  the Agent call's `model` field. Every spawn, every role, every attempt.
+
+  **The twelve agent files still say `model: inherit`.** A spawn by hand in an
+  ordinary sitting therefore behaves exactly as it always did: no live ledger, no
+  map, no change.
+
+  **A map that cannot be forgotten needs a refusal, and this pack does not ship
+  one.** Two `PreToolUse` and `SubagentStop` hooks do that job in the author's
+  own setup — one refuses a spawn whose `model` field does not match the ledger
+  and names the value to reissue, the other opens each subagent's transcript
+  after it concludes and journals what actually ran. Neither ships here, because
+  neither can be made true of a reader's machine by scrubbing alone. Without
+  them the map is a rule the runner has to hold, which is weaker; read
+  `hooks/README.md` for what a reader gains by writing their own.
+
+  **The finale reads those lines, and `run_quality.py` is what reads them.** One
+  `**MISMATCH**` anywhere in the journal marks this run's trial VOID in the merge
+  briefing, beside the per-role table and the three per-issue quality figures.
+  `finale.md` step 4 carries the command. A void trial halts nothing and unmerges
+  nothing: it says only that this run may not be compared against another to read
+  a model choice.
+
+  **A journal with no landed line reads `not measured`, which is not a pass.**
+
+  **One spawn falls outside all of this, and it is the one with no agent file.**
+  The finale's board render is not one of the twelve roles, so the map does not
+  name it. `finale.md` step 5 requires `model: "opus"` named explicitly on that
+  Agent call — an unnamed spawn there inherits whatever the session runs, to
+  convert a 283 KB markdown file into HTML, measured 2026-08-06. **The pin is
+  `opus`: the top reasoning tier below the most expensive one**, and it was
+  `haiku`, then `fable`, before that. The render cost 0.30M weighted
+  tokens against a run's 149.70M, so the saving is not what decides it, and the
+  tier order in this pack ranks review authority and never price. `finale.md`
+  step 5 carries the rest of that reasoning. Read the two together: this bullet
+  governs the twelve briefed roles, which take their model from the ledger;
+  `finale.md` governs the one spawn that has no brief and no map row. (Scoped by
+  the human on 2026-08-22, answering C7 of the skills audit. The alternative —
+  minting an agent file for the board renderer — was refused, because it adds a
+  file to fix a wording problem.)
 - **Record the session model in the ledger's owner line and in the merge
   briefing.** Every tier this pipeline has evidence for was earned at Opus 5
   (decisions.md). A run on any other tier is still a valid run, and it is also
@@ -1049,6 +1215,18 @@ procedure is a script and not a judgement.
   reading must come from inside the last week: they change the workflow daily, so an older
   figure describes a system that no longer exists. If the window is empty the script says
   so and prints nothing else. Do not go looking for an older number.
+
+  **`--days` is the launch reading and `--batch <id>` is the finale's.** The window
+  answers "what have other runs cost at this size", which is a question you ask before
+  you pick a list. `--batch` measures ONE run or hunt, per model and per role, and the
+  finale takes it through `run_costs.py` (ticket 39 of the pilot-delivery map,
+  every-worker-inherits-the-session-model, ruling 12). Do not read the window as this
+  run's cost: until 2026-09-06 `run_costs.py` did exactly that, and the row it appended
+  borrowed another run's issue count, agent count and orchestrator share.
+
+  **The weekly table now carries a `models` column.** A run that mixed models has no
+  single weighted figure, so the table names the tiers that answered and refuses to add
+  them (ruling 11).
 
   What the five runs to 2026-08-20 measured, and why the column matters: the orchestrator
   is the single session that holds the whole run, and every turn re-reads the conversation
@@ -1164,8 +1342,17 @@ procedure is a script and not a judgement.
   - **Implementer** — typecheck, lint, test, the cold-build `rm -rf`, git stage
     and commit, the QA migration script.
   - **Verify gate** — **starting the dev server**, by name, from the repo's
-    `.claude/launch.json`. On this repo that is `spine-dev-qa-auto`, port 3101. A
-    verify gate cannot drive an acceptance path without it. **It probes that
+    `.claude/launch.json`. On this repo that is `spine-dev-qa-auto`, whose entry
+    carries `autoPort: true`: **the port exists only in the `preview_start` result
+    of the spawn that started the server.** Two runs start the same entry at once
+    and the second takes the next free port, so a number carried in a brief is the
+    other run's server (ticket 38, the one-run-per-feature layout ticket, sitting 2). No refusal catches a wrong port yet;
+    the header field `Dev server:` and this fact are what there is. **The gate
+    drives that server at `<batch-id>.localhost:<port>`, never bare `localhost`**:
+    a browser cookie is scoped to the host and not the port, so two runs on
+    `localhost` share one session (measured in the sitting 2 rehearsal), and
+    `dev-signin-link.mjs --batch` refuses any other host. A verify gate cannot
+    drive an acceptance path without the server. **It probes that
     server through the repo's probe script, never with a bare `curl`.** On this
     repo that is `node scripts/http-probe.mjs "<label>" <url>`, allowed by one
     prefix rule. A raw `curl` gets allowed as an exact string, so the next probe
@@ -1215,7 +1402,7 @@ standing. Record it in Carry-forward with its scope written on it and re-brief i
 from there. Do not write it to a memory file in-session — the test is whether it
 would still be true if this run had never happened. At run close, route "should
 this become standing?" to the finale's `## Decide` heading, and from there into
-`.scratch/decisions-queue.md`, where `/daily-brief` collects it — a chat question
+the run's own queue shard, where `/daily-brief` collects it — a chat question
 at session end dies with the session. It goes under `## Decide` rather than
 `## Ruled` because nobody has answered it. Write it in the form
 `~/.claude/questionrules.md` sets.

@@ -24,11 +24,14 @@ Read each entry and its bug file, then for each one ask:
 - Is this the system being wrong, or the finder expecting the wrong thing?
 - Is it already covered by another entry under a different description?
 
-**Mutate only in an isolated copy, and never in the shared tree.** A finder and a
-fixer run beside you, so a source mutation of yours is a second-writer collision
-and their green may be reading your mutant. Take a `git clone --shared` or a
-scratchpad copy of the file, mutate that, and run it there — the copy's path names
-the entry and this role, so a sibling gate cannot pick the same name. **Never
+**Mutate only in an isolated copy, and never in the shared tree.** The shared
+tree is the hunt's worktree the spawn's round block names (`Worktree:`); a finder
+and a fixer run beside you in it, so a source mutation of yours is a second-writer
+collision and their green may be reading your mutant. Take a `git clone --shared`
+of the hunt's worktree, or a scratchpad copy of the file, mutate that, and run it
+there — the copy's path names the entry and this role, so a sibling gate cannot
+pick the same name. The register row you move lives in the round's one shard, at
+the `Register shard:` path in that block; regenerate before you read. **Never
 `git checkout -- <path>` to undo a drill:** restore from your own copy. Round 9
 paid for both halves — one gate left an untracked `zz-gate-probe.test.ts` in the
 repo root, named so it would have joined the suite, and another overwrote four

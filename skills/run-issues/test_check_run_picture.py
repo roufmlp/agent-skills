@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import check_run_picture as guard
+import draw_run_rail
 
 
 class BoardDisagreesWithTheBlock(unittest.TestCase):
@@ -295,6 +296,178 @@ def a_card(issue, stage, kind, lines=("A sentence",), shape="shipped"):
     )
 
 
+# Issue 554's two tables, appended to the same rail block. 522 and 523 are
+# holes the run left and neither shipped, so neither may appear in the shipped
+# table above.
+RAIL_554 = RAIL + """
+### Minted and left open
+
+| Issue | Stage     | Sentence                                |
+|-------|-----------|-----------------------------------------|
+| 522   | quotation | A failed price read shows as 'no price' |
+| 524   | floor     | A gate writes a row nothing later reads |
+
+### Forks waiting on you
+
+| Fork | Stage     | Question                                          |
+|------|-----------|---------------------------------------------------|
+| F1   | workspace | Tell an admin the email belongs to another space? |
+| F4   | floor     | Refuse an untracked paste file?                   |
+"""
+
+
+def a_hole(issue, stage, lines=("A hole",)):
+    """A dashed card. It carries no kind: a hole has no diff to have a kind of."""
+    return a_card(issue, stage, "", lines=lines, shape="minted")
+
+
+def a_fork(key, stage, lines=("A question?",)):
+    return a_card(key, stage, "", lines=lines, shape="fork")
+
+
+SHIPPED_CARDS = (
+    a_card("517", "workspace", "new")
+    + a_card("516", "needs-you", "new")
+    + a_card("503", "floor", "fix")
+)
+HOLE_CARDS = a_hole("522", "quotation") + a_hole("524", "floor")
+FORK_CARDS = a_fork("F1", "workspace") + a_fork("F4", "floor")
+
+
+def cards_verdict(board, block=RAIL_554, stages=None):
+    return guard.compare_cards(
+        guard.read_block_cards(block), guard.read_board_cards(board), stages=stages
+    )
+
+
+class TheHolesAndTheQuestionsAreDrawnToo(unittest.TestCase):
+    """Issue 554, criteria 1 and 2. Two more card shapes reach the board and
+    both are graded against their own table.
+
+    Issue 553 left `data-shape` here for exactly this and graded `shipped`
+    alone, so before this slice a dashed card the renderer invented passed in
+    silence. The three shapes are graded apart, and an UNKNOWN shape is still
+    counted and passed over — that forward door is what kept 553's guard from
+    halting every run the day these two shapes shipped, and the next shape needs
+    it just as much.
+    """
+
+    def test_the_whole_board_passes(self):
+        ok, why = cards_verdict(SHIPPED_CARDS + HOLE_CARDS + FORK_CARDS)
+        self.assertTrue(ok, why)
+        self.assertIn("2 minted", why)
+        self.assertIn("2 fork", why)
+
+    def test_a_dashed_card_the_briefing_never_minted_is_refused(self):
+        """The criterion's own test: a dashed card on the board with no minted
+        row in the briefing. Before this slice it passed."""
+        board = SHIPPED_CARDS + HOLE_CARDS + a_hole("999", "floor") + FORK_CARDS
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("card-not-in-the-block", reason)
+        self.assertIn("999", reason)
+        self.assertIn("minted", reason)
+
+    def test_a_minted_row_with_no_dashed_card_is_refused(self):
+        board = SHIPPED_CARDS + a_hole("522", "quotation") + FORK_CARDS
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("no-card", reason)
+        self.assertIn("524", reason)
+
+    def test_a_dashed_card_on_the_wrong_stage_is_refused(self):
+        board = SHIPPED_CARDS + a_hole("522", "zoho") + a_hole("524", "floor") + FORK_CARDS
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("card-disagrees", reason)
+        self.assertIn("522", reason)
+        self.assertIn("quotation", reason)
+
+    def test_an_amber_card_the_briefing_never_asked_is_refused(self):
+        board = SHIPPED_CARDS + HOLE_CARDS + FORK_CARDS + a_fork("F9", "floor")
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("card-not-in-the-block", reason)
+        self.assertIn("F9", reason)
+
+    def test_a_fork_row_with_no_amber_card_is_refused(self):
+        board = SHIPPED_CARDS + HOLE_CARDS + a_fork("F1", "workspace")
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("no-card", reason)
+        self.assertIn("F4", reason)
+
+    def test_a_fork_key_is_never_read_as_a_number(self):
+        """`F1` and `F4` are keys, not issue ids. 553's reader keeps the
+        attribute verbatim and this is the case that holds it there."""
+        self.assertIn("F1", guard.read_board_cards(FORK_CARDS))
+
+    def test_a_hole_and_a_fork_are_measured_against_their_box_too(self):
+        """A dashed card draws text like a shipped one, so a sentence that
+        would reach the browser clipped is refused on all three shapes."""
+        wide = "x" * 40
+        board = SHIPPED_CARDS + a_hole("522", "quotation", lines=(wide,)) \
+            + a_hole("524", "floor") + FORK_CARDS
+        ok, reason = cards_verdict(board)
+        self.assertFalse(ok)
+        self.assertIn("card-overflows", reason)
+
+    def test_an_unknown_shape_is_counted_and_passed_over(self):
+        """553's forward door, kept open. A shape this guard does not know is
+        not graded and not refused, so the next slice can ship its cards before
+        this file learns them."""
+        board = SHIPPED_CARDS + HOLE_CARDS + FORK_CARDS + a_card(
+            "B1", "workspace", "", lines=(), shape="band"
+        )
+        ok, why = cards_verdict(board)
+        self.assertTrue(ok, why)
+
+    def test_a_shipped_card_still_carries_its_kind_and_the_others_need_none(self):
+        """Only the shipped table has a `Kind` column. Grading a kind on a
+        dashed card would demand a column that does not exist."""
+        board = SHIPPED_CARDS + HOLE_CARDS + FORK_CARDS
+        self.assertTrue(cards_verdict(board)[0])
+        wrong = (
+            a_card("517", "workspace", "fix")
+            + a_card("516", "needs-you", "new")
+            + a_card("503", "floor", "fix")
+            + HOLE_CARDS + FORK_CARDS
+        )
+        ok, reason = cards_verdict(wrong)
+        self.assertFalse(ok)
+        self.assertIn("card-disagrees", reason)
+        self.assertIn("kind", reason)
+
+    def test_the_register_is_drawn_nowhere(self):
+        """Criterion 7. Every register row ends fixed, promoted, refused or
+        dropped below the floor, and a fifth road never reaches promotion at
+        all. None of the five gets a card, and the guard is what says so: a
+        card keyed like a register row is in no table and is refused.
+        """
+        for row in ("fin45c8b1-01", "vg99e-02", "rg248-01"):
+            with self.subTest(row=row):
+                board = SHIPPED_CARDS + HOLE_CARDS + FORK_CARDS + a_hole(row, "floor")
+                ok, reason = cards_verdict(board)
+                self.assertFalse(ok)
+                self.assertIn("card-not-in-the-block", reason)
+
+
+class ARunWithNoHolesAndNoForksDrawsNoSuchCard(unittest.TestCase):
+    """Issue 554, criterion 8. The rail block omits both tables rather than
+    printing empty ones, and the board is shipped cards only."""
+
+    def test_the_pre_554_block_and_board_still_pass(self):
+        ok, why = cards_verdict(SHIPPED_CARDS, block=RAIL)
+        self.assertTrue(ok, why)
+        self.assertIn("0 minted", why)
+        self.assertIn("0 fork", why)
+
+    def test_a_dashed_card_against_a_block_with_no_minted_table_is_refused(self):
+        ok, reason = cards_verdict(SHIPPED_CARDS + a_hole("522", "quotation"), block=RAIL)
+        self.assertFalse(ok)
+        self.assertIn("card-not-in-the-block", reason)
+
+
 class ACardThatDisagreesWithItsRow(unittest.TestCase):
     """The fault this half of the guard exists for.
 
@@ -355,10 +528,43 @@ class ARowWithNoCardIsRefused(unittest.TestCase):
 BANDED = RAIL + """
 ### Bands
 
-| Caption                   | Span                | Issues   |
-|---------------------------|---------------------|----------|
-| Viewer can no longer write | workspace..needs-you | 517, 516 |
+| Band | Stages               | Kind  | Issues   | Caption                    | Seats                          |
+|------|----------------------|-------|----------|----------------------------|--------------------------------|
+| B1   | workspace..needs-you | guard | 517 516  | Viewer can no longer write | admin ok, member ok, viewer no |
+
+### Band chips
+
+| Band | Issue | Text                  |
+|------|-------|-----------------------|
+| B1   | 517   | seats change          |
+| B1   | 516   | the queue tells them   |
 """
+
+
+def a_band(key="B1", stages="workspace..needs-you", issues="517 516", chips=None):
+    """One band in the shape `draw_run_rail.py` draws it.
+
+    The attributes go on a `<g>` that opens and closes. Measured 2026-09-03
+    against this file's own reader: `<rect data-figure="a" width="5"/>` raises
+    `no number in ''`, so a self-closing carrier is refused rather than read,
+    and no `data-figure` element may sit inside a band — a nested one is
+    swallowed and its digits concatenated, `7` and `9` reading as `79.0`.
+    """
+    if chips is None:
+        chips = (("517", ("seats change",)), ("516", ("the queue tells them",)))
+    inside = "".join(
+        f'<g data-chip="{num}"><rect class="c-guard"/><text class="tn">{num}</text>'
+        + "".join(
+            f'<text class="tv" data-line="{k}">{line}</text>'
+            for k, line in enumerate(lines)
+        )
+        + "</g>"
+        for num, lines in chips
+    )
+    return (
+        f'<g data-band="{key}" data-stages="{stages}" data-issues="{issues}">'
+        f'<rect class="band"/><text class="tb">a caption</text>{inside}</g>'
+    )
 
 
 class ABandReplacesTheCardsForItsMembers(unittest.TestCase):
@@ -371,9 +577,10 @@ class ABandReplacesTheCardsForItsMembers(unittest.TestCase):
     """
 
     def test_a_banded_row_owes_no_card(self):
-        board = a_card("503", "floor", "fix")
+        board = a_card("503", "floor", "fix") + a_band()
         ok, reason = guard.compare_cards(
-            guard.read_block_cards(BANDED), guard.read_board_cards(board), stages=None
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
         )
         self.assertTrue(ok, reason)
         self.assertIn("1 of the block's 1", reason)
@@ -381,26 +588,35 @@ class ABandReplacesTheCardsForItsMembers(unittest.TestCase):
     def test_a_card_for_a_banded_row_is_refused(self):
         """Drawn twice is the other half of the same rule: once as a chip inside
         the band, once as a card beneath it, and the reader counts two."""
-        board = a_card("503", "floor", "fix") + a_card("517", "workspace", "new")
+        board = (
+            a_card("503", "floor", "fix") + a_band() + a_card("517", "workspace", "new")
+        )
         ok, reason = guard.compare_cards(
-            guard.read_block_cards(BANDED), guard.read_board_cards(board), stages=None
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
         )
         self.assertFalse(ok)
         self.assertIn("card-in-a-band", reason)
         self.assertIn("517", reason)
 
 
-class OnlyShippedCardsAreGraded(unittest.TestCase):
-    """Issue 554 adds minted and fork cards, keyed `F1` and `F4`, with no row in
-    the shipped table. `data-shape` is what stops this guard refusing every one
-    of them on the day 554 ships."""
+class OnlyTheGradedShapesAreGraded(unittest.TestCase):
+    """Issue 553 wrote this class as a promise to issue 554: `data-shape` is
+    what stops the shipped rule refusing a card that has no shipped row.
 
-    def test_a_fork_card_with_no_row_passes(self):
+    554 has now arrived and grades `minted` and `fork` against their own
+    tables, so the promise moves on to the shape after them. The door is the
+    same one and it is still open; only its subject changed. A fork card with
+    no fork row is refused from this slice onward, and
+    `TheHolesAndTheQuestionsAreDrawnToo` is where that is asserted.
+    """
+
+    def test_a_card_of_an_unknown_shape_with_no_row_passes(self):
         board = (
             a_card("517", "workspace", "new")
             + a_card("516", "needs-you", "new")
             + a_card("503", "floor", "fix")
-            + a_card("F1", "workspace", "fork", shape="fork")
+            + a_card("B1", "workspace", "", lines=(), shape="band")
         )
         ok, reason = guard.compare_cards(
             guard.read_block_cards(RAIL), guard.read_board_cards(board), stages=None
@@ -648,12 +864,22 @@ class TheUnmarkedRuleFollowsWhatIsGraded(unittest.TestCase):
     about a shape it does not grade.
     """
 
-    def test_a_fork_card_with_no_marked_line_is_read_not_refused(self):
+    def test_a_card_of_an_unknown_shape_with_no_marked_line_is_read_not_refused(self):
+        """Issue 554 grades `fork` and measures its lines, so a fork card with
+        no marked line IS refused from this slice on. The exemption belongs to
+        the shape this guard makes no claim about, which is what it was for."""
         cards = guard.read_board_cards(
-            '<g data-card="F1" data-stage="floor" data-kind="fork" '
-            'data-shape="fork"><rect/></g>'
+            '<g data-card="B1" data-stage="floor" data-shape="band"><rect/></g>'
         )
-        self.assertEqual(cards["F1"].shape, "fork")
+        self.assertEqual(cards["B1"].shape, "band")
+
+    def test_a_fork_card_with_no_marked_line_is_now_refused(self):
+        with self.assertRaises(ValueError) as caught:
+            guard.read_board_cards(
+                '<g data-card="F1" data-stage="floor" data-shape="fork">'
+                '<rect/></g>'
+            )
+        self.assertIn("data-line", str(caught.exception))
 
     def test_a_shipped_card_with_no_marked_line_is_still_refused(self):
         with self.assertRaises(ValueError) as caught:
@@ -666,3 +892,259 @@ class TheUnmarkedRuleFollowsWhatIsGraded(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --------------------------------------------------------------------------
+# Issue 555. A band is drawn where the block states one, and nowhere else.
+# --------------------------------------------------------------------------
+
+
+class ABandIsDrawnWhereTheBlockStatesOne(unittest.TestCase):
+    """Criteria 2 and 4. The board draws what the `### Bands` table states and
+    draws nothing where it states nothing — the same rule as the cards, for the
+    same reason: the drawing carries no judgement."""
+
+    def board(self, **kw):
+        return a_card("503", "floor", "fix") + a_band(**kw)
+
+    def test_the_stated_band_is_drawn_and_agrees(self):
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(self.board()),
+            stages=None, bands=guard.read_board_bands(self.board()),
+        )
+        self.assertTrue(ok, reason)
+
+    def test_a_band_the_block_does_not_name_is_refused(self):
+        board = self.board(key="B9")
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("band-not-in-the-block", reason)
+        self.assertIn("B9", reason)
+
+    def test_a_row_with_no_band_on_the_board_is_refused(self):
+        board = a_card("503", "floor", "fix")
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("no-band", reason)
+        self.assertIn("B1", reason)
+
+    def test_a_span_that_disagrees_with_the_row_is_refused(self):
+        board = self.board(stages="workspace..zoho")
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("band-disagrees", reason)
+        self.assertIn("workspace..zoho", reason)
+
+    def test_an_issue_list_that_disagrees_with_the_row_is_refused(self):
+        board = self.board(issues="517")
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("band-disagrees", reason)
+        self.assertIn("516", reason)
+
+    def test_a_run_with_no_bands_draws_none_and_passes(self):
+        """Two of the five drawn runs are this case, and it is the normal one."""
+        board = (
+            a_card("517", "workspace", "new")
+            + a_card("516", "needs-you", "new")
+            + a_card("503", "floor", "fix")
+        )
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(RAIL), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertTrue(ok, reason)
+
+
+class ABandsAttributesAreReadableByThisGuard(unittest.TestCase):
+    """Criterion 3, measured 2026-09-03 against this file's own readers."""
+
+    def test_a_self_closing_carrier_is_refused_rather_than_read(self):
+        with self.assertRaises(ValueError) as caught:
+            guard.read_board_bands('<svg><rect data-band="B1" width="5"/></svg>')
+        self.assertIn("B1", str(caught.exception))
+
+    def test_a_band_that_never_closes_is_refused(self):
+        """The band's own end tag, missing. An end tag from an element that
+        opened BEFORE the band closes it instead, exactly as it does for a
+        card: this reader counts depth from the carrier and has no view of what
+        wraps it."""
+        with self.assertRaises(ValueError) as caught:
+            guard.read_board_bands('<g data-band="B1"><rect class="band"/>')
+        self.assertIn("B1", str(caught.exception))
+
+    def test_a_figure_inside_a_band_is_refused(self):
+        """`read_block_figures` swallows a nested `data-figure` and concatenates
+        its digits — `7` and `9` read as `79.0` — so a band may hold none."""
+        with self.assertRaises(ValueError) as caught:
+            guard.read_board_bands(
+                '<g data-band="B1"><div data-figure="shipped">7</div></g>'
+            )
+        self.assertIn("data-figure", str(caught.exception))
+
+
+class AChipIsMeasuredAgainstTheSpaceItsOwnBandGives(unittest.TestCase):
+    """The budget a chip has falls out of the band's span and its chip count,
+    so it cannot be graded against a fixed number the way a card's sentence is.
+
+    Measured across the five drawn bands in `34-picture-d-gen.py`: 12.84 units
+    a line on `batch-88624c`'s money band, three chips over two columns, up to
+    23.15 on a two-chip band over eight columns.
+    """
+
+    STAGES = [
+        "workspace", "tender", "quote", "award", "quotation",
+        "needs-you", "zoho", "catalogue", "floor",
+    ]
+
+    def test_the_two_measured_ends_are_what_the_shared_function_returns(self):
+        """Both figures are characters a line, not units, and both are the
+        generator's own bands: `Money must add up` over `award..quotation` with
+        three chips, and the anonymous-caller band over all eight with two."""
+        narrow = draw_run_rail.chip_width(2, 3, "Money must add up")
+        wide = draw_run_rail.chip_width(
+            8, 2, "Anyone at the database meets a closed door"
+        )
+        self.assertAlmostEqual(narrow / draw_run_rail.PX, 12.84, places=2)
+        self.assertAlmostEqual(wide / draw_run_rail.PX, 23.15, places=2)
+
+    def test_a_band_too_narrow_for_a_caption_column_puts_it_on_top(self):
+        """The generator's one `layout="top"` band is the two-column money
+        band, whose chips would otherwise have 35 units between them."""
+        self.assertEqual(
+            draw_run_rail.band_layout(2, 3, "Money must add up")[0], "top"
+        )
+        self.assertEqual(
+            draw_run_rail.band_layout(4, 4, "Money, from award to Zoho")[0], "left"
+        )
+
+    def test_a_chip_line_wider_than_its_budget_is_refused(self):
+        board = a_card("503", "floor", "fix") + a_band(
+            chips=(
+                ("517", ("a chip line far too long for the space it has",)),
+                ("516", ("the queue tells them",)),
+            )
+        )
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=self.STAGES, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("band-overflows", reason)
+        self.assertIn("517", reason)
+
+    def test_a_chip_line_inside_its_budget_passes(self):
+        board = a_card("503", "floor", "fix") + a_band()
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=self.STAGES, bands=guard.read_board_bands(board),
+        )
+        self.assertTrue(ok, reason)
+
+
+class TheBandRefusalsExitOne(unittest.TestCase):
+    """Criterion 4 drives this mutation once: delete the band's briefing row,
+    watch the check exit 1, restore it, watch it exit 0.
+
+    The exit code is not free. `main()` ends `return 1 if reason.startswith(...)
+    else 2`, so a refusal named anything outside that tuple exits 2 and reads
+    as "the guard could grade nothing", which is a different repair.
+    """
+
+    SCRIPT = str(pathlib.Path(__file__).with_name("check_run_picture.py"))
+    BOARD_HEAD = (
+        '<div class="stat"><div class="n" data-figure="shipped-unmerged">3</div></div>'
+    )
+
+    def run_it(self, briefing, board):
+        with tempfile.TemporaryDirectory() as work:
+            b = pathlib.Path(work, "briefing.md")
+            h = pathlib.Path(work, "board.html")
+            b.write_text(briefing)
+            h.write_text(board)
+            return subprocess.run(
+                [sys.executable, self.SCRIPT, "--briefing", str(b), "--board", str(h)],
+                capture_output=True, text=True,
+            )
+
+    def board(self):
+        return (
+            self.BOARD_HEAD
+            + a_card("503", "floor", "fix")
+            + a_band()
+        )
+
+    def test_the_stated_band_drawn_exits_zero(self):
+        done = self.run_it(BANDED, self.board())
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_band_with_no_row_exits_one(self):
+        without = BANDED.replace(
+            "| B1   | workspace..needs-you | guard | 517 516  "
+            "| Viewer can no longer write | admin ok, member ok, viewer no |\n",
+            "",
+        )
+        done = self.run_it(without, self.board())
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("band-not-in-the-block", done.stderr)
+
+    def test_a_row_with_no_band_exits_one(self):
+        done = self.run_it(BANDED, self.BOARD_HEAD + a_card("503", "floor", "fix"))
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("no-band", done.stderr)
+
+    def test_an_unreadable_band_exits_two(self):
+        done = self.run_it(BANDED, self.BOARD_HEAD + '<rect data-band="B1"/>')
+        self.assertEqual(done.returncode, 2, done.stderr)
+        self.assertIn("unreadable-band", done.stderr)
+
+
+class AChipTheBlockDoesNotNameIsRefused(unittest.TestCase):
+    """The other direction of the band rule, and the one a first build misses.
+
+    `card-not-in-the-block` refuses a card the block does not name. Without the
+    same rule inside a band, a render could add a chip to the run's headline
+    band and no guard would say so.
+    """
+
+    def test_an_invented_chip_is_refused(self):
+        board = a_card("503", "floor", "fix") + a_band(
+            chips=(
+                ("517", ("seats change",)),
+                ("516", ("the queue tells them",)),
+                ("999", ("invented",)),
+            )
+        )
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("chip-not-in-the-block", reason)
+        self.assertIn("999", reason)
+
+    def test_a_member_with_no_chip_is_named_as_a_missing_chip(self):
+        """Not `no-band`: the band is drawn and one chip inside it is not, and
+        the two repairs are different."""
+        board = a_card("503", "floor", "fix") + a_band(
+            chips=(("517", ("seats change",)),)
+        )
+        ok, reason = guard.compare_cards(
+            guard.read_block_cards(BANDED), guard.read_board_cards(board),
+            stages=None, bands=guard.read_board_bands(board),
+        )
+        self.assertFalse(ok)
+        self.assertIn("no-chip:", reason)
+        self.assertIn("516", reason)

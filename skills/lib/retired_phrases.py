@@ -53,7 +53,18 @@ AGENT_PATTERN = "*.md"
 # scan set on 2026-09-01, the day the guard was built.
 RETIRED = [
     (
-        "splitting is his call",
+        "One skill per checkout",
+        "A hunt runs in its own worktree beside a live run, so nothing refuses "
+        "a hunt for a run being live; the ceiling is one hunt at a time. "
+        "Ruled 2026-09-05.",
+    ),
+    (
+        "Finder and fixer both work in the main checkout",
+        "Finder and fixer both work in the hunt's own worktree, cut at launch on "
+        "hunt/<hunt-id>. Ruled 2026-09-05.",
+    ),
+    (
+        "splitting is their call",
         "A split the session can cut, harden and stamp itself is the session's "
         "to make; only a split it cannot complete that way goes to the human. "
         "Ruled 2026-08-29; routing table in ~/.claude/questionrules.md.",
