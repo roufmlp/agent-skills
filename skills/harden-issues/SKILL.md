@@ -414,6 +414,15 @@ hardening session is attended. Settle it here.
 - **Write their results into the issue files as facts**, cited `checked by the human
   <date>` with the query or the setting quoted. That citation meets the
   write-authority bar the same way a file:line does.
+- **A check that can overturn an issue's premise must be answered BEFORE that issue
+  is stamped, not after.** Sort each check as you write it: does its answer decide a
+  criterion, or the issue's premise? A premise check leaves its issue unstamped until
+  they answer — it is not defaultable, whatever tier the question carries. Adopted by
+  the human 2026-09-07, on issue 465: an attacker, the seam pass and the orchestrating
+  session all read the code correctly and still got the issue wrong, because the one
+  datum that settled it — the text of the auto-reply — was on their phone. The pass
+  routed the check to them correctly and then stamped the issue anyway; their answer
+  arrived and unstamped it.
 - **No hardened issue may ask the run to stop for a human.** A criterion that tells
   the implementer to run a script and report the output, or to pause for a value, is
   a defect in the issue. Either the check happens here and the answer goes into the
