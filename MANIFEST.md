@@ -26,6 +26,8 @@ Listed in the order the loop runs.
 | `skills/run-issues/check_paste_file.py` | `~/.claude/skills/run-issues/check_paste_file.py` |
 | `skills/run-issues/check_permission_floor.py` | `~/.claude/skills/run-issues/check_permission_floor.py` |
 | `skills/run-issues/check_run_picture.py` | `~/.claude/skills/run-issues/check_run_picture.py` |
+| `skills/run-issues/check_origin.py` | `~/.claude/skills/run-issues/check_origin.py` (refuses a register row or a minted issue that does not name the issue and run that shipped the code) |
+| `skills/run-issues/empty_input.py` | `~/.claude/skills/run-issues/empty_input.py` (one refusal for a reader handed nothing, so an empty input never reads as a clean result) |
 | `skills/run-issues/check_register_status.py` | `~/.claude/skills/run-issues/check_register_status.py` (refuses a register row whose status cell cannot be read) |
 | `skills/run-issues/model_map.py` | `~/.claude/skills/run-issues/model_map.py` (resolves a launch line's model map to one model per role) |
 | `skills/run-issues/model-map.default` | `~/.claude/skills/run-issues/model-map.default` (the map a launch that names none falls back to) |
@@ -35,15 +37,25 @@ Listed in the order the loop runs.
 | `skills/run-issues/estimate_accuracy.py` | `~/.claude/skills/run-issues/estimate_accuracy.py` |
 | `skills/run-issues/harness_cost.py` | `~/.claude/skills/run-issues/harness_cost.py` |
 | `skills/run-issues/run_costs.py` | `~/.claude/skills/run-issues/run_costs.py` |
+| `skills/run-issues/run_records.py` | `~/.claude/skills/run-issues/run_records.py` (owns `runs.jsonl`, `issues.jsonl` and the page generated from them) |
+| `skills/run-issues/run_measures.py` | `~/.claude/skills/run-issues/run_measures.py` (one line per issue: the estimate, the spans, the verdicts and the five kind facts) |
+| `skills/run-issues/run_step.py` | `~/.claude/skills/run-issues/run_step.py` (stamps the finale's named mechanical steps, which a transcript cannot time) |
+| `skills/run-issues/pipeline_fingerprint.py` | `~/.claude/skills/run-issues/pipeline_fingerprint.py` (the three repository heads a run launched on, with a dirty mark each) |
+| `skills/run-issues/run_compare.py` | `~/.claude/skills/run-issues/run_compare.py` (reads the records across runs; the fact behind `/run-compare`) |
+| `skills/run-issues/run_replay.py` | `~/.claude/skills/run-issues/run_replay.py` (the one-time backfill of seven lines written before the fields existed) |
+| `skills/run-issues/migrate_view.py` | `~/.claude/skills/run-issues/migrate_view.py` (carried the markdown table into the records, once) |
 | `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
 | `skills/run-issues/check_run_rail.py` | `~/.claude/skills/run-issues/check_run_rail.py` (refuses a rail block a renderer could not transcribe) |
 | `skills/run-issues/draw_run_rail.py` | `~/.claude/skills/run-issues/draw_run_rail.py` (draws the rail as SVG from that block; the only road to it) |
+| `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
+| `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
 | `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (17 files, 423 cases, grading the skill text and its scripts) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
 | `skills/parallel-hunt/test_hunt_cost_step.py` | `~/.claude/skills/parallel-hunt/test_hunt_cost_step.py` |
 | `skills/daily-brief/SKILL.md` | `~/.claude/skills/daily-brief/SKILL.md` |
+| `skills/daily-brief/test_skill_structure.py` | `~/.claude/skills/daily-brief/test_skill_structure.py` (refuses the return of the deleted "row above" rule) |
 | `skills/daily-brief/move_closed_sections.py` | `~/.claude/skills/daily-brief/move_closed_sections.py` |
 | `skills/daily-brief/test_move_closed_sections.py` | `~/.claude/skills/daily-brief/test_move_closed_sections.py` |
 | `skills/lib/check_verdict.py` | `~/.claude/skills/lib/check_verdict.py` (shared by the four skills that spawn adversarial agents) |
@@ -146,6 +158,8 @@ than the four that govern everything else here.
 | `hooks/run-issues-evidence-gate.py` | `~/.claude/hooks/run-issues-evidence-gate.py` |
 | `hooks/test_run_issues_evidence_gate.py` | `~/.claude/hooks/test_run_issues_evidence_gate.py` |
 | `hooks/coderules-gate.py` | `~/.claude/hooks/coderules-gate.py` |
+| `hooks/origin-row-guard.py` | `~/.claude/hooks/origin-row-guard.py` (refuses a register table typed without an `origin` column, at the keystroke) |
+| `hooks/test_origin_row_guard.py` | `~/.claude/hooks/test_origin_row_guard.py` |
 | `hooks/retired-phrases-gate.py` | `~/.claude/hooks/retired-phrases-gate.py` (refuses a write that puts retired wording into a steering file) |
 | `hooks/test_retired_phrases_gate.py` | `~/.claude/hooks/test_retired_phrases_gate.py` |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
