@@ -2,11 +2,16 @@
 sitting 1: the map, the default file and the launch line."""
 
 import os
+import pathlib
 import subprocess
 import sys
 import tempfile
 import unittest
 
+import pipeline_fingerprint
+import model_map as _mm
+
+model_map_file = _mm.__file__
 from model_map import (
     GATES,
     SPAWNED_BY,
@@ -23,6 +28,11 @@ from model_map import (
     read_map,
     resolve,
     resolve_launch,
+    worker_cell,
+    orchestrator_cell,
+    EFFORTS,
+    GATES,
+    ROLES,
     role_efforts,
 )
 
@@ -461,6 +471,283 @@ class TheLaunchLine(unittest.TestCase):
         done = cli("--session-model", "", "512")
         self.assertEqual(done.returncode, 1)
         self.assertIn("REFUSED", done.stderr)
+
+
+class TheLaunchHeaderCarriesThePipelineFingerprint(unittest.TestCase):
+    """Ticket 37, ruling 23, additive to ticket 39's ruling 4 header.
+
+    The three repositories this pipeline runs from sat at `5215fb5`, `24f37ef`
+    and `19b097f` on 2026-09-05, and no ledger and no cost row named any of
+    them. A row saying a run got faster could not say what the pipeline was
+    when it ran."""
+
+    def test_the_header_names_the_three_repositories(self):
+        header, refusals = resolve_launch("512 513", "claude-opus-5")
+        self.assertEqual([], refusals)
+        for name in ("skills", "agents", "hooks"):
+            self.assertIn(name, header)
+
+    def test_the_model_map_lines_are_still_there(self):
+        """Additive means additive: ticket 39's two lines are untouched, and
+        `ledger_map` reads them out of the same header."""
+        header, _ = resolve_launch("512 models: all=opus", "claude-opus-5")
+        self.assertIn("Model map at launch:", header)
+        self.assertIn("Role effort at launch:", header)
+        self.assertEqual(12, len(ledger_map(header) or {}))
+
+    def test_the_fingerprint_is_readable_back_out_of_the_header(self):
+        header, _ = resolve_launch("512 513", "claude-opus-5")
+        self.assertTrue(pipeline_fingerprint.from_ledger(header))
+
+    def test_a_refusal_still_writes_no_header(self):
+        """Ruling 23 says a dirty tree runs and the mark is a fact. It must not
+        become a way for a fingerprint reading to write a header that the model
+        map refused."""
+        header, refusals = resolve_launch("512 models: reviewer=opus",
+                                          "claude-opus-5")
+        self.assertTrue(refusals)
+        self.assertEqual("", header)
+
+
+class TheWorkerCellIsTheShortestFormOfTheMap(unittest.TestCase):
+    """Ticket 37, ruling 9: the second model cell reads `all=opus/high` or
+    `implementer=opus/high gates=fable/high`.
+
+    Shortest form matters because the cell sits in a markdown table a person
+    scans. The full twelve-role map is 220 characters and would push every
+    column after it off the page; the ledger keeps the long form, and the
+    per-role table in the merge briefing keeps the proof."""
+
+    def test_one_model_everywhere_collapses_to_all(self):
+        cell = worker_cell({role: "claude-opus-5" for role in ROLES},
+                           {role: "high" for role in ROLES})
+        self.assertEqual("all=opus/high", cell)
+
+    def test_a_split_names_the_group_that_differs(self):
+        models = {role: "claude-opus-5" for role in ROLES}
+        efforts = {role: "high" for role in ROLES}
+        for gate in GATES:
+            models[gate] = "claude-fable-5"
+        cell = worker_cell(models, efforts)
+        self.assertIn("gates=fable/high", cell)
+        self.assertNotIn("verify=", cell)
+
+    def test_effort_travels_with_the_model(self):
+        """The human confirmed it after round 3: model AND effort, for the
+        orchestrator AND every subagent."""
+        efforts = {role: "high" for role in ROLES}
+        efforts["finale"] = "max"
+        cell = worker_cell({role: "claude-opus-5" for role in ROLES}, efforts)
+        self.assertIn("finale=opus/max", cell)
+
+    def test_every_role_is_named_somewhere(self):
+        """Shortest form may not be lossy. A role dropped from the cell is a
+        role whose tier nobody can read off the table."""
+        models = {role: "claude-opus-5" for role in ROLES}
+        efforts = {role: "high" for role in ROLES}
+        models["implementer"] = "claude-fable-5"
+        efforts["promotion"] = "medium"
+        cell = worker_cell(models, efforts)
+        self.assertIn("implementer=fable/high", cell)
+        self.assertIn("promotion=opus/medium", cell)
+
+    def test_an_empty_map_says_so_rather_than_inventing_a_default(self):
+        """Every run before ticket 39 sitting 1, and ruling 3 keeps them."""
+        self.assertEqual("not stated", worker_cell({}, {}))
+
+
+# Every dialect of the ledger's own model line, measured 2026-09-06 across all
+# 22 files on this machine that carry one. Only three matched the reader before
+# this test: `SESSION_MODEL` anchored on `\s*$`, so bold markers or any trailing
+# word made the line invisible and ruling 9's first model cell read `not
+# stated` on a ledger that plainly states the model.
+#
+# Sitting 4's warning holds -- widening a pattern with no dialect behind it is
+# how a reader stops meaning anything -- so each row below is a real line from a
+# real ledger, and the file it came from is named.
+SESSION_LINES = (
+    ("runs/batch-170a59/run.md",
+     "Session model at launch: claude-opus-5", "claude-opus-5"),
+    ("archive-run-batch-375cbf-merged.md",
+     "Session model at launch: claude-opus-5", "claude-opus-5"),
+    ("archive-run-batch-45c8b1.md",
+     "Session model at launch: **claude-opus-5** (measured from the process "
+     "command line, `--model`).", "claude-opus-5"),
+    ("run-prev-run-batch-88624c.md",
+     "Session model at launch: claude-opus-5   (read from "
+     "`ps -o args= -p $CLAUDE_PID`)", "claude-opus-5"),
+)
+
+# The other dialect, and it is NOT widened into. Twelve of the 22 write the
+# DISPLAY name and no id. `Opus 5/high` in the model cell would be a second
+# spelling of one model, which is the eighth-dialect fault sitting 3 refused
+# when it fixed the gate token to `pass` and `reject` alone.
+DISPLAY_ONLY = (
+    ("archive-run-b3f7a1-merged.md", "Session model at launch: **Opus 5**."),
+    ("archive-run-402-251d11-merged.md",
+     "Session model at launch: Opus 5 (`claude-opus-5`)"),
+    ("run-prev-325b-snapshot.md",
+     "Session model at launch was Opus 5."),
+)
+
+
+class TheOrchestratorCellReadsTheLedgersOwnModelLine(unittest.TestCase):
+    """Ticket 37, ruling 9's FIRST model cell. It had no test at all until
+    sitting 5, and it was wrong on 19 of the 22 ledgers on this machine.
+
+    A session cannot read its own model out of its context, so the ledger's
+    launch line is the only measured road there is. A reader that cannot read
+    it writes `not stated` onto a line whose ledger states the model, and
+    every model trial ticket 39 exists to run is read off that cell.
+    """
+
+    def test_every_measured_dialect_is_read(self):
+        for source, line, expected in SESSION_LINES:
+            with self.subTest(source=source):
+                text = f"# Run ledger\n\n{line}\n"
+                self.assertEqual(expected, orchestrator_cell(text))
+
+    def test_the_effort_travels_with_it(self):
+        text = ("Session model at launch: **claude-opus-5** (measured from "
+                "the process command line, `--model`).\n"
+                "Session effort at launch: **high** (measured from the "
+                "process command line, `--effort`).\n")
+        self.assertEqual("claude-opus-5/high", orchestrator_cell(text))
+
+    def test_a_display_name_alone_is_refused_rather_than_spelled_twice(self):
+        """`Opus 5` is not a model id. Writing it into the cell would give one
+        model two spellings, and nothing downstream could group them."""
+        for source, line in DISPLAY_ONLY:
+            with self.subTest(source=source):
+                self.assertEqual("not stated",
+                                 orchestrator_cell(f"{line}\n"))
+
+    def test_an_empty_model_line_does_not_read_the_line_below_it(self):
+        """The `/code-review` pass of 2026-09-06, and the widening's own
+        risk. `\\s*` matches a NEWLINE, so `Session model at launch:` with
+        nothing after it captured the first word of the NEXT line. A ledger
+        reading `Session model at launch:` above `claude-opus-5 was chosen
+        later` reported `claude-opus-5/high` with confidence, for a run whose
+        ledger stated nothing -- a measured figure invented from an adjacent
+        line, which is the fault class this whole ticket exists to end."""
+        text = ("Session model at launch:\n"
+                "claude-opus-5 was chosen later\n"
+                "Session effort at launch: high\n")
+        self.assertEqual("not stated", orchestrator_cell(text))
+
+    def test_an_empty_effort_line_does_not_read_the_line_below_it(self):
+        text = ("Session model at launch: claude-opus-5\n"
+                "Session effort at launch:\n"
+                "high\n")
+        self.assertEqual("claude-opus-5", orchestrator_cell(text))
+
+    def test_a_ledger_with_no_such_line_says_not_stated(self):
+        self.assertEqual("not stated", orchestrator_cell("# Run ledger\n"))
+
+
+CORPUS = pathlib.Path("/home/user/project/.scratch/example-feature")
+
+
+class TheWholeLedgerCorpus(unittest.TestCase):
+    """Measured against every ledger on this machine, never against one.
+
+    Sitting 3 of this ticket shipped two false-negative readings that were
+    correct on the runs they were built against, and sitting 4 of ticket 39 was
+    blind to seven dialects after measuring one ledger. This class is the net.
+    It is deliberately weak on which ledger reads what -- that is the reader's
+    own arithmetic handed back to it -- and asserts the two properties a
+    narrowed or a widened pattern breaks first: enough lines are read at all,
+    and nothing but a `claude-` id ever reaches the cell.
+
+    Skipped where the corpus is absent, because these files are in another
+    repository and this suite must run without it.
+    """
+
+    def setUp(self):
+        if not CORPUS.is_dir():
+            self.skipTest(f"{CORPUS} is not on this machine")
+        self.ledgers = sorted(
+            list(CORPUS.glob("archive-run-*.md"))
+            + list(CORPUS.glob("run-prev-*.md"))
+            + list(CORPUS.glob("runs/*/run.md")))
+        self.stating = [one for one in self.ledgers
+                        if "Session model at launch" in one.read_text(
+                            encoding="utf-8", errors="replace")]
+
+    def test_the_corpus_is_big_enough_to_be_a_net(self):
+        """Measured 2026-09-06: 21 files carry the line."""
+        self.assertGreaterEqual(len(self.stating), 21)
+
+    def test_every_ledger_carrying_a_model_id_is_read(self):
+        """Measured 2026-09-06: 7 of the 21, and 3 before the widening. The
+        seven are every ledger whose line carries a `claude-` id at all."""
+        read = [one for one in self.stating
+                if orchestrator_cell(one.read_text(
+                    encoding="utf-8", errors="replace")) != "not stated"]
+        self.assertGreaterEqual(len(read), 7,
+                                f"read: {[one.name for one in read]}")
+
+    def test_no_cell_in_the_corpus_holds_anything_but_a_model_id(self):
+        """The widening's own risk, pinned. `Opus 5` reaching this cell would
+        give one model two spellings across the record."""
+        for one in self.stating:
+            cell = orchestrator_cell(one.read_text(
+                encoding="utf-8", errors="replace"))
+            if cell == "not stated":
+                continue
+            with self.subTest(ledger=one.name):
+                model, _, effort = cell.partition("/")
+                self.assertRegex(model, r"^claude-")
+                if effort:
+                    self.assertIn(effort, EFFORTS)
+
+
+class TheHooksLoadThisFileByPath(unittest.TestCase):
+    """The hooks are a SEPARATE repository and load `model_map.py` by path,
+    with the skills directory NOT on `sys.path`. A plain top-level import of a
+    sibling therefore throws on every spawn on the machine.
+
+    This is the fault ticket 37 sitting 1 already met and recorded: "a missing
+    `check_origin.py` raised rather than passing, and hooks and skills are
+    separate repositories that can sit at different commits, so that would have
+    thrown on every write to a shard." The fingerprint is a LAUNCH-time
+    reading; no hook needs it."""
+
+    def _loaded_without_the_skills_dir(self):
+        import importlib.util
+        import os
+        here = os.path.dirname(os.path.abspath(model_map_file))
+        saved = [p for p in sys.path]
+        sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != here]
+        for name in ("pipeline_fingerprint",):
+            sys.modules.pop(name, None)
+        try:
+            spec = importlib.util.spec_from_file_location("mm_probe", model_map_file)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules["mm_probe"] = module
+            spec.loader.exec_module(module)
+            return module
+        finally:
+            sys.path[:] = saved
+            sys.modules.pop("mm_probe", None)
+
+    def test_the_module_imports_with_the_skills_directory_off_the_path(self):
+        self.assertTrue(self._loaded_without_the_skills_dir().ROLES)
+
+    def test_the_hook_road_still_reads_a_map(self):
+        module = self._loaded_without_the_skills_dir()
+        line = "Model map at launch: `" + " ".join(
+            f"{role}=opus" for role in module.ROLES) + "`"
+        self.assertEqual(12, len(module.ledger_map(line)))
+
+    def test_a_launch_with_no_fingerprint_module_still_writes_a_header(self):
+        """Fail open. Ruling 23 says a dirty tree still runs and the mark is a
+        fact, never a refusal; a MISSING reading is weaker evidence than a
+        dirty one and must stop even less."""
+        module = self._loaded_without_the_skills_dir()
+        header, refusals = module.resolve_launch("512 513", "claude-opus-5")
+        self.assertEqual([], refusals)
+        self.assertIn("Model map at launch:", header)
 
 
 if __name__ == "__main__":

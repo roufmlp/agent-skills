@@ -39,10 +39,22 @@ class HuntTakesTheReadings(unittest.TestCase):
             self.assertIn(f"{script} --batch <hunt-id>", self.text,
                           f"{script} is not wired into the round end")
 
-    def test_run_costs_is_told_not_to_append_a_hunt_row(self):
-        """`run-costs.md` is one row per RUN and its columns are a run's. A
-        hunt row there is read as a run for as long as the table lives."""
-        self.assertIn("run_costs.py --batch <hunt-id> --no-append", self.text)
+    def test_a_hunt_appends_its_own_line_marked_as_a_hunt(self):
+        """REVERSED on 2026-09-06 by ticket 37 ruling 11: "hunts share the
+        files, with a `kind` field reading `run` or `hunt`".
+
+        The old rule was `--no-append`, and its reason was sound at the time: a
+        hunt row in a table of run rows is read as a run for as long as the
+        table lives. Ruling 11 removes the reason rather than the rule. The
+        record now carries `kind`, and ruling 12 compares a line against the
+        previous line OF THE SAME KIND, so a hunt line can never be read as a
+        run. Before this, a hunt's cost was not recorded at all, whatever model
+        it ran on -- which is the thing ticket 39 ruling 12 set out to end."""
+        self.assertIn("run_costs.py --batch <hunt-id> --kind hunt", self.text)
+        # The COMMAND may not carry it. The prose above the command explains
+        # the reversal and names the old flag, which is why this pins the
+        # command form rather than the words.
+        self.assertNotIn("<hunt-id> --no-append", self.text)
 
     def test_the_readings_come_before_the_brief_is_deleted(self):
         """Step 6 states the round-end order in one sentence. The readings sit

@@ -58,11 +58,16 @@ looked exactly like the cells it filled rightly.
 import argparse
 import datetime
 import importlib.util
+import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+
+import model_map
+import pipeline_fingerprint
+import run_records
 
 
 def _module(name):
@@ -88,21 +93,189 @@ def _run_session():
 
 HERE = pathlib.Path(__file__).resolve().parent
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
-LEDGER = ".scratch/workflow-audit/run-costs.md"
+# The view's path lives in `run_records.VIEW`, which owns both record files
+# and the page rendered from them. A second copy here is the drift that took
+# `journal_for` in ticket 39 sitting 2 and `read_transcript` in sitting 3.
 
-HEADER = """# What each run cost itself
+# The version cell holds the Claude Code version and nothing else (ruling 10).
+# It is MEASURED here rather than typed, because `finale.md` asks an agent for
+# `--version <cc-version>` and on 2026-08-30 an agent typed the model:
+# `claude-opus-5` is in the live table's version column today.
+def read_cc_version():
+    """`claude --version`, or "" when it cannot be read. Never raises."""
+    try:
+        done = subprocess.run(["claude", "--version"], capture_output=True,
+                              text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
 
-One row per run, appended by `run_costs.py` at the finale. A row is written by the
-machine, never by hand, because two of the five runs to 2026-08-20 had no row when
-the table was kept by hand.
 
-Compare a row against the row above it to read what a skill change or a version
-change did. The issue mix is NOT controlled here, so a difference of a few per cent
-is the batch, not the change.
+def quality_counts(ledger_text, spans=None, orphans=None):
+    """Ruling 6's four counts and the denominator beside them.
 
-| Taken | Version | Issues | Hours | Weighted | Per issue | Subagents | Orchestrator | Idle | Note |
-|---|---|---|---|---|---|---|---|---|---|
-"""
+    **This is the reading sitting 2 refused to take**, and ruling 28 is why:
+    `run_quality.issue_quality` graded 12 rows for the six-issue run
+    `batch-170a59`, because `check_commit_order.status_rows` accepted any table
+    row on the page whose first cell held an issue id. Sitting 3 bounded that
+    reader to the table whose header declares `issue`, so the denominator is
+    now the run's own issue count and every rate over it is true.
+
+    **Two sources, and losing one costs only what came from it.** Three counts
+    are the ledger's; escalations are the transcript's, by role name (ticket 39
+    ruling 21.3 -- the ledger records what was ASKED for). A run whose ledger
+    could not be read carries five nulls, never five zeros: a run with no
+    strikes is a fact, and a run whose strikes were never read is not.
+
+    **`orphans` is not optional bookkeeping and the review of 2026-09-06 is
+    why.** `estimate_accuracy.actuals` returns it as the census that makes a
+    silent loss impossible -- 30 per-issue spawns went into run `batch-88624c`
+    and 18 came out booked to the wrong issue. Reading `spans` alone made an
+    empty map mean "no issue was named", so a transcript whose spawns were ALL
+    unattributed recorded `escalations: 0`: a measured zero for a figure
+    nothing read, written by the sitting whose whole purpose is to end those.
+    One orphan is enough to refuse the figure, because the escalation may be
+    the spawn that was lost.
+    """
+    rows = _module("run_quality").issue_quality(ledger_text or "")
+    if not rows:
+        return {name: None for name in run_records.QUALITY_FIELDS}
+    measures = _module("run_measures")
+    counted = spans is not None and not orphans
+    return {
+        "issues_graded": len(rows),
+        "first_attempt_passes": sum(
+            1 for one in rows if one.first_attempt == "pass"),
+        "correction_rounds": sum(one.corrections for one in rows),
+        "strikes": sum(one.strikes for one in rows),
+        "escalations": sum(
+            1 for one in rows
+            if measures.ESCALATED in ((spans.get(one.issue) or {}).get("roles")
+                                      or ())) if counted else None,
+    }
+
+
+def trial_record(journal_text):
+    """Ruling 22's verdict, as three numbers and a word. Ticket 39 sitting 4.
+
+    **That sitting handed this ticket one line and nothing carried it.** Its
+    decision ledger reads "the merge briefing alone, with the answer behind one
+    function `trial_verdict` ... Ticket 37 calls the same function", and
+    sittings 2, 3 and 4 all passed it. So the VOID mark ruling 22 raises has
+    lived only in a briefing, which nothing reads across runs -- the exact
+    shape this ticket exists to end.
+
+    The verdict is READ and never re-derived, so the briefing and this line
+    cannot answer differently. `mismatches` is stored as a COUNT: the verdict
+    carries whole journal lines naming a role and a model, and a sentence in a
+    field a reader counts would travel into every future reading of the file.
+    """
+    verdict = _module("run_quality").trial_verdict(journal_text or "")
+    return {"state": verdict.state, "spawns": verdict.spawns,
+            "proved": verdict.proved, "mismatches": len(verdict.mismatches)}
+
+
+def build_record(batch, kind, version="", note="", ledger_text="",
+                 version_reader=None, spans=None, orphans=None, stamped=None,
+                 agent_steps=None, idle_hours=None, agent_hours=None,
+                 issue_lines=None, journal_text="", **figures):
+    """One per-run line, ready for `run_records.append_run`.
+
+    Pure apart from `version_reader`, so every field can be tested without a
+    transcript, a ledger or a git repository.
+
+    The fingerprint is COPIED off the ledger header, never re-measured here
+    (ruling 23). The finale runs days after the launch and in a different tree,
+    so a fresh `git rev-parse` would record what the pipeline is now rather
+    than what ran, which is the whole value of the field.
+    """
+    reader = version_reader or read_cc_version
+    stated = version or reader() or run_records.NOT_STATED
+
+    marks = pipeline_fingerprint.from_ledger(ledger_text)
+    models = model_map.ledger_map(ledger_text) or {}
+    efforts = model_map.ledger_efforts(ledger_text) or {}
+
+    record = {
+        "batch": batch,
+        "kind": kind,
+        "taken": datetime.date.today().isoformat(),
+        "version": stated,
+        "note": note,
+        "orchestrator_model": model_map.orchestrator_cell(ledger_text),
+        "worker_models": model_map.worker_cell(models, efforts),
+        "fingerprint": pipeline_fingerprint.as_record(marks),
+        # Ruling 6, filled by sitting 3 now that the reader is repaired.
+        "quality": quality_counts(ledger_text, spans, orphans),
+        # Ruling 22, by way of ticket 39 sitting 4. Sitting 5 wires it.
+        "trial": trial_record(journal_text),
+    }
+    record.update({name: value for name, value in figures.items()
+                   if value is not None})
+
+    # Rulings 5 and 21. The per-issue population these divide by is the GRADED
+    # count rather than `figures["issues"]`: a row the reader could not grade
+    # has no span and no estimate, so dividing by it would flatter every
+    # per-issue figure on the line.
+    #
+    # **`issue_lines` is passed IN, and the review of 2026-09-06 is why.** This
+    # built its own with no briefing and no git, while `report` built a second
+    # set with both. They agree today because `faster` reads only the estimate
+    # and the span, and they would stop agreeing the moment a faster figure
+    # drew on a briefing-sourced field -- one run, two populations, nothing
+    # comparing them.
+    measures = _module("run_measures")
+    if issue_lines is None:
+        issue_lines = measures.issue_records(
+            batch=batch, ledger_text=ledger_text or "", spans=spans)
+    record["faster"] = measures.faster(
+        issue_lines,
+        wall_hours=record.get("hours"),
+        idle_hours=idle_hours,
+        agent_hours=agent_hours)
+    record["longest_steps"] = measures.longest_steps(stamped, agent_steps)
+    return record
+
+
+
+def cache_reading(probed):
+    """`{read, written, ratio}` for a run, or None. Ticket 37, ruling 14.
+
+    **The figure was printed at every finale and stored on no line.** The
+    ticket's facts of 2026-09-05 list `cache_probe.py:113`'s read-to-write
+    ratio under "Printed and not stored", and sitting 4 builds ruling 14's one
+    threshold, which cannot fire over a field nothing writes.
+
+    The arithmetic is `cache_probe.report`'s own, including its filter on
+    subagents that hold usage rows: two readers of one quantity that disagree
+    are worse than one, and this must answer what the finale prints.
+
+    Pure. `report` does the probing, so this can be measured without a
+    transcript.
+    """
+    agents = [one for one in (probed or {}).get("agents") or ()
+              if one.get("rows")]
+    if not agents:
+        return None
+    written = sum(one.get("written") or 0 for one in agents)
+    read = sum(one.get("read") or 0 for one in agents)
+    # Null, never zero: a ratio of zero would fire ruling 14's floor on a run
+    # whose cache nobody could read.
+    ratio = round(read / written, 2) if written else None
+    return {"read": read, "written": written, "ratio": ratio}
+
+
+def probe_cache(path):
+    """The fleet cache reading for one run's transcript, or None.
+
+    Never raises: a measurement that could break a finale would be worse than
+    no measurement (the human, 2026-08-30).
+    """
+    try:
+        return cache_reading(_module("cache_probe").probe(
+            pathlib.Path(path).with_suffix("")))
+    except Exception:  # noqa: BLE001 - a reading never raises
+        return None
 
 
 def last_stamp(path: pathlib.Path) -> str:
@@ -248,17 +421,24 @@ def number(pattern: str, text: str, cast=float):
         return None
 
 
-def append_row(repo: pathlib.Path, row: str) -> str:
-    path = repo / LEDGER
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            path.write_text(HEADER, encoding="utf-8")
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(row + "\n")
-    except OSError as error:
-        return f"the row was NOT appended: {error}"
-    return f"appended to {LEDGER}"
+def append_record(repo: pathlib.Path, record) -> str:
+    """Append the line, then regenerate the view. Never raises, never halts.
+
+    Ruling 4 refuses a second line for a batch already present, which is ticket
+    36's fault 9. The refusal is PRINTED and the finale carries on: a
+    measurement that could break a finale would be worse than no measurement
+    (the human, 2026-08-30).
+    """
+    ok, why = run_records.append_run(repo, record)
+    if not ok:
+        return why
+    seen = run_records.read_runs(repo)
+    _, said = run_records.write_view(repo)
+    note = f"{why}; {said}"
+    if seen.damaged:
+        note += (f"\n{len(seen.damaged)} line(s) of {run_records.RUNS} could "
+                 "not be parsed and are NOT in the view. Read them by hand.")
+    return note
 
 
 def main(argv=None) -> int:
@@ -281,6 +461,10 @@ def main(argv=None) -> int:
     parser.add_argument("--days", type=int, default=2,
                         help="window for orchestrator_cost.py; 2 covers a run "
                              "that started yesterday and ended today")
+    parser.add_argument("--kind", default="run", choices=sorted(run_records.KINDS),
+                        help="ruling 11: a run and a hunt share these files, "
+                             "and ruling 12 compares a line against the "
+                             "previous line of the SAME kind")
     parser.add_argument("--no-append", action="store_true")
     args = parser.parse_args(argv)
 
@@ -341,45 +525,32 @@ def main(argv=None) -> int:
     return report(args, session, this_run, path, session.spawn_rows([str(path)]), cwd)
 
 
-def weighted_cell(session, spawns):
-    """The `Weighted` cell: every model, named beside its own figure.
+def _by_model(session, spawns, field):
+    """`{model: value}` for one field, models the run did not use left out.
 
-    A bare `96.6M` on a mixed run is two models added together, and
-    `.scratch/workflow-audit/run-costs.md` holds two such cells already --
-    `run-issues-resume-6a2355` at fable 50.6M against opus-4-8 43.4M, and
-    `mint-settlement-batch-28b482` at opus-4-8 85.0M against fable 16.1M.
-    Neither says anything, because a weighted fable token and a weighted opus
-    token are not the same quantity.
-
-    Ruled by the human 2026-09-06: record everything, display everything per model,
-    and refuse only the merged total. The model rides in the cell rather than in
-    a new column, so no reader ever has the number without it, and the table
-    keeps the ten columns every row since 2026-08-18 was written with.
+    Raw, not rendered. Ruling 5 says record everything and show everything;
+    `run_records.render_view` does the showing, so the record keeps figures a
+    later reader can do arithmetic on. The old code stored the rendered string
+    `opus 149.7M / fable 0.3M` and nothing could ever divide it.
     """
     found = session.by_model(spawns)
     real = {m: v for m, v in found.items() if m not in session.NOT_A_MODEL}
     if not real:
         return None
-    return " / ".join(
-        f"{session.tier_of(model) or model} {slot['weighted'] / 1e6:.1f}M"
-        for model, slot in sorted(real.items(), key=lambda kv: -kv[1]["weighted"]))
+    return {session.tier_of(model) or model: slot[field]
+            for model, slot in real.items()}
 
 
-def per_issue_cell(session, spawns, issues):
-    """`Per issue`, per model, for the same reason `Weighted` is."""
+def _per_issue_by_model(session, spawns, issues):
     if not issues:
         return None
-    found = session.by_model(spawns)
-    real = {m: v for m, v in found.items() if m not in session.NOT_A_MODEL}
-    if not real:
+    found = _by_model(session, spawns, "weighted")
+    return {m: v / issues for m, v in found.items()} if found else None
+
+
+def _share_by_model(session, mains, spawns):
+    if not mains:
         return None
-    return " / ".join(
-        f"{session.tier_of(model) or model} {slot['weighted'] / issues / 1e6:.2f}M"
-        for model, slot in sorted(real.items(), key=lambda kv: -kv[1]["weighted"]))
-
-
-def share_cell(session, mains, spawns):
-    """The `Orchestrator` cell, per model. `not read` where nothing was read."""
     orchestrator = {}
     for one in mains:
         for model, weighted in session.main_thread_by_model(one).items():
@@ -388,8 +559,27 @@ def share_cell(session, mains, spawns):
               if m not in session.NOT_A_MODEL}
     if not shares:
         return None
-    return " / ".join(f"{session.tier_of(m) or m} {v * 100:.0f}%"
-                      for m, v in sorted(shares.items(), key=lambda kv: -kv[1]))
+    return {session.tier_of(m) or m: v for m, v in shares.items()}
+
+
+def issues_for(typed, session, spawns):
+    """How many issues this run shipped, or None. Never the week window.
+
+    The one place the count is decided, so that a test can hold it. Until
+    2026-09-06 `run_costs.py` took it from `orchestrator_cost.py --days 7`'s
+    LAST data row, whatever run that row described, and wrote it as this run's
+    own; `aa94b3b` closed that on the `--batch` road and `finale.md` still
+    keeps the `--run` road "for a run whose ledger is gone", where the week
+    window is still what gets read.
+
+    So: a number typed by hand, else this batch's own spawns, else None. A null
+    is a missing measurement. A borrowed number is a wrong one that reads
+    exactly like a right one, and seventeen of the eighteen lines carried into
+    `runs.jsonl` on 2026-09-06 are marked `borrowed` because of it.
+    """
+    if typed:
+        return typed
+    return session.issue_count(spawns) or None if spawns else None
 
 
 def report(args, session, this_run, path, spawns, cwd, mains=None):
@@ -426,6 +616,7 @@ def report(args, session, this_run, path, spawns, cwd, mains=None):
     # run_timings.py's own three header lines, and nothing else.
     hours = number(r"wall clock\s+([\d.,]+)\s*h", timings)
     idle_h = number(r"nobody running\s+([\d.,]+)\s*h", timings)
+    agent_h = number(r"a subagent running\s+([\d.,]+)\s*h", timings)
     idle = f"{100 * idle_h / hours:.0f}%" if hours and idle_h is not None else None
 
     # orchestrator_cost.py's LAST data row, which is the most recent run — the
@@ -439,50 +630,152 @@ def report(args, session, this_run, path, spawns, cwd, mains=None):
         _, counted, agents, tokens, share, per_issue = rows[-1]
         agents = int(agents)
         share = share + "%"
-        if not args.issues:
-            args.issues = int(counted)
+        # `counted` is deliberately NOT read. See `issues_for`.
 
-    def show(value, suffix=""):
-        if value is None:
-            return "not read"
-        if isinstance(value, str):
-            return value
-        if isinstance(value, int):
-            return f"{value:,}{suffix}"
-        return f"{value:g}{suffix}"
+    issues = issues_for(args.issues, session, spawns)
 
-    # Per model, because a single figure across two models needs a
-    # cross-model multiplier and that is a price with the currency taken off
-    # (ruling 11). Where this run's spawns could not be read, the old
-    # week-window figure stands and says which model it belongs to nowhere --
-    # which is why the fall-back is the LESS trusted of the two.
-    if spawns and not args.issues:
-        args.issues = session.issue_count(spawns)
-    tokens = weighted_cell(session, spawns) or tokens
-    per_issue = per_issue_cell(session, spawns, args.issues) or per_issue
-    if spawns:
-        agents = len(spawns)
-    if mains:
-        share = share_cell(session, mains, spawns) or share
+    ledger_text, briefing_text, journal_text, stamped = "", "", "", []
+    found = session.ledger_for_batch(this_run, repo=args.repo or None)
+    if found is not None:
+        ledger_text = _text(found.path)
+        # `find_live_ledger` owns where a journal sits beside its ledger, and a
+        # hunt's is `round-journal.md`. Two hooks each grew their own copy of
+        # that answer in ticket 39 sitting 2 and the review of 2026-09-05
+        # refused both, so this asks the owner.
+        journal_text = _text(
+            _module("find_live_ledger").journal_for(found.path))
+        # `merge-briefing.md` sits in the run directory beside the ledger
+        # (ticket 38, ruling 10). It carries the rail's stage keys and the
+        # `## Ruled` section, which are two of ruling 20's five kind facts.
+        briefing_text = _text(os.path.join(os.path.dirname(found.path),
+                                           "merge-briefing.md"))
+        stamped = _module("run_step").read_steps(
+            _module("run_step").steps_beside(found.path))
 
-    stamp = datetime.date.today().isoformat()
-    row = (
-        f"| {stamp} | {args.version or 'not stated'} | {args.issues or 'not stated'} "
-        f"| {show(hours)} | {show(tokens)} | {show(per_issue)} | {show(agents)} "
-        f"| {show(share)} | {show(idle)} | run `{this_run}`. {args.note or '—'} |"
+    # The per-issue spans and the role names, off the run's own transcript
+    # (ticket 39, ruling 21.3). `None` where nothing was read, so that the
+    # figures drawn from it are null rather than zero.
+    spans, orphans = None, None
+    try:
+        spans, orphans = _module("estimate_accuracy").actuals(pathlib.Path(path))
+    except Exception as error:
+        print(f"The per-issue spans could not be read from {path} ({error}), "
+              "so every figure drawn from the transcript is null on this "
+              "line. The ledger's own figures are unaffected.\n")
+    if orphans:
+        print(f"{len(orphans)} per-issue spawn(s) name no issue in their "
+              "heading line, so the escalation count is null rather than a "
+              "figure: the escalation may be one of the spawns that was "
+              "lost.\n")
+
+    # Ruling 17's second file, built ONCE and used by both roads. `build_record`
+    # divides ruling 5's figures by this population and the lines themselves go
+    # to `issues.jsonl`, so two builds would be one run with two populations.
+    issue_lines = _module("run_measures").issue_records(
+        batch=this_run,
+        ledger_text=ledger_text,
+        briefing_text=briefing_text,
+        spans=spans,
+        touched=_touched(args.repo or str(cwd)))
+
+    record = build_record(
+        batch=this_run,
+        kind=args.kind,
+        version=args.version,
+        note=args.note,
+        ledger_text=ledger_text,
+        journal_text=journal_text,
+        spans=spans,
+        orphans=orphans,
+        issue_lines=issue_lines,
+        stamped=stamped,
+        agent_steps=_agent_steps(session, spawns),
+        idle_hours=idle_h,
+        agent_hours=agent_h,
+        issues=issues,
+        hours=hours,
+        weighted=_by_model(session, spawns, "weighted"),
+        per_issue=_per_issue_by_model(session, spawns, issues),
+        subagents=len(spawns) if spawns else agents,
+        orchestrator=_share_by_model(session, mains, spawns),
+        idle=(idle_h / hours) if hours and idle_h is not None else None,
+        # Ruling 14's one threshold needs a figure on the line. The finale has
+        # printed this at every run since 2026-08-16 and stored it on none.
+        cache=probe_cache(path),
     )
-    print("### The row for the comparison table\n")
-    print(row)
+
+    print("### The line for the comparison record\n")
+    print("```json\n" + json.dumps(record, indent=2, sort_keys=True) + "\n```\n")
+    if issue_lines:
+        print(f"### The {len(issue_lines)} per-issue line(s)\n")
+        print("```json\n"
+              + "\n".join(json.dumps(one, sort_keys=True) for one in issue_lines)
+              + "\n```\n")
     if args.no_append:
-        print("\n(not appended: --no-append)")
+        print("(not appended: --no-append)")
     else:
-        print("\n" + append_row(cwd, row))
+        # **The issue lines go FIRST, and the order is the fix.**
+        # `append_record` regenerates the view as its last act, so appending
+        # the per-run line first published a page whose per-issue table was
+        # missing the run that had just finished, and a second render was
+        # needed to repair it. One render, and it is the correct one.
+        ok, message = run_records.append_issues(cwd, issue_lines)
+        print(message)
+        if not ok:
+            print("The per-run line below still stands. A refusal here costs "
+                  "the per-issue population of ONE run and halts nothing.")
+        print(append_record(cwd, record))
     print(
-        "\nAny cell reading `not read` means this script could not find that figure "
-        "in the output above. The output above is the measurement; the row is a "
-        "convenience. Do not halt for a `not read` cell."
+        "\nAny field reading `null` means nothing measured it -- not that it "
+        "was zero. A run\nwith no strikes is a fact; a run whose strikes were "
+        "never read is not, and the two\nmust not read alike. The output above "
+        "is the measurement and the line is a\nconvenience. Do not halt for a "
+        "null."
     )
     return 0
+
+
+def _text(path):
+    """A file's text, or "". Never raises: every caller here is measuring."""
+    try:
+        return pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _agent_steps(session, spawns):
+    """Every subagent spawn as a step, for ruling 21's join.
+
+    The KIND of an agent step is its role, which is what makes "the longest
+    step by kind" answer the human's stated use: a two-hour citation pass and a
+    two-hour verify gate are different kinds of slow.
+    """
+    return [{"kind": one.role or one.agent_type,
+             "seconds": one.seconds,
+             "label": one.description or ""}
+            for one in spawns or ()]
+
+
+def _touched(repo):
+    """A callable answering "what paths did this sha change", or None.
+
+    Injected rather than called inline so that `run_measures` stays pure and
+    testable without a repository. It answers None on any failure, and
+    `_migration` turns that into a null: a repository git cannot read has not
+    told us the commit held no migration.
+    """
+    def paths(sha):
+        try:
+            done = subprocess.run(
+                ["git", "-C", str(repo), "show", "--name-only",
+                 "--format=", sha],
+                capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if done.returncode != 0:
+            return None
+        return [line.strip() for line in done.stdout.splitlines() if line.strip()]
+    return paths
 
 
 if __name__ == "__main__":

@@ -13,14 +13,16 @@ still reproduce. The finale corrected them by hand.
 `verified` IS a legal word, so a check that only tested the status cell against
 a vocabulary would have passed all three. The fault was a TRANSPOSITION, and
 what makes it visible is that the register's own contract puts a status word in
-the notes cell too: `parallel-hunt/SKILL.md:107-115` says owner-notes holds a
-status word and a link to `bugs/<ID>.md`, nothing else. So two rules, and the
+the notes cell too: `parallel-hunt/SKILL.md`, under "`owner-notes` holds a
+status word and a link to `bugs/<ID>.md`. Nothing else, and 200 characters
+hard." So two rules, and the
 second is the one that earns the build:
 
   1. The status cell holds a word the status machine knows.
   2. Where owner-notes opens with a status word, it agrees with the status cell.
 
-The vocabulary is the status machine of `parallel-hunt/SKILL.md:127-140`:
+The vocabulary is the status machine of `parallel-hunt/SKILL.md`, under
+"Status machine, single writer per transition":
 `candidate`, `open`, `in-fix`, `fix-ready`, `verified`, `retracted`, `deferred`,
 plus `fixed`, the exit rule F6 writes. `promoted` and `closed` are accepted
 because rows in the register's own history sections carry them; they are exits
@@ -50,8 +52,11 @@ import re
 import sys
 from collections import namedtuple
 
-# The status machine, `parallel-hunt/SKILL.md:127-140`, plus the three exit
-# words the register's history sections carry.
+import empty_input
+
+# The status machine, `parallel-hunt/SKILL.md` under "Status machine, single
+# writer per transition", plus the three exit words the register's history
+# sections carry.
 LEGAL = (
     "candidate",
     "open",
@@ -123,8 +128,17 @@ def _is_separator(cells):
 
 
 def faults(text):
-    """Every offence in one file, in the order they appear."""
+    """`(offences, graded)` — every offence in one file, and how many rows it read.
+
+    **The count is returned, not discarded, and that is ruling 6 of 2026-09-06.**
+    This used to return the list alone, so a file whose every table declares no
+    `status` column produced an empty list and the caller printed "every status
+    cell reads a legal word" over zero cells. That sentence and a real pass are
+    the same bytes. `check_commit_order.py` reported six of them on run
+    `batch-170a59`.
+    """
     found = []
+    graded = 0
     status_at = notes_at = id_at = None
     for number, line in enumerate(text.splitlines(), start=1):
         if not line.lstrip().startswith("|"):
@@ -141,6 +155,7 @@ def faults(text):
             continue
         if status_at >= len(cells):
             continue
+        graded += 1
         row_id = cells[id_at].strip("` ") if id_at < len(cells) else "(no id)"
         status = normalise(cells[status_at])
         if not status:
@@ -161,15 +176,17 @@ def faults(text):
                     f"opens with {noted!r}. One of the two is in the wrong "
                     f"cell, which is the transposition of run batch-b5e96d",
                     number))
-    return found
+    return found, graded
 
 
-def main():
+def main(argv=None):
+    # `argv` so the drill can call this in-process, the way every sibling
+    # checker in this directory is already written.
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("register", help="the register file to grade")
     parser.add_argument("--quiet", action="store_true",
                         help="print the offences and nothing else")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if not os.path.exists(args.register):
         print(f"check_register_status: no such file: {args.register}",
@@ -183,15 +200,35 @@ def main():
               file=sys.stderr)
         return 2
 
-    found = faults(text)
+    found, graded = faults(text)
     for fault in found:
         print(f"{args.register}:{fault.line}: {fault.row_id}: {fault.reason}")
     if found:
         print(f"{len(found)} row(s) refused. Repair the cells and run this again.")
         return 1
+
+    # The guard goes AFTER the offences, so a file that produced faults is never
+    # also called unreadable, and BEFORE the pass line, which is the sentence
+    # this refusal exists to stop being printed over nothing. Unlike
+    # `check_origin.py`, this reader has no legitimate zero: every register and
+    # every shard declares a `status` column, so zero graded rows means the
+    # wrong file or a table shape this reader does not know.
+    if empty_input.refuse_empty(
+        graded,
+        args.register,
+        "row under a `status` column",
+        read=len([1 for line in text.splitlines()
+                  if line.lstrip().startswith("|")]),
+        remedy="Promotion calls this before it resolves a row, so a vacuous "
+               "pass here clears every row in the file. Check the path names "
+               "the register or a shard, and that a header row declares "
+               "`status`.",
+    ):
+        return empty_input.EXIT_EMPTY
+
     if not args.quiet:
-        print(f"{args.register}: every status cell reads a legal word and "
-              f"agrees with its own owner-notes.")
+        print(f"{args.register}: {graded} row(s) graded, every status cell "
+              f"reading a legal word and agreeing with its own owner-notes.")
     return 0
 
 

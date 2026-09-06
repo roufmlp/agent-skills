@@ -37,13 +37,22 @@ WHAT IT MEASURES, and the one thing it deliberately does not:
   * Sidechain lines are skipped, so a subagent's own tool calls are not double-counted
     against the step that spawned it.
 
-  * A BACKGROUNDED Bash call is NOT its real duration and this script cannot fix that.
+  * A BACKGROUNDED call is NOT its real duration and this script cannot fix that.
     Backgrounding returns immediately, so the tool call reads as instant while the work
     runs on. On `416-419-421-d167e0` the citation passes showed 50m 47s, 31m 32s and
     30m 39s on the background-task panel while every Bash call in the run summed to 26
     minutes. The cost of a backgrounded command appears as the wall clock of whatever
     later waited for it. Read the "nobody running" figure and the Agent spans with that
     in mind, and do not report a Bash total as though it were the whole story.
+
+    **This is true of a backgrounded AGENT call too, and the verdict below used to
+    ignore this very paragraph.** Run `batch-170a59` reached its concurrency by
+    backgrounding one gate of each pair; every one read as instant, and
+    `serial_gates()` reported "0 pair(s) overlapped, 7 ran one after the other" and
+    "ROUGHLY 0 MINUTES" over seven pairs that had all overlapped. Since 2026-09-06 that
+    function REFUSES a verdict when any pair it graded holds a backgrounded step,
+    rather than printing a number it cannot support. It does not compute the true span:
+    The human ruled the refusal in and the measurement out, on cost.
 """
 
 import argparse
@@ -85,7 +94,11 @@ def label(block):
 
 
 def read(path):
-    pending, calls, spans, labelled = {}, [], [], []
+    # `backgrounded` is keyed by tool-use id and read again at the result, because
+    # the flag lives on the CALL and the duration is only known at the RESULT.
+    # `serial_gates` is the consumer: a backgrounded Agent call returns at once,
+    # so its span is not its runtime and no verdict may rest on it.
+    pending, calls, spans, labelled, backgrounded = {}, [], [], [], {}
     first = last = None
     for line in open(path):
         try:
@@ -107,6 +120,8 @@ def read(path):
                 continue
             if block.get("type") == "tool_use":
                 pending[block["id"]] = (block.get("name"), label(block), stamp)
+                backgrounded[block["id"]] = bool(
+                    (block.get("input") or {}).get("run_in_background"))
             elif block.get("type") == "tool_result":
                 found = pending.pop(block.get("tool_use_id"), None)
                 if not found or not stamp:
@@ -118,7 +133,9 @@ def read(path):
                 calls.append((seconds, name, text))
                 if name == "Agent":
                     spans.append([parse(started), parse(stamp)])
-                    labelled.append((parse(started), parse(stamp), text))
+                    labelled.append((parse(started), parse(stamp), text,
+                                     backgrounded.get(block.get("tool_use_id"),
+                                                      False)))
     return calls, spans, first, last, labelled
 
 
@@ -265,21 +282,50 @@ def serial_gates(labelled):
     2026-08-30 by filing state per `<issue>@<attempt>`. This is the same correction, one tool
     later. Gates are now grouped by that key, so only two halves of the same round are ever
     compared, and a label naming no issue is dropped rather than guessed at.
+
+    **Corrected again 2026-09-06, and this time the verdict is withheld rather than
+    repaired.** The pairing above is right and the CLOCK it reads can still be wrong. A
+    backgrounded Agent call returns the moment it is spawned, so its span is the spawn
+    and not the work. Run `batch-170a59` reached its concurrency by backgrounding one
+    gate of each pair — the runner obeyed the rule, by a road the rule did not name —
+    and this printed "0 pair(s) overlapped, 7 ran one after the other" and "SERIAL GATES
+    COST THIS RUN ROUGHLY 0 MINUTES" over seven pairs that had every one overlapped, by
+    87 minutes in total. Wrong in the opposite direction from `batch-b5e96d`, where a
+    real 97-minute loss went unreported and a peer session found it by hand.
+
+    So: any pair holding a backgrounded step makes the whole verdict unprintable, and
+    the foreground pairs go unreported with it, because a partial verdict reads as a
+    whole one. The header of this file has warned about backgrounded calls since it was
+    written; the verdict ignored its own warning, and closing that is the entire build.
+
+    A pair whose two halves both ran in the foreground is still judged and still
+    reported, marked as a floor. Measured before it was adopted: `batch-b5e96d` read 21
+    serial pairs and 136 minutes under the old shape, of which 12 were the spurious
+    near-zero readings and NINE were genuine, worth about 134 minutes. Refusing all 21
+    would trade a false zero for a false silence. (Ruled by the human 2026-09-06, at that
+    width: keep the mixed-run behaviour as built.)
+
+    **What this deliberately does NOT do**, on the human's ruling of 2026-09-06: open each
+    backgrounded subagent's own transcript to compute a true span. That is a real build
+    and it adds work at every finale, and they refused it by name. A future session that
+    finds itself computing a corrected overlap figure here has exceeded the ruling.
     """
-    gates = sorted((s, e, text) for s, e, text in labelled if "gate" in text.lower())
+    gates = sorted((s, e, text, bg) for s, e, text, bg in labelled
+                   if "gate" in text.lower())
     if not gates:
         return
 
     rounds = {}
     unreadable = 0
-    for start, end, text in gates:
+    for start, end, text, background in gates:
         key, half = pair_key(text), gate_half(text)
         if not key or not half:
             unreadable += 1
             continue
-        rounds.setdefault(key, {}).setdefault(half, []).append((start, end, text))
+        rounds.setdefault(key, {}).setdefault(half, []).append(
+            (start, end, text, background))
 
-    serial, parallel = [], 0
+    serial, parallel, blind = [], 0, 0
     for key in sorted(rounds):
         halves = rounds[key]
         # A round is one verify and one review. A key holding only one half, or two
@@ -288,18 +334,64 @@ def serial_gates(labelled):
         if "verify" not in halves or "review" not in halves:
             continue
         first, second = sorted([min(halves["verify"]), min(halves["review"])])
-        (first_start, first_end, first_text), (start, end, text) = first, second
+        (first_start, first_end, first_text, first_bg), (start, end, text, bg) = first, second
+        # **Grade nothing on a backgrounded span.** This pair is counted, named
+        # and then excluded from both tallies, so the refusal below can say how
+        # many pairs it could not judge without pretending to judge them.
+        if first_bg or bg:
+            blind += 1
+            continue
         if start >= first_end:
             serial.append((first_text, text, min(end - start, first_end - first_start).total_seconds()))
         else:
             parallel += 1
 
-    print(f"\ngate concurrency: {parallel} pair(s) overlapped, {len(serial)} ran one after the other")
+    judged = parallel + len(serial)
+
+    if blind:
+        print(f"\ngate concurrency: CANNOT JUDGE {blind} of {blind + judged} graded "
+              f"pair(s) — each holds a backgrounded step.")
+        print("  A backgrounded Agent call returns the moment it is spawned, so its span is")
+        print("  not its runtime: the pair reads as one-after-the-other whether it was or not.")
+        # The incident is described, never QUOTED: an explanation that repeats a
+        # verdict-shaped string is a second thing for a reader skimming this to
+        # mistake for a verdict, which is the class of confusion being closed.
+        print("  Run `batch-170a59` reached its concurrency BY backgrounding one gate of each")
+        print("  pair. All seven pairs read as serial at zero cost; all seven had in fact")
+        print("  overlapped, by 87 minutes in total.")
+        print("  No corrected span is computed for those pairs, on purpose: the human ruled on")
+        print("  2026-09-06 that the refusal is the build and the measurement is not. Read")
+        print("  the background-task panel if the number is wanted.")
+
     if unreadable:
         print(f"  {unreadable} gate step(s) named no issue and were not graded.")
+
+    if blind and not judged:
+        return
+
+    # A pair whose halves BOTH ran in the foreground needs no correction and is
+    # reported normally. Suppressing those too would have cost run `batch-b5e96d`
+    # its real finding: 21 pairs were reported as serial there, 12 of them the
+    # spurious near-zero readings this refusal now withholds, and NINE genuine
+    # ones worth about 134 minutes. Refusing all 21 trades a false zero for a
+    # false silence, on the exact run whose 97-minute loss a peer session had to
+    # find by hand. (Ruled by the human 2026-09-06: keep the mixed-run behaviour as
+    # built. That ruling is exactly this wide and extends to nothing else.)
+    # The unqualified sentence is kept EXACTLY when there is nothing to qualify.
+    # A run with no backgrounded gate reads as it always did, so a reader
+    # comparing two runs' reports is not made to translate between two dialects.
+    floor = ""
+    if blind:
+        floor = " (a FLOOR: it says nothing about the pair(s) above)"
+        print(f"\ngate concurrency, over the {judged} pair(s) that ran wholly in "
+              f"the foreground: {parallel} overlapped, {len(serial)} ran one "
+              f"after the other")
+    else:
+        print(f"\ngate concurrency: {parallel} pair(s) overlapped, "
+              f"{len(serial)} ran one after the other")
     if serial:
         wasted = sum(row[2] for row in serial)
-        print(f"  SERIAL GATES COST THIS RUN ROUGHLY {wasted / 60:.0f} MINUTES.")
+        print(f"  SERIAL GATES COST THIS RUN ROUGHLY {wasted / 60:.0f} MINUTES{floor}.")
         print("  SKILL.md says spawn both gates in ONE message; two messages do not run in parallel.")
         for first_text, second_text, cost in serial:
             print(f"    {cost / 60:5.1f}m  {second_text[:40]}  followed  {first_text[:40]}")
@@ -362,7 +454,7 @@ def main(argv=None):
     # ten-minute spread, while agent time halved. Per issue is the figure that
     # holds still, so this prints it beside the share.
     issues = {found.group(1).lower()
-              for _, _, text in spans_by_label
+              for _, _, text, _ in spans_by_label
               for found in [re.search(r"\bissue\s+(\S+)", text or "")] if found}
     if issues:
         print(f"                             {idle / 60 / len(issues):5.1f} min per issue, "
@@ -375,7 +467,7 @@ def main(argv=None):
     totals = collections.Counter()
     for seconds, name, _ in calls:
         totals[name] += seconds
-    print("\nby tool  (a backgrounded Bash call reads as instant; see the header)")
+    print("\nby tool  (a backgrounded call of ANY tool reads as instant; see the header)")
     for name, seconds in totals.most_common(8):
         print(f"  {seconds / 3600:6.2f} h  {name}")
 

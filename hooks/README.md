@@ -9,7 +9,8 @@ So the install is two steps, and the second one is the step that matters.
 ```
 mkdir -p ~/.claude/hooks
 cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
-   hooks/coderules-gate.py hooks/retired-phrases-gate.py ~/.claude/hooks/
+   hooks/coderules-gate.py hooks/retired-phrases-gate.py \
+   hooks/origin-row-guard.py ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
@@ -56,13 +57,22 @@ its `PreToolUse` array rather than replacing the array.
             "command": "python3 /ABSOLUTE/PATH/TO/retired-phrases-gate.py"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/origin-row-guard.py"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-All four are `PreToolUse` hooks, so each runs before the tool call it matches
+All five are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -162,6 +172,39 @@ off within a week.
 Skip it and you keep the reporting test, which finds the same drift after it has
 already reached the file.
 
+## origin-row-guard.py, on `Edit|Write|NotebookEdit|Bash`
+
+It refuses a register row written into a `register.d/` shard directory that does
+not name where the fault came from — either a register table declaring no
+`origin` column, or a row under one whose origin cell is blank. It judges only a
+table whose header carries both `audience` and `severity`, which is the register
+row shape and not the prose tables a shard also holds. Every path outside a
+shard directory passes untouched.
+
+**It needs one file from this pack: `skills/run-issues/check_origin.py`.** The
+hook reuses that script's row reader rather than growing a second one. It looks
+in `~/.claude/skills/run-issues` by default; set `ORIGIN_CHECK` if you keep the
+pack elsewhere. If the import fails the hook PASSES, which is the opposite of
+the evidence gate's choice above and is deliberate: this rule has a second
+enforcer downstream in `check_origin.py` itself, which promotion runs before it
+resolves a row, so a silent pass here is caught rather than lost.
+
+**Its Bash road does not work in this pack, and that is stated rather than
+discovered.** Resolving a redirect target needs `generated-file-guard.py`'s
+parser, and `MANIFEST.md` withholds that file. Without it a heredoc appending a
+row to a shard passes here. Edit and Write are judged in full. The two Bash
+classes in `test_origin_row_guard.py` skip themselves when the parser is absent,
+so the test reports the gap instead of failing on it; drop that sibling in
+beside the guard and both start working with no change to either file.
+
+Skip the hook and a new register table can be typed without the column at all,
+which is the one shape `check_origin.py` cannot report: it skips a table
+declaring no `origin` column on purpose, because a register holds historical
+rounds under a dozen header shapes and grading all of them would report hundreds
+of faults nobody can act on. A hook sees only writes happening now, so it can
+demand the column without ever meeting history. That is the whole of what you
+lose.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -172,7 +215,10 @@ RUN_ISSUES_LIB=../skills/lib python3 test_run_issues_evidence_gate.py
 ```
 
 `retired-phrases-gate.py` ships its test too, `test_retired_phrases_gate.py`,
-which runs from this directory with no environment set.
+which runs from this directory with no environment set. So does
+`origin-row-guard.py`, as `test_origin_row_guard.py`; it needs no environment
+either, and it reports five skips, which is the Bash gap named above and not a
+failure.
 
 The other two ship no test, because neither has one in the tree it came from.
 Each carries a drill in its docstring instead: pipe a JSON payload on stdin and
@@ -199,5 +245,9 @@ agent is asked to remember is weaker than a rule that answers a tool call, and t
 gap is worth knowing about before you rely on one of those sentences. Every one of
 these is a `PreToolUse` or `SubagentStop` hook of about a hundred lines, so the road
 open to you is to write your own against the rule the skill states, with the shape
-the four published hooks carry: payload on stdin, reason on stderr, exit 2 to refuse,
+the five published hooks carry: payload on stdin, reason on stderr, exit 2 to refuse,
 exit 0 on anything it cannot read.
+
+`generated-file-guard.py` is the one of those nine that a published hook actually
+reaches for: `origin-row-guard.py` loads its `bash_targets` parser to resolve a
+redirect target, and passes every Bash write when it is absent.

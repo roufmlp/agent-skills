@@ -39,6 +39,25 @@ MARKER = {
     "attempt": re.compile(r"\battempt\s+(\d+)(?![\d:.])", re.IGNORECASE),
     "criteria reset": re.compile(r"\bcriteria[\s-]*(?:fault[\s-]*)?reset\b",
                                  re.IGNORECASE),
+    # `gates 1: verify=pass review=reject` — one gate ROUND, minted by ticket
+    # 37 ruling 28 on 2026-09-06 and read by `run_quality.py`. It lives here
+    # because this dict is the one home for markers the RUNNER writes, and a
+    # second home is the drift `journal_for` and `read_transcript` taught
+    # ticket 39 in its sittings 2 and 3.
+    #
+    # **It exists for the same reason `attempt N` does.** Sitting 4 of ticket
+    # 39 measured what a verdict costs when it is prose: seven dialects across
+    # sixteen ledgers, every one of them read as silence until two review
+    # passes found them, and two ledgers reporting `0 strike(s)` on runs that
+    # charged them.
+    #
+    # **Two fixed verdict words and no synonyms.** `pass` and `reject` only. A
+    # minted marker that also took `accept`, `passed` and `rejects` would be an
+    # eighth dialect rather than an end to the seven.
+    "gate round": re.compile(
+        r"\bgates\s+(?P<round>\d+)\s*:\s*"
+        r"verify=(?P<verify>pass|reject)\s+review=(?P<review>pass|reject)\b",
+        re.IGNORECASE),
 }
 
 # The pre-2026-08-17 stamp vocabulary. A row carrying it and no `attempt N`

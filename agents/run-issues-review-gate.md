@@ -177,8 +177,20 @@ python3 ~/.claude/skills/lib/collect_shards.py --kind register \
 Your shard is yours alone: the prefix keeps you off the other gate's file when
 you both run at once. A write to `register.md` itself is refused, and the
 refusal names the directory your shard belongs in. Append one row:
-`ID | one-line summary | audience | severity | status | owner-notes`.
+`ID | one-line summary | audience | severity | status | origin | owner-notes`.
 
+- **`origin` names where the fault came from: the issue and the run that
+  shipped the code it is in, written `<issue>/<run>`.**
+  For you that is the issue you are grading and this run's batch id, for
+  example `149e/batch-170a59`.
+  It is the only field that makes an escaped fault countable, and nothing
+  else in the record carries it -- the fact is written today as a sentence
+  inside `owner-notes`, where nothing can read it. Where you genuinely do
+  not know a half, write `unknown` in its place (`unknown/batch-170a59`),
+  or `unknown` alone for neither: it is legal, it is counted, and it is
+  worth more than a guess. `origin-row-guard.py` refuses a row without it,
+  and refuses a table that declares no `origin` column at all. (Ticket 37
+  of the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
 - **`audience`** is `operator` or `tester` — who can see this fault at all.
   Promotion decides on this field, so choose it deliberately. **A finding only an
   agent can see is a note, not a register row: write it in your verdict, which is

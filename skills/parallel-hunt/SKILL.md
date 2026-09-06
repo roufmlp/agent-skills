@@ -103,8 +103,16 @@ run's fixes; that is a fact about the cut, not a wait. Name any run at
 its fixes on the old code is read against it.
 
 `register.md` is a table:
-`ID | one-line summary | audience | severity | status | owner-notes`.
+`ID | one-line summary | audience | severity | status | origin | owner-notes`.
 
+- **`origin`** names where the fault came from: the issue and the run that shipped
+  the code it is in, written `<issue>/<run>`, with `unknown` legal for either half
+  or for both. It is what makes an escaped fault countable, and nothing else in the
+  record carries it. `origin-row-guard.py` in the hooks refuses a row without it and
+  a table that declares no such column; `check_origin.py` grades a file that already
+  exists. A table declaring no `origin` column is history and is never graded, which
+  is how the count starts the day the key landed and backfills nothing. (Ticket 37 of
+  the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
 - **`audience`** is `operator`, `tester` or `agent` — who can see the fault at all.
   The finder writes it with the row, and promotion reads it.
 - **`owner-notes` holds a status word and a link to `bugs/<ID>.md`. Nothing else,
@@ -430,7 +438,7 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    Run all five with this round's hunt id and paste the output into the round report:
 
    ```
-   python3 ~/.claude/skills/run-issues/run_costs.py --batch <hunt-id> --no-append
+   python3 ~/.claude/skills/run-issues/run_costs.py --batch <hunt-id> --kind hunt
    python3 ~/.claude/skills/run-issues/harness_cost.py --batch <hunt-id>
    python3 ~/.claude/skills/run-issues/orchestrator_cost.py --batch <hunt-id>
    python3 ~/.claude/skills/run-issues/run_timings.py --batch <hunt-id>
@@ -448,10 +456,23 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    thing void is the comparison against another round. Paste it into the round report
    whole. It prints no per-issue figures, because a hunt has no issues.
 
-   **`--no-append` on the first one.** `.scratch/workflow-audit/run-costs.md` is one
-   row per RUN and its columns are a run's — issues shipped, per issue, correction
-   rounds. A hunt has none of those, and a hunt row in that table would be read as a
-   run for as long as the table lives.
+   **`--kind hunt` on the first one**, so it reads
+   `run_costs.py --batch <hunt-id> --kind hunt`. The line goes into
+   `.scratch/workflow-audit/runs.jsonl` beside the runs, and `run-costs.md` draws it
+   with `hunt` in its own column.
+
+   **This REVERSES the old `--no-append` rule, and the reason is worth keeping.**
+   That rule existed because a hunt row in a table of run rows is read as a run for
+   as long as the table lives, and the columns are a run's — issues shipped, per
+   issue, correction rounds — none of which a hunt has. Ticket 37 of the
+   pilot-delivery map, ruling 11 (2026-09-05), removes the reason rather than the
+   rule: the record carries a `kind` field, and ruling 12 compares a line against the
+   previous line OF THE SAME KIND, never the line above it. So a hunt can never be
+   read as a run. The columns a hunt cannot fill read `not measured`, which is a
+   different statement from zero.
+
+   What this buys: until now a hunt's cost was never recorded at all, whatever model
+   it ran on, which is exactly what ticket 39 ruling 12 set out to end.
 
    **The order above is not a preference. Every one of them finds the session by
    reading `round-brief.md`**, so all five must run while it still exists. Once it is

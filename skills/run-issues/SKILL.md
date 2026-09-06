@@ -392,6 +392,40 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    is a duration in minutes, so a row still carrying them is refused until it is
    restamped.
 
+   **Stamp `gates <N>: verify=<pass|reject> review=<pass|reject>` into the row
+   when both gates of a round have answered** — one token per gate ROUND, `N`
+   being that round's number. Minted by ticket 37 of the pilot-delivery map,
+   ruling 28, 2026-09-06, and read by `run_quality.py`.
+
+   Write it beside whatever prose you were going to write; the prose is not
+   forbidden and nothing is deleted. Two fixed verdict words only, `pass` and
+   `reject`: **a token that also took `accept`, `passed` and `rejects` would be
+   an eighth dialect rather than an end to the seven.**
+
+   **Why it exists is measured, and it is `attempt N`'s own story.** Ticket 39
+   sitting 4 read the verdicts out of prose across sixteen ledgers and found
+   SEVEN dialects, every one of them read as silence until two review passes
+   caught them — bolded verdicts in 17 rows, `gates both pass`, `v: pass · r:
+   reject`, `rejected by BOTH gates`, `one correction round`, `correction
+   18:48->18:54`, `correction open 04:06`. Two ledgers reported `0 strike(s)`
+   on runs that had charged them. A regex cannot be widened out of that; only
+   the writer can end it, which is exactly why `attempt N` replaced
+   `implement`/`retry`.
+
+   **A strike is still DERIVED and the token does not state one.** It says what
+   the gates answered. Step 5's prose-deletion road and a runner-error
+   annulment both cancel a strike in prose and write no marker, so the count
+   stays "rounds rejected since the last criteria reset", and a row whose own
+   words disagree with the count is marked `*` with both shown and neither
+   preferred.
+
+   **Nothing refuses a row without it**, and that is deliberate: sixteen
+   ledgers and 143 rows were written before it existed, ruling 3 loses no
+   history, and the prose reader stays. `run_quality.py` counts how many rounds
+   carry the token and prints the figure, so the rate at which it is actually
+   written is visible rather than assumed — the same discipline as the
+   `Origin:` check's pass line.
+
    **Size the issue while settling the road**, and write the estimate in its
    ledger row — an overrun then reads as live signal instead of archaeology.
    Where the given order and dependencies permit, schedule the big ones last:
@@ -695,9 +729,19 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    that line is a killed pass, not a clean one: a session host can exit and take every session
    with it, so the file on disk is the only record.
 
-   **The finale collects every file and runs one catch-up pass at branch head for any sha
-   whose file is missing or unterminated.** A run that reports a clean sweep over a pass that
-   never returned is reporting on nothing.
+   **The finale collects every file, checks each one for that terminator line, and names in
+   the merge briefing every sha whose file is missing or unterminated. It re-runs nothing.** A
+   run that reports a clean sweep over a pass that never returned is reporting on nothing, and
+   this listing is what stops that: a directory listing and a `tail -1` per file, seconds of
+   work. On run `batch-170a59` four of six commits had no pass at all and the finale was the
+   only thing that noticed.
+
+   **The catch-up pass at branch head is removed, ruled by the human 2026-09-06.** It is the same
+   argument that removed the differential on 2026-08-28: nothing in a run acts on the finding,
+   because a run may not write an issue file and the repair goes through `/harden-issues` by
+   hand. Measured at full scope on that same run: 268 files, about 17,200 citations, 70 minutes
+   at 4 per cent CPU duty, and about three hours from finishing when it was stopped. The
+   collection and the report stay; only the re-run goes.
 
    **File each new `moved` or `gone` as a register row naming the citation and the commit that
    moved it**, exactly as before. The row is the whole remedy, and the run repairs nothing: a
@@ -1084,6 +1128,22 @@ procedure is a script and not a judgement. Resume keys on the current directory
 
 ## Pre-flight
 
+- **The session that types `/run-issues` is launched with the three directories
+  every worker reads outside the worktree.** CLI 2.1.257 added a one-time
+  permission prompt in auto mode before the first file read outside the working
+  directory. Every worker in this run reads outside its worktree as a matter of
+  course, so an unattended one meets that prompt and the run halts where nobody
+  is watching. The launch command names all three:
+
+  ```
+  claude --add-dir ~/.claude/skills ~/.claude/agents <the project's memory directory, if it has one>
+  ```
+
+  The skills directory holds the guard scripts every role shells out to and the
+  briefs it reads beside them; the agents directory holds the agent files; the
+  memory directory holds this project's memory, including the pending list the
+  daily brief writes. (Ruled by the human 2026-09-06, overturning the default of
+  changing nothing.)
 - **The launch line is a gate, not an announcement. Nothing spawns before it
   prints.** One line on every invocation — issues in order, branch, the resolved
   session model, **the resolved session effort**, and what will NOT happen (no

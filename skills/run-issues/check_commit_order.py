@@ -36,11 +36,16 @@ fault in the ledger and still worth catching, because every per-issue duration
 in a run's records comes from these stamps and `orchestrator_cost.py` inherits
 them.
 
-Two refusals:
+Three refusals:
 
     commit-precedes-round   the commit is earlier than the correction round it
                             is recorded as carrying
     git-failed              a commit could not be read, so nothing is assumed
+    empty-input             this read zero rows of a shape it must find, so it
+                            asserts nothing. Two shapes are guarded: the status
+                            table itself, and the `committed <sha>` stamp. See
+                            `empty_input.py` for why a pass over nothing is a
+                            refusal here rather than an `ok`.
 
 Usage:
 
@@ -54,6 +59,8 @@ import argparse
 import re
 import subprocess
 import sys
+
+import empty_input
 
 # A row of the ledger's status table. Both times are `HH:MM` on the run's own
 # day; a run that crosses midnight is out of scope and says so below.
@@ -77,8 +84,20 @@ CLOSED = re.compile(r"correction:.*?closed\s+(?P<time>[0-2]?[0-9]:[0-5][0-9])", 
 # a row reading `committed \`e9737396\`` with no time is now the normal shape.
 # Nothing is lost: git supplies the time this check actually compares. The ledger
 # stamp, when present, is only quoted back in the refusal.
+#
+# **The BACKTICKS are optional, and that is the whole of ruling 6(a).** This
+# pattern demanded them. `SKILL.md:284` tells the runner to write `committed
+# <sha>` — bare — so the script and the skill that drives it disagreed about the
+# shape of the one stamp this check exists to read. On run `batch-170a59` every
+# ledger row obeyed the skill, the pattern matched zero of them, and six `ok`
+# results were vacuous. Both forms are now read, so neither the skill nor any
+# ledger already written in either dialect has to move.
+# The backtick is captured and matched again by backreference, so an opening one
+# demands a closing one and a bare sha demands neither. `(?![0-9a-z])` stops a
+# 45-character hex token being read as its own first 40 characters.
 COMMITTED = re.compile(
-    r"committed\s+`(?P<sha>[0-9a-f]{7,40})`(?:\s+(?P<time>[0-2]?[0-9]:[0-5][0-9]))?")
+    r"committed\s+(?P<tick>`?)(?P<sha>[0-9a-f]{7,40})(?P=tick)(?![0-9a-z])"
+    r"(?:\s+(?P<time>[0-2]?[0-9]:[0-5][0-9]))?")
 
 REMEDY = (
     "A commit cannot carry a correction round that closed after it. Either the round's\n"
@@ -97,20 +116,75 @@ def cells(line):
     return [cell.strip() for cell in line.strip().strip("|").split("|")]
 
 
-def issue_column(text):
-    """Which column holds the issue id, read from the header.
+def tables(text):
+    """Every markdown table on the page, as a list of its stripped lines.
 
-    Two header shapes are in use: `| Issue | Status | …` puts it first, and
-    `| # | issue | …` puts it second behind a row number. Without a header,
-    the first column. Same reader as `check_attempt_cap.py`.
+    A table is a CONTIGUOUS run of lines beginning with a pipe. A blank line, a
+    heading or a paragraph ends one, which is what markdown itself requires to
+    render two tables rather than one.
     """
+    found, current = [], []
     for line in text.splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        lowered = [cell.lower() for cell in cells(line)]
-        if "issue" in lowered:
-            return lowered.index("issue")
-    return 0
+        stripped = line.strip()
+        if stripped.startswith("|"):
+            current.append(stripped)
+        elif current:
+            found.append(current)
+            current = []
+    if current:
+        found.append(current)
+    return found
+
+
+def status_table(text):
+    """`(lines, column)` for the status table, or `([], 0)` when there is none.
+
+    **The status table is the one whose HEADER declares `issue`, and the bound
+    is the whole of ticket 37 ruling 28's repair half.** Until 2026-09-06 this
+    reader walked every pipe line on the page, so any other table whose first
+    cell could pass for an issue id was counted as issues. Run `batch-170a59`
+    reported 12 issues for six, because its carry-forward table of test counts
+    at `run.md:35-43` writes rows opening `149c (-13, -3)`. The totals were
+    right and the DENOMINATOR was wrong, so every rate ruling 6 asks for was
+    wrong -- and the number had already reached a merge briefing.
+
+    Two header shapes are in use: `| Issue | Status | …` puts the id first, and
+    `| # | issue | …` puts it second behind a row number. Measured 2026-09-06
+    over the sixteen ledgers on this machine that hold a status table, every
+    one of them declares `issue` in that header.
+
+    **A page with no such header returns nothing rather than guessing**, and
+    that is deliberate. The header is the only thing that tells a status table
+    from a carry-forward table, so a reader without one cannot tell them apart;
+    guessing is what produced the phantom rows. `empty_input.py` already turns
+    a zero read into a refusal here, and `run_quality.render_quality` prints
+    "no status table was read ... a missing measurement, not a clean run". Both
+    say a hole rather than inventing a figure.
+    """
+    for lines in tables(text):
+        # Every line of the block, not only the first. A ledger writing any
+        # pipe line directly above its header -- `| Run | batch-x |` -- puts
+        # both in one contiguous block, and testing `lines[0]` alone lost the
+        # whole table. Found by the review of 2026-09-06; no ledger on this
+        # machine does it, so the loss was latent rather than live.
+        #
+        # A data row cannot be mistaken for the header: the test is a cell
+        # reading exactly `issue`, and a data row's cell reads `149c`.
+        for index, line in enumerate(lines):
+            lowered = [cell.lower() for cell in cells(line)]
+            if "issue" in lowered:
+                return lines[index + 1:], lowered.index("issue")
+    return [], 0
+
+
+def issue_column(text):
+    """Which column of the status table holds the issue id.
+
+    Kept because `check_attempt_cap.py` and `estimate_accuracy.py` read the
+    same header, and because a caller wanting only the column should not have
+    to take the rows as well.
+    """
+    return status_table(text)[1]
 
 
 def status_rows(text):
@@ -120,18 +194,17 @@ def status_rows(text):
     caller prints both numbers, so `ok` on a table this could not read is a
     different sentence from `ok` on a table with nothing to grade.
     """
-    column = issue_column(text)
+    lines, column = status_table(text)
     found = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("|") or SEPARATOR.match(stripped):
+    for stripped in lines:
+        if SEPARATOR.match(stripped):
             continue
         parts = cells(stripped)
         if len(parts) <= column:
             continue
         token = ID_IN_CELL.match(parts[column])
         if not token:
-            continue  # The header row, and any prose table sharing the page.
+            continue  # A wrapped header, and any row that names no issue.
         found.append((token.group("issue"), stripped))
     return found
 
@@ -206,23 +279,47 @@ def main(argv=None):
         print(f"REFUSED unreadable: {args.ledger}: {error}", file=sys.stderr)
         return 2
 
+    # Two guards, and they name DIFFERENT absences. This one is the table: a
+    # ledger always carries one row per issue, so zero is the wrong file or a
+    # column shape this reader does not know (`rn414a-01`, run
+    # `414a-483-286335`).
     seen = status_rows(text)
-    if not seen:
-        print(
-            f"REFUSED empty-table: {args.ledger} holds no status row this could "
-            "read. A ledger always carries one row per issue, so zero rows means "
-            "the wrong file or a table shape this reader does not know. It is "
-            "NOT a pass: run `414a-483-286335` printed `ok` on zero rows and hid "
-            "a commit stamped before the round it carried.",
-            file=sys.stderr,
-        )
-        return 2
+    if empty_input.refuse_empty(
+        len(seen),
+        args.ledger,
+        "status row",
+        read=len([1 for line in text.splitlines()
+                  if line.strip().startswith("|")]),
+        remedy="A ledger carries one status row per issue. Check this is the "
+               "run's own `run.md`, and that its table's issue column is where "
+               "`issue_column` looks for it.",
+    ):
+        return empty_input.EXIT_EMPTY
+
+    # This one is the STAMP, and it is the `batch-170a59` silence. `SKILL.md`
+    # runs this check right after writing a `committed <sha>` stamp, so by the
+    # time it runs at least one row carries one and zero means the pattern and
+    # the ledger disagree. It is deliberately NOT a guard on correction rounds:
+    # a run where every issue passed its gates first time carries none, and
+    # refusing that would refuse a healthy run.
+    stamped = [line for _, line in seen if COMMITTED.search(line)]
+    if empty_input.refuse_empty(
+        len(stamped),
+        args.ledger,
+        "row recording a `committed <sha>` stamp",
+        read=len(seen),
+        remedy="This check runs after a commit stamp is written, so one always "
+               "exists by then. Read a status row and compare it against "
+               "`COMMITTED` in this file. Run `batch-170a59` reached the finale "
+               "with six vacuous `ok` results on exactly this absence.",
+    ):
+        return empty_input.EXIT_EMPTY
 
     rows = rows_from(text)
     if not rows:
         print(
-            f"ok: {len(seen)} status row(s) read, none of them recording both a "
-            "correction round and a commit"
+            f"ok: {len(seen)} status row(s) read, {len(stamped)} carrying a "
+            "commit stamp, none of them also recording a correction round"
         )
         return 0
 
@@ -239,8 +336,9 @@ def main(argv=None):
 
     if not faults:
         print(
-            f"ok: {len(seen)} status row(s) read, {len(rows)} carrying a correction "
-            "round, every one of those committed after its round"
+            f"ok: {len(seen)} status row(s) read, {len(stamped)} carrying a commit "
+            f"stamp, {len(rows)} carrying a correction round, every one of those "
+            "committed after its round"
         )
         return 0
 

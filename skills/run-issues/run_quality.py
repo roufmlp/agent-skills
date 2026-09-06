@@ -222,8 +222,25 @@ ATTEMPT = re.compile(r"\battempt\s+(\d+)(?!\d)(?!:\d)(?!\.\d)",
                      re.IGNORECASE)
 
 # `criteria reset`, `criteria-fault reset`. Same pattern, same file.
-RESET = _load("check_attempt_cap",
-              "check_attempt_cap.py").MARKER["criteria reset"]
+_CAP = _load("check_attempt_cap", "check_attempt_cap.py")
+RESET = _CAP.MARKER["criteria reset"]
+
+# **The minted marker, and the whole of ticket 37 ruling 28's second half.**
+# `gates 1: verify=pass review=reject` — one gate ROUND, written by the runner,
+# on the model of `attempt N`. It lives in `check_attempt_cap.MARKER` with the
+# other two, because that dict is the one home for markers the runner writes.
+#
+# **Why it was minted.** Everything below this line reads PROSE, and the cost
+# of that is measured: seven dialects across sixteen ledgers, every one read as
+# silence until two review passes of 2026-09-06 found them, and two ledgers
+# reporting `0 strike(s)` on runs that charged them. A regex cannot be widened
+# out of that; only the writer can end it.
+#
+# **The reader PREFERS the token and keeps the prose reader.** The sixteen
+# ledgers already written carry no token and ruling 3 loses no history, so the
+# prose road below stays exactly as sitting 4 left it and its corpus test with
+# it. A row carrying a token never reaches it.
+GATE_ROUND = _CAP.MARKER["gate round"]
 
 # A gate stating its verdict, and NOTHING else that names a gate. The verdict
 # word must sit against the role word, with only a variant name, a separator
@@ -296,6 +313,18 @@ class Issue:
     corrections: int = 0
     strikes: int = 0
     flags: tuple = ()
+    # Ruling 17 of ticket 37 puts BOTH gate verdicts on the per-issue line.
+    # `first_attempt` collapses them into one word, which is right for ruling
+    # 15's count and wrong for a line meant to answer which gate rejects more
+    # often. These two are the FIRST attempt's, apart.
+    verify: str = UNREAD
+    review: str = UNREAD
+    # How many gate rounds on this row carry the MINTED marker (ruling 28).
+    # Counted and reported rather than assumed: minting a token does not make
+    # a runner write it, and this is where the rate at which it is actually
+    # written becomes visible. It is the same discipline as sitting 1's
+    # `Origin:` pass line, which prints how many rows took `unknown`.
+    marked: int = 0
 
 
 def attempt_segments(row):
@@ -342,8 +371,60 @@ def gate_verdicts(text):
     return tuple(named + paired)
 
 
+def marked_verdicts(text):
+    """`((role, outcome), ...)` from the MINTED marker alone, or `()`.
+
+    Separate from `gate_verdicts` on purpose: that function is the prose
+    reader, whose whole risk is widening, and a marker read through it would
+    put a fixed token at the mercy of seven dialects' worth of alternatives.
+    """
+    return tuple(
+        pair
+        for found in GATE_ROUND.finditer(text or "")
+        for pair in (("verify", found.group("verify").lower()),
+                     ("review", found.group("review").lower()))
+    )
+
+
+# The two gates, and every spelling that names one. `v` and `r` are the
+# shortest dialect in the corpus. `both` is not a gate: it is one statement
+# ABOUT two gates -- `gates both reject`, `rejected by BOTH gates` -- so it
+# fills each cell rather than sitting in one, which is what it says.
+GATE_NAMES = {"verify": "verify", "v": "verify", "review": "review",
+              "r": "review"}
+BOTH = "both"
+
+
+def _by_gate(text):
+    """`(verify, review)` for one attempt's span, each PASS, REJECT or UNREAD.
+
+    A gate that stated nothing reads UNREAD and never PASS. That is the rule
+    the whole module carries -- a hole is visible rather than silent -- and it
+    matters more per gate than in the collapsed figure: a row naming one gate
+    says nothing at all about the other.
+    """
+    found = {"verify": UNREAD, "review": UNREAD}
+    for role, word in marked_verdicts(text) or gate_verdicts(text):
+        outcome = REJECT if word in REJECTED else PASS
+        for name in (("verify", "review") if role == BOTH
+                     else (GATE_NAMES.get(role),)):
+            if name and found[name] != REJECT:
+                # A rejection is never overwritten by a later pass inside one
+                # span. The same span holds a re-read on some rows, and the
+                # round is what the figure is about.
+                found[name] = outcome
+    return found["verify"], found["review"]
+
+
 def _outcome(text):
-    verdicts = gate_verdicts(text)
+    """PASS, REJECT or UNREAD for one attempt's span.
+
+    **The marker wins where it is present** (ticket 37, ruling 28). It is one
+    fixed token written by the runner; the prose below it is seven dialects
+    read by regex, and a row carrying both is a row where the token is the
+    record and the sentence is commentary.
+    """
+    verdicts = marked_verdicts(text) or gate_verdicts(text)
     if not verdicts:
         return UNREAD
     return REJECT if any(w in REJECTED for _, w in verdicts) else PASS
@@ -379,6 +460,11 @@ def issue_quality(ledger_text):
                     f"and the row denies the strike. Counted as one; read the "
                     f"row before quoting the figure.")
 
+        # One call, not two. Written as `_by_gate(...)[0]` and
+        # `_by_gate(...)[1]` until the review of 2026-09-06: two identical
+        # parses per row, and two call sites that had to stay in step or the
+        # two gates would be read from different spans.
+        verify, review = _by_gate(spans[0][1])
         found.append(Issue(
             issue=issue,
             # 0 means the row carries no `attempt N` marker, not that nothing
@@ -387,6 +473,9 @@ def issue_quality(ledger_text):
             # false figure in a briefing.
             attempts=len(spans) if segments else 0,
             first_attempt=_outcome(spans[0][1]),
+            verify=verify,
+            review=review,
+            marked=len(GATE_ROUND.findall(row)),
             corrections=(len(ROUND.findall(row))
                          + sum(HOW_MANY[word.lower()]
                                for word in WORDED_ROUNDS.findall(row))),

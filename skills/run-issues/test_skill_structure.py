@@ -724,22 +724,77 @@ class TheDailyBriefShowsWhatTheRunCost(unittest.TestCase):
     def test_section_one_reads_the_cost_table(self):
         self.assertIn(".scratch/workflow-audit/run-costs.md", self.section_one())
 
-    def test_it_compares_this_run_against_the_one_before_it(self):
-        """One row alone is a number. The table was built for the comparison."""
-        section = self.section_one()
-        self.assertIn("the row above it", section)
+    def test_it_compares_against_the_previous_line_of_the_same_kind(self):
+        """Inverted by ticket 37 sitting 4, and the inversion is the point.
 
-    def test_it_states_the_observed_range_instead_of_inventing_a_threshold(self):
-        """Across the table's 13 rows `Per issue` ran 0.96M to 2.45M and
-        consecutive runs swung by up to 75 per cent. A 25 per cent flag would
-        fire on seven of twelve transitions and train the reader to ignore it."""
+        This test used to assert the section said "the row above it", which was
+        the table's own rule and is now wrong twice over. Ruling 12 compares a
+        line against the previous line of the SAME KIND by finale time: ticket
+        38 puts two runs and a hunt in flight at once, so position in the file
+        is not order of finishing, and ruling 11 puts hunts in the same file.
+        Ruling 27 deletes the old rule with its cause.
+        """
         section = self.section_one()
-        self.assertIn("0.96M", section)
-        self.assertIn("2.45M", section)
+        self.assertNotIn("the row above", section)
+        self.assertIn("SAME KIND", section)
+        self.assertIn("run_compare.py last", section)
 
-    def test_idle_is_declared_to_have_no_baseline(self):
-        """Two readings, 12 and 17 per cent. A third is not a trend."""
-        self.assertIn("no baseline", self.section_one())
+    def test_the_brief_holds_no_reader_of_its_own(self):
+        """Ruling 27: one reader. Two readers of one file disagree eventually,
+        which is what `journal_for` taught ticket 39 in sitting 2."""
+        self.assertIn("only reader", self.section_one())
+
+    def test_it_invents_no_alarm_threshold(self):
+        """Even inside the old borrowed numbers, consecutive rows swung by up
+        to 75 per cent. A 25 per cent flag would fire on seven of twelve
+        transitions and train them to ignore it."""
+        self.assertIn("Invent no alarm threshold", self.section_one())
+
+    def test_it_refuses_the_old_per_issue_range_instead_of_quoting_it(self):
+        """Inverted on 2026-09-06, and the inversion is the point.
+
+        This test used to assert that the section QUOTED 0.96M to 2.45M as an
+        observed range. That range was never observed. Before skills commit
+        aa94b3b, run_costs.py scraped five of its columns out of
+        `orchestrator_cost.py --days 7`'s last data row, whatever run that row
+        described, so `Issues`, `Subagents`, `Weighted`, `Orchestrator` and
+        `Per issue` were all borrowed. The section must now forbid the range,
+        not repeat it, and it must say where the fault was fixed.
+
+        Narrowed by ticket 37 sitting 4. The "read no row above 2026-09-06"
+        phrase went with the date rule behind it: sitting 2 measured that the
+        mark is a property of the LINE and not of the day -- divide `Weighted`
+        by `Per issue` and see whether it lands on the line's own `Issues` --
+        so `run_compare.py` reads the mark per line and the brief no longer
+        asks a reader to date a row.
+        """
+        section = self.section_one()
+        self.assertIn("aa94b3b", section)
+        self.assertIn("measured, not dated", section)
+        self.assertIn("you must not invent one", section)
+
+    def test_it_names_which_columns_were_borrowed_and_which_were_not(self):
+        """A reader who does not know WHICH columns are affected will either
+        distrust the whole table or trust the wrong half. Hours and Idle came
+        from the run's own transcript and survive."""
+        section = self.section_one()
+        for column in ("`Issues`", "`Subagents`", "`Weighted`",
+                       "`Orchestrator`", "`Per issue`"):
+            self.assertIn(column, section)
+        self.assertIn("`Idle` and `Hours` survive intact", section)
+
+    def test_it_gives_the_arithmetic_that_exposes_a_borrowed_row(self):
+        """The fault is checkable without reading the script's history: a
+        finale passing --issues N overrode the borrowed issue count while
+        Weighted and Per issue stayed borrowed, so the two divide to 85-114
+        and never to the row's own Issues cell."""
+        self.assertIn("85 and 114", self.section_one())
+
+    def test_idle_is_still_declared_not_to_be_a_trend(self):
+        """Four readings now: 12, 17, 10 and 23 per cent. Idle was never
+        borrowed, so the readings stand -- but four is still not a trend, and
+        that was the original point of this test."""
+        self.assertIn("still not a trend", self.section_one())
 
     def test_the_block_stays_inside_section_one(self):
         """The brief has thirty minutes and this must not become a fifth
@@ -1219,3 +1274,65 @@ class TheFinaleWritesTheTrialTable(unittest.TestCase):
         """It said so, and named sitting 4 as the owner. Sitting 4 has landed."""
         self.assertNotIn("Nothing yet READS those lines", self.skill)
         self.assertIn("run_quality.py` is what reads them", self.skill)
+
+
+class TicketThirtySevenSittingThree(unittest.TestCase):
+    """The step wrapper and the minted marker, pinned in the files that drive
+    them. `SKILL.md` and `finale.md` have drifted apart on exactly this kind of
+    line before -- ticket 39 sitting 2 found `SKILL.md` citing `finale.md:147`
+    for the board render's model, where line 147 is about migration `0086`."""
+
+    def setUp(self):
+        self.finale = " ".join(read(FINALE).split())
+        self.skill = " ".join(read(SKILL).split())
+
+    def test_the_finale_runs_the_named_steps_under_the_wrapper(self):
+        """Ruling 19. A step run bare leaves no duration anywhere: a
+        backgrounded Bash call reads as instant in the transcript."""
+        self.assertIn("run_step.py --batch <batch-id> --kind suite", self.finale)
+        self.assertIn("run_step.py --batch <batch-id> --kind build", self.finale)
+        self.assertIn("run_step.py --batch <batch-id> --kind citation", self.finale)
+        self.assertIn("run_step.py --batch <batch-id> --kind board", self.finale)
+        self.assertIn("run_step.py --batch <batch-id> --kind cost", self.finale)
+
+    def test_every_kind_the_finale_names_is_one_the_wrapper_accepts(self):
+        """The drift this class exists to catch, made mechanical: a kind typed
+        into `finale.md` that `run_step.py` refuses would stop the finale at
+        the step, and nothing else would have said so."""
+        import re as _re
+        import run_step
+        for kind in _re.findall(r"run_step\.py [^`]*?--kind (\w+)", self.finale):
+            with self.subTest(kind=kind):
+                self.assertIn(kind, run_step.KINDS)
+
+    def test_the_finale_says_the_runner_never_stamps_a_clock(self):
+        """Ticket 36 ruling 3, and the whole reason this is a wrapper."""
+        self.assertIn("You never write a clock yourself", self.finale)
+
+    def test_the_finale_no_longer_says_the_counts_are_null_on_purpose(self):
+        """It said so and named sitting 3 as the owner. Sitting 3 has landed."""
+        self.assertNotIn("written null on purpose", self.finale)
+
+    def test_the_runner_is_told_to_write_the_gate_round_marker(self):
+        """Ruling 28's second half. A marker nothing writes is not a marker."""
+        self.assertIn("gates <N>: verify=<pass|reject> review=<pass|reject>",
+                      self.skill)
+
+    def test_the_marker_the_skill_states_is_the_one_the_reader_reads(self):
+        """The two live in different repositories' worth of files, and a token
+        the skill spells one way and the reader matches another is a marker
+        that silently never fires. So the skill's own example is run through
+        the pattern."""
+        import run_quality
+        example = "attempt 1; gates 1: verify=pass review=reject"
+        self.assertTrue(run_quality.GATE_ROUND.search(example))
+
+    def test_the_skill_says_nothing_refuses_a_row_without_the_marker(self):
+        """Ruling 3 loses no history: sixteen ledgers hold 143 rows written
+        before it existed, and the prose reader stays for them."""
+        self.assertIn("Nothing refuses a row without it", self.skill)
+
+    def test_the_skill_says_the_strike_stays_derived(self):
+        """Ruling 28 is explicit that minting the token does not make a strike
+        countable: two roads cancel one in prose and write no marker."""
+        self.assertIn("A strike is still DERIVED", self.skill)

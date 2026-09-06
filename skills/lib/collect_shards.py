@@ -75,7 +75,10 @@ ITEM_ID = re.compile(r"`(q-[A-Za-z0-9][A-Za-z0-9._-]*)`")
 ANSWER_TOKEN = re.compile(r"(?<![\w-])(q-[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9])(?![\w-])")
 SECTION = re.compile(r"^## ", re.MULTILINE)
 
-# A register row: `| ID | summary | audience | severity | status | owner-notes |`.
+# A register row:
+# `| ID | summary | audience | severity | status | origin | owner-notes |`.
+# The `origin` column arrived with ticket 37 ruling 7 on 2026-09-06; rows
+# written before it have one cell fewer, and this pattern reads only the first.
 # The id is the first cell, and only the first cell makes a line that row.
 ROW_ID = re.compile(r"^\|\s*`?([A-Za-z][A-Za-z0-9._-]*)`?\s*\|")
 # A closed id in `closed.md`: one id ALONE on its line, backticked or not. A

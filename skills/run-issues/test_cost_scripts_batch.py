@@ -315,23 +315,53 @@ class RunCosts(Batched):
         self.assertEqual(code, 0)
         self.assertIn(self.fx.batch, text)
 
-    def test_the_weighted_cell_carries_its_model(self):
-        """A bare `96.6M` on a mixed run is opus and fable added together, and
-        `run-costs.md` holds two such cells already. The model travels with the
-        number so nobody can read one without the other."""
+    def record(self):
+        """The JSON line the script now prints. Ticket 37 ruling 2 replaced the
+        markdown row with a record and a generated view, so these three cases
+        assert the same properties through the seam that carries them now."""
+        import json
         _, text = self.read(["--batch", self.fx.batch,
                              "--repo", str(self.fx.tree), "--no-append"])
-        row = [line for line in text.splitlines()
-               if line.startswith("|") and self.fx.batch in line][-1]
-        self.assertIn("opus", row)
-        self.assertIn("fable", row)
+        block = text.split("```json", 1)[1].split("```", 1)[0]
+        return json.loads(block)
 
-    def test_the_row_is_still_ten_cells_so_the_old_table_still_reads(self):
-        _, text = self.read(["--batch", self.fx.batch,
-                             "--repo", str(self.fx.tree), "--no-append"])
-        row = [line for line in text.splitlines()
-               if line.startswith("|") and self.fx.batch in line][-1]
-        self.assertEqual(len(row.strip().strip("|").split("|")), 10)
+    def test_the_weighted_figure_carries_its_model(self):
+        """A bare `96.6M` on a mixed run is opus and fable added together, and
+        `run-costs.md` held two such cells already. The model travels with the
+        number so nobody can read one without the other. It is now a mapping
+        rather than a rendered string, so a later reader can also divide it --
+        the old cell `opus 149.7M / fable 0.3M` was arithmetic nobody could do."""
+        weighted = self.record()["weighted"]
+        self.assertIn("opus", weighted)
+        self.assertIn("fable", weighted)
+
+    def test_the_trial_verdict_is_read_from_the_journal_beside_the_ledger(self):
+        """Ticket 39 sitting 4 said ticket 37 would call `trial_verdict` and
+        nothing did. The journal is found through `find_live_ledger.journal_for`,
+        which owns the layout, so a hunt's `round-journal.md` is found by the
+        same road -- two hooks each grew their own copy of that answer in
+        ticket 39 sitting 2 and the review refused both."""
+        (self.fx.ledger.parent / "run-journal.md").write_text(
+            "# Journal\n\n- model landed: run-issues-implementer ran on "
+            "claude-opus-5 (opus) at effort high (ledger asked opus).\n",
+            encoding="utf-8")
+        trial = self.record()["trial"]
+        self.assertEqual("holds", trial["state"])
+        self.assertEqual(1, trial["proved"])
+
+    def test_a_run_with_no_journal_records_a_trial_nobody_measured(self):
+        """`batch-b5e96d` is exactly this, measured: it ran before ticket 39
+        sitting 2's landed check existed. It must not read as a pass."""
+        self.assertEqual("unmeasured", self.record()["trial"]["state"])
+
+    def test_the_view_still_draws_the_ten_columns_the_old_table_had(self):
+        """Ticket 39 sitting 3 kept the ten columns every row since 2026-08-18
+        was written with, and ruling 2 must not quietly drop one."""
+        import run_records
+        drawn = run_records.render_view([self.record()])
+        for column in ("Taken", "Version", "Issues", "Hours", "Weighted",
+                       "Per issue", "Subagents", "Orchestrator", "Idle", "Note"):
+            self.assertIn(column, drawn)
 
     def test_the_orchestrator_reading_is_this_batch_not_the_week_window(self):
         """The window states what OTHER runs cost, at launch. Read here it made
@@ -342,11 +372,7 @@ class RunCosts(Batched):
         self.assertIn("orchestrator against fleet, PER MODEL", text)
 
     def test_the_issue_count_comes_from_this_batch_own_spawns(self):
-        _, text = self.read(["--batch", self.fx.batch,
-                             "--repo", str(self.fx.tree), "--no-append"])
-        row = [line for line in text.splitlines()
-               if line.startswith("|") and self.fx.batch in line][-1]
-        self.assertEqual(row.strip().strip("|").split("|")[2].strip(), "1")
+        self.assertEqual(1, self.record()["issues"])
 
     def test_the_per_role_and_per_spawn_tables_are_printed(self):
         _, text = self.read(["--batch", self.fx.batch,
@@ -455,3 +481,46 @@ class TheHuntRoad(unittest.TestCase):
         code = run_timings.main(["--batch", self.fx.batch,
                                  "--repo", str(self.fx.tree)])
         self.assertEqual(code, 0)
+
+
+class NoFigureIsEverBorrowedIntoTheRecord(unittest.TestCase):
+    """The fault `aa94b3b` fixed on the `--batch` path, held shut on every path.
+
+    Until 2026-09-06 `run_costs.py` scraped `Issues`, `Subagents`, `Weighted`,
+    `Orchestrator` and `Per issue` out of `orchestrator_cost.py --days 7`'s LAST
+    data row, whatever run that row described, and wrote them as the run's own.
+    Seventeen of the eighteen lines carried into `runs.jsonl` are marked
+    `borrowed` because of it.
+
+    `aa94b3b` fixed the `--batch` road by reading this batch rather than the
+    week. The `--run` road is still there -- `finale.md` keeps it "for a run
+    whose ledger is gone" -- and it still reads the week window. So the record
+    takes its figures from THIS batch's spawns or from nothing at all: a null
+    is a missing measurement, and a borrowed number is a wrong one that reads
+    exactly like a right one.
+    """
+
+    class FakeSession:
+        """Stands in for `run_session`. `issue_count` is the only call."""
+        def __init__(self, count):
+            self.count = count
+
+        def issue_count(self, spawns):
+            return self.count
+
+    def test_a_typed_count_wins(self):
+        self.assertEqual(9, run_costs.issues_for(9, self.FakeSession(3), ["a"]))
+
+    def test_the_count_otherwise_comes_from_this_batch_own_spawns(self):
+        self.assertEqual(3, run_costs.issues_for(0, self.FakeSession(3), ["a"]))
+
+    def test_with_no_spawns_the_count_is_null_and_not_borrowed(self):
+        """The whole point. With no spawns to read there is nothing to count,
+        and the week window is NOT consulted -- a null says "not measured" and
+        a borrowed number says nothing at all while looking like a figure."""
+        self.assertIsNone(run_costs.issues_for(0, self.FakeSession(3), []))
+
+    def test_a_zero_from_the_spawns_is_null_rather_than_zero(self):
+        """A run that shipped no issues and a run nobody could count are not
+        the same fact, and `Per issue` divides by this."""
+        self.assertIsNone(run_costs.issues_for(0, self.FakeSession(0), ["a"]))

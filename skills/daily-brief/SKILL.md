@@ -291,44 +291,86 @@ issue over 90 minutes. Then the branch head SHA, and one line for their answer.
 Name what the run could not tell them: issues that shipped on defaults, with the
 pending question each; anything blocked and why; anything minted.
 
-**Then the cost block, per repo holding a run at `awaiting-merge`.** Read
-`.scratch/workflow-audit/run-costs.md`, print this run's row and the row above it, and
-add one line naming which columns moved. That table is written by `run_costs.py` at
-every finale and says on its own face what it is for: compare a row against the row
-above it to read what a skill change or a version change did. Until 2026-09-01 nothing
-outside the `run-issues` skill opened it, so the finale printed the cost at line 1790 of
-a 1963-line briefing and the human never found it. A second print in the same document
-was never the fix; the comparison is.
+**Then the cost block, per repo holding a run at `awaiting-merge`.** One command,
+and it carries both the cost reading and the estimate reading:
 
-**Invent no alarm threshold.** Across the table's 13 rows the `Per issue` column ran
-0.96M to 2.45M, and consecutive runs swung by as much as 75 per cent (1.22M to 2.14M,
-both on 2026-08-23). A 25 per cent flag would fire on seven of the twelve transitions and
-teach them to ignore it. State the observed range beside the figure and let them judge,
-which is what the table was built for.
+```
+python3 ~/.claude/skills/run-issues/run_compare.py last --repo <repo>
+```
 
-Two columns are tighter and worth naming when they leave their range. `Orchestrator` has
-run 9 to 31 per cent across all 13 rows. `Idle` has **no baseline** — two readings, 12
-and 17 per cent — so say that plainly rather than reading a third as a trend.
+Print what it prints. It is the only reader of `.scratch/workflow-audit/runs.jsonl`
+(ticket 37, ruling 27): until 2026-09-06 the brief opened the markdown table itself
+and applied its own comparison rule, and two readers of one file disagree eventually.
 
-**Then the estimate reading, from the same merge briefing, and it is two lines.** The finale
-runs `estimate_accuracy.py`, which joins each issue's `Est` column to the span the transcript
-measured for it. Give the median ratio, the spread, and every issue that ran OVER its estimate
-with what it carried. Then one line saying how many runs now point the same way, because one
-run is not a sizing rule and the script's own output says so.
+**It compares a line against the previous line of the SAME KIND by finale time**
+(ruling 12), never against the line before it in the file. Ticket 38 puts two runs
+and a hunt in flight at once, so position in the file is not order of finishing, and
+a hunt is not a run. Do not reintroduce a positional rule.
 
-Routed here on the human's instruction of 2026-09-02. Before that it printed only into the merge
-briefing, and they assumed for a day that it reached them. It answers a question the cost table
-cannot: the cost table says what a run spent, and this says whether the scoping that produced
-the run was honest. They use it to size the next batch.
+**It says what it could NOT read, and that half matters more than the figures.**
+Seventeen of the eighteen lines carried over on 2026-09-06 are marked `borrowed`:
+before skills commit `aa94b3b` (2026-09-06, 00:49) `run_costs.py` did not measure
+the run it was reporting. It scraped `Issues`, `Subagents`, `Weighted`,
+`Orchestrator` and `Per issue` out of `orchestrator_cost.py --days 7`'s LAST data
+row, whatever run that row described. Only `Hours` and `Idle` were the run's own.
+The reader skips a marked line for a marked figure and prints the skip; repeat the
+skip to them rather than quietly giving them the four figures that survived.
 
-**Read its `attribution:` line before you quote any figure from it.** It says how many per-issue
-spawns it could attribute. Where it REFUSES with `unattributed-steps`, say so and give the
-figures anyway when it still graded every issue — but never quote a median without saying what
-it was computed over. A known cause of that refusal is the `force-serial-gates` sentinel sitting
-as the first line of a re-spawned gate's prompt, which leaves the step with no readable issue.
+**`Idle` and `Hours` survive intact**, because they never came from the borrowed
+row, and the mark names which five fields it covers rather than condemning the whole
+line. `Idle` has read 12, 17, 10 and 23 per cent, which is four readings and
+still not a trend. Say that rather than reading a fifth as one. The reader may
+print a RANGE over four readings and a range is not a trend: it says where the
+readings fell, never which way they are going.
 
-Five lines, two row pairs. This is not a fourth section, and the brief still has thirty
-minutes.
+**The mark is measured, not dated, and you can check it by hand.** Divide `Weighted`
+by `Per issue` and see whether it lands on the line's own `Issues`. On every affected
+line it divides to something between 85 and 114 and never to that cell, because a
+finale passing `--issues N` overrode the borrowed issue count while `Weighted` and
+`Per issue` stayed borrowed. Eighteen of the nineteen rows carried over fail that
+check; the one that passes is `batch-170a59`, the first line written after the
+repair.
+
+**So there is still no per-issue baseline, and you must not invent one.** The
+0.96M-to-2.45M range this section used to quote is a range of borrowed figures. Do
+not repeat it, do not average it, and do not compare a post-`aa94b3b` line against
+it. The same goes for the `Orchestrator` column's old 9-to-31 per cent band.
+
+**Invent no alarm threshold, with exactly one exception.** Ruling 14 allows a
+threshold on the cache read-to-write ratio and on nothing else; `run_compare.py`
+holds it and prints it, and there is nothing for you to add. Everything else is a
+figure, a direction and a range. Even inside the old borrowed numbers consecutive
+rows swung by as much as 75 per cent, so a 25 per cent flag would have fired on
+seven of twelve transitions and taught them to ignore it. Give them the figure
+and the honest-line count, and let them judge.
+
+**The figures are PER MODEL and a cell may hold more than one.** A weighted token
+on one model is not the same quantity as one on another, so never add them. To read
+a model trial, compare the same role across runs, which is what the merge briefing's
+own role table is for.
+
+**The estimate reading arrives in the same output**, as one of ruling 8's four
+direction lines. It is in the brief on the human's instruction of 2026-09-02: before
+that the finale printed it only into the merge briefing, and they assumed for a
+day that it reached them. It answers a question the cost figures cannot — they say what a
+run spent, and this says whether the scoping that produced the run was honest.
+They use it to size the next batch. Add from the merge briefing only what the reader
+cannot carry: every issue that ran OVER its estimate, with what it carried.
+
+**Read the briefing's `attribution:` line before you quote it.** It says how many
+per-issue spawns `estimate_accuracy.py` could attribute. Where it REFUSES with
+`unattributed-steps`, say so and give the figures anyway when it still graded every
+issue — but never quote a median without saying what it was computed over. A known
+cause of that refusal is the `force-serial-gates` sentinel sitting as the first line
+of a re-spawned gate's prompt, which leaves the step with no readable issue.
+
+**The one-look page is `.scratch/workflow-audit/run-costs.md`** (ruling 13): the
+per-run table, the per-issue table and the longest steps by kind. It is GENERATED
+from `runs.jsonl` and a hand edit to it is refused, so name it and let them open it;
+never read a figure out of it into the brief.
+
+One command's output plus the two lines it cannot carry. This is not a fourth
+section, and the brief still has thirty minutes.
 
 ### 1b. Promotions — one screen
 

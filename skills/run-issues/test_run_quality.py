@@ -671,7 +671,8 @@ class TheWholeCorpus(unittest.TestCase):
         if not CORPUS.is_dir():
             self.skipTest(f"{CORPUS} is not on this machine")
         self.ledgers = sorted(CORPUS.glob("archive-run-*.md")) + [
-            CORPUS / "runs" / "batch-b5e96d" / "run.md"]
+            CORPUS / "runs" / "batch-b5e96d" / "run.md",
+            CORPUS / "runs" / "batch-170a59" / "run.md"]
         self.rows = []
         for path in self.ledgers:
             if path.exists():
@@ -680,10 +681,36 @@ class TheWholeCorpus(unittest.TestCase):
                         encoding="utf-8", errors="replace")))
 
     def test_the_corpus_is_big_enough_to_be_a_net(self):
-        """Measured 2026-09-06: 17 files read, 16 holding a status table --
-        `archive-run-journal-batch-45c8b1.md` is a journal -- and 143 rows."""
-        self.assertGreaterEqual(len(self.ledgers), 16)
-        self.assertGreaterEqual(len(self.rows), 143)
+        """Measured 2026-09-06: 18 files read, 17 holding a status table --
+        `archive-run-journal-batch-45c8b1.md` is a journal -- and 149 rows.
+
+        `batch-170a59` was added by ticket 37 sitting 3, because it is the one
+        ledger on this machine that holds a SECOND table whose first cell can
+        pass for an issue id, and its absence is why sitting 4 never saw the
+        fault ruling 28 sends here.
+        """
+        self.assertGreaterEqual(len(self.ledgers), 17)
+        self.assertGreaterEqual(len(self.rows), 149)
+
+    def test_the_run_with_two_tables_reads_its_own_six_issues(self):
+        """Ticket 37, ruling 28's repair half, measured both ways.
+
+        Before the bound this returned TWELVE rows for a six-issue run: the
+        six issues, plus six rows of the carry-forward table of test counts at
+        `run.md:35-43`, which open `149c (-13, -3)`. The six phantoms read
+        `unread` and `not recorded`, so the totals stayed right and every rate
+        was computed over a denominator twice the truth.
+
+        The ledger's own status table is the independent source: it holds six
+        rows, one per slice, 149c to 149h.
+        """
+        path = CORPUS / "runs" / "batch-170a59" / "run.md"
+        if not path.exists():
+            self.skipTest("batch-170a59 is not on this machine")
+        rows = tool.issue_quality(path.read_text(encoding="utf-8"))
+        self.assertEqual([r.issue for r in rows],
+                         ["149c", "149d", "149e", "149f", "149g", "149h"])
+        self.assertEqual([r.first_attempt for r in rows].count(tool.UNREAD), 0)
 
     def test_almost_no_row_reads_unread(self):
         """Measured 2026-09-06: 2 of 143, both genuine.
@@ -829,3 +856,149 @@ class Cli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheRunnerMarker(unittest.TestCase):
+    """Ticket 37 ruling 28's second half: a fixed token per gate round.
+
+    Sitting 4 measured the limit and named the fix. Only `attempt N` and
+    `criteria reset` are markers; a gate's verdict and a strike are sentences,
+    and reading them cost SEVEN dialects across sixteen ledgers, every one of
+    them read as silence until a review found it. `check_attempt_cap.py` tells
+    the same story about itself: `implement`/`retry` could not be counted, so
+    `attempt N` was minted and the runner writes it.
+
+    The token is `gates <n>: verify=<pass|reject> review=<pass|reject>`. One
+    spelling, two fixed verdict words, no synonyms -- a minted marker that
+    accepted `accept` and `passed` too would be a seventh dialect rather than
+    an end to them.
+
+    **The reader PREFERS the token and keeps its prose reader**, because the
+    sixteen ledgers already written carry no token and ruling 3 loses no
+    history.
+    """
+
+    def row(self, notes, issue="700"):
+        return f"| Issue | Notes |\n|---|---|\n| {issue} | {notes} |\n"
+
+    def test_the_marker_is_read(self):
+        text = self.row("attempt 1; gates 1: verify=pass review=pass; "
+                        "committed `abc1234`")
+        self.assertEqual(quality_for("700", text).first_attempt, tool.PASS)
+
+    def test_a_rejection_in_the_marker_is_read(self):
+        text = self.row("attempt 1; gates 1: verify=pass review=reject")
+        self.assertEqual(quality_for("700", text).first_attempt, tool.REJECT)
+
+    def test_the_marker_wins_where_the_prose_disagrees_with_it(self):
+        """The whole point of preferring it. A round the gates rejected, in a
+        row whose prose also reasons about a pass elsewhere, must read the
+        token rather than whichever sentence the regex reached first."""
+        text = self.row("attempt 1; gates 1: verify=pass review=reject; "
+                        "the review gate would pass this on a rewrite")
+        self.assertEqual(quality_for("700", text).first_attempt, tool.REJECT)
+
+    def test_prose_still_reads_where_no_marker_was_written(self):
+        """Sixteen ledgers, 143 rows, none of them carrying a token."""
+        text = self.row("attempt 1 — verify: pass, review: accept")
+        self.assertEqual(quality_for("700", text).first_attempt, tool.PASS)
+
+    def test_a_strike_is_still_derived_from_the_marker(self):
+        """Ruling 28: strikes stay derived under either road. The token says
+        what the gates answered; it does not say whether a strike was charged,
+        because `SKILL.md` step 5's prose-deletion road and a runner-error
+        annulment both cancel one in prose."""
+        text = self.row("attempt 1; gates 1: verify=pass review=reject; "
+                        "attempt 2; gates 2: verify=pass review=pass")
+        row = quality_for("700", text)
+        self.assertEqual(row.strikes, 1)
+        self.assertEqual(row.attempts, 2)
+
+    def test_sitting_fours_star_survives_the_marker(self):
+        """Ruling 28 keeps the `*` on a row whose own words disagree with the
+        count, and it must fire on a marked row exactly as on a prose one."""
+        text = self.row("attempt 1; gates 1: verify=pass review=reject; "
+                        "a runner error, so this is not a strike")
+        row = quality_for("700", text)
+        self.assertEqual(row.strikes, 1)
+        self.assertTrue(row.flags)
+
+    def test_the_marker_is_counted_and_reported(self):
+        """`marked` is how the rate at which the token is actually written
+        becomes visible, rather than being assumed once it is minted."""
+        text = self.row("attempt 1; gates 1: verify=pass review=pass")
+        self.assertEqual(quality_for("700", text).marked, 1)
+
+    def test_an_unmarked_row_reports_no_marked_rounds(self):
+        text = self.row("attempt 1 — verify: pass, review: accept")
+        self.assertEqual(quality_for("700", text).marked, 0)
+
+
+class BothGateVerdicts(unittest.TestCase):
+    """Ticket 37 ruling 17 puts BOTH gate verdicts on the per-issue line.
+
+    `first_attempt` collapses them into one word, which is right for ruling
+    15's count and wrong for a line meant to answer "which gate rejects more
+    often". So the two are carried apart as well, for the FIRST attempt.
+
+    `v` and `r` are the shortest dialect in the corpus and mean the same two
+    gates. A verdict stated for the PAIR -- `both reject`, `rejected by BOTH
+    gates` -- is one statement about two gates, and it fills both cells,
+    because that is what it says. `unread` where a row states nothing.
+    """
+
+    def row(self, notes, issue="700"):
+        return f"| Issue | Notes |\n|---|---|\n| {issue} | {notes} |\n"
+
+    def test_a_split_verdict_is_carried_apart(self):
+        text = self.row("attempt 1; verify: pass; review: reject")
+        got = quality_for("700", text)
+        self.assertEqual(got.verify, tool.PASS)
+        self.assertEqual(got.review, tool.REJECT)
+
+    def test_the_short_dialect_names_the_same_two_gates(self):
+        text = self.row("attempt 1 · v: pass · r: reject")
+        got = quality_for("700", text)
+        self.assertEqual(got.verify, tool.PASS)
+        self.assertEqual(got.review, tool.REJECT)
+
+    def test_a_pair_verdict_fills_both(self):
+        text = self.row("attempt 1 — gates both reject 03:03/03:05")
+        got = quality_for("700", text)
+        self.assertEqual(got.verify, tool.REJECT)
+        self.assertEqual(got.review, tool.REJECT)
+
+    def test_the_minted_marker_is_preferred_here_too(self):
+        text = self.row("attempt 1; gates 1: verify=reject review=pass")
+        got = quality_for("700", text)
+        self.assertEqual(got.verify, tool.REJECT)
+        self.assertEqual(got.review, tool.PASS)
+
+    def test_a_gate_that_stated_nothing_reads_unread_not_pass(self):
+        """The rule the whole module carries: a hole is visible, never a
+        pass. A row naming one gate says nothing about the other."""
+        text = self.row("attempt 1; verify: pass")
+        got = quality_for("700", text)
+        self.assertEqual(got.verify, tool.PASS)
+        self.assertEqual(got.review, tool.UNREAD)
+
+    def test_only_the_first_attempt_is_read(self):
+        """Same rule as `first_attempt`: the figure is about attempt ONE, and
+        a later attempt neither repairs nor spoils it."""
+        text = self.row("attempt 1; verify: pass; review: reject; "
+                        "attempt 2; verify: pass; review: pass")
+        got = quality_for("700", text)
+        self.assertEqual(got.review, tool.REJECT)
+
+    def test_the_real_corpus_splits_the_gates_where_it_states_them(self):
+        """`batch-170a59` issue 149e: the review gate rejected attempt 1 and
+        the verify gate passed it. The ledger says so in its own words, and
+        this is the one figure a collapsed `first_attempt` cannot show."""
+        path = CORPUS / "runs" / "batch-170a59" / "run.md"
+        if not path.exists():
+            self.skipTest("batch-170a59 is not on this machine")
+        rows = {r.issue: r for r in
+                tool.issue_quality(path.read_text(encoding="utf-8"))}
+        self.assertEqual(rows["149e"].verify, tool.PASS)
+        self.assertEqual(rows["149e"].review, tool.REJECT)
+        self.assertEqual(rows["149c"].review, tool.PASS)

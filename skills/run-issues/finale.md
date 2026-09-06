@@ -83,6 +83,33 @@ resolves it — and the board render is safe to repeat:
    python3 ~/.claude/skills/run-issues/check_paste_file.py <every paste file this run wrote>
    ```
 
+   **Run the suite, the build and the citation pass under the step wrapper** (ticket
+   37 of the pilot-delivery map, ruling 19). It stamps start, end and exit code into
+   `runs/<batch-id>/steps.jsonl` and passes the command's own exit code straight
+   through, so a refusal still stops the finale exactly where it stopped before:
+
+   ```
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind suite --label "full suite" -- <the suite command>
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind build --label "cold-cache build" -- <the build command>
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind citation --label "citation pass" -- <the citation command>
+   ```
+
+   The five kinds are `citation`, `suite`, `build`, `board` and `cost`, and a sixth
+   spelling is REFUSED before the command runs, because a step stamped under a kind
+   nothing reads is left out of the longest-step-per-kind figure in silence.
+
+   **You never write a clock yourself** (ticket 36, ruling 3). That rule is the whole
+   reason this is a wrapper: a runner asked to record when a step started and ended
+   writes one time from the other, so the two agree by construction and the figure
+   measures nothing. It is the same fault rule 9 had, which `check_commit_order.py`
+   replaced for the same reason.
+
+   **A backgrounded Bash step leaves NO duration in the transcript**
+   (`run_timings.py:40-46`), so before this wrapper only agent steps were timed and
+   the mechanical half of a finale could not be measured at all. If the wrapper
+   cannot stamp, it says `NOT stamped` and the command still runs; it can never be
+   the reason a step fails.
+
    **`check_commit_order.py` prints two numbers and you read both**: how many
    status rows it READ, and how many of those carried a correction round. Its
    `ok` on nine rows and its `ok` on nothing are different sentences, and it
@@ -236,13 +263,54 @@ resolves it — and the board render is safe to repeat:
    Then run
 
    ```
-   python3 ~/.claude/skills/run-issues/run_costs.py --batch <batch-id> \
-       --version <cc-version> --note "<what changed since the last run>"
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind cost --label "run_costs" -- \
+       python3 ~/.claude/skills/run-issues/run_costs.py --batch <batch-id> \
+       --note "<what changed since the last line, at most 160 characters>"
    ```
 
-   Paste its whole output into `merge-briefing.md` under `## What this run cost`. It
-   appends one row to `.scratch/workflow-audit/run-costs.md`, which is the table the human
-   reads to compare one run against the one before it.
+   Paste its whole output into `merge-briefing.md` under `## What this run cost`.
+
+   **It appends one JSON line to `.scratch/workflow-audit/runs.jsonl` and regenerates
+   `.scratch/workflow-audit/run-costs.md` from it** (ticket 37 of the pilot-delivery
+   map, ruling 2). The view keeps its name, so every citation of it still reads, and
+   it is the page the human opens. Never edit that page: a hook refuses the write and
+   names this road, because a row typed there is gone at the next finale. To correct
+   a figure, edit the one JSON line and say why in the commit message.
+
+   **A second line for a batch id already present is REFUSED** (ruling 4, closing
+   ticket 36's fault 9). Run `review-375cbf` appended two rows for itself on
+   2026-09-01, four minutes and 0.9M weighted tokens apart, and nothing noticed. The
+   refusal is printed and the finale carries on; it never halts a run.
+
+   **Compare a line against the previous line of the same KIND** (ruling 12), never
+   the line above it. A hunt writes into the same file with `--kind hunt`.
+
+   **It now writes ruling 6's four inside-run counts, and a second file beside the
+   first.** Sitting 3 of ticket 37, 2026-09-06, repaired the reader ruling 28 named:
+   `check_commit_order.status_rows` accepted any table row on a ledger page whose
+   first cell held an issue id, so `batch-170a59` graded 12 rows for six issues --
+   right totals over a doubled denominator. It is now bounded to the table whose
+   header declares `issue`. **Do not type a figure into any of them**; every one is
+   measured, and a typed count is the fault that put `claude-opus-5` in a version
+   cell.
+
+   **`.scratch/workflow-audit/issues.jsonl` gets one line per issue** (ruling 17):
+   the estimate midpoint, span, agent minutes, attempts, correction rounds, strikes,
+   escalation, both gate verdicts, and ruling 20's five kind facts. A second write
+   for a batch already present is refused, for ruling 4's reason. A refusal there
+   costs the per-issue population of ONE run and halts nothing.
+
+   **A null is not a zero, and the difference is the whole discipline.** A run with
+   no strikes is a fact; a run whose strikes were never read is not, and they must
+   never read alike. Anything the script could not measure reads `not measured` on
+   the page.
+
+   **Do NOT pass `--version`.** The script measures it with `claude --version`
+   (ticket 37, ruling 10). This step used to ask you to type it, and on 2026-08-30 an
+   agent typed the MODEL: `claude-opus-5` is in the live table's version column to
+   this day. A value that is not a version is now refused outright, so typing one
+   costs the run its whole cost record rather than one wrong cell. The flag survives
+   for a hand reading of an old run, and nothing else.
 
    **`--batch` is this run's batch id, `batch-88624c` and the like.** It is the only
    argument the reading needs. The id names the ledger, the ledger's `Worktree:` line
@@ -709,10 +777,18 @@ resolves it — and the board render is safe to repeat:
    what it prints into the board:
 
    ```
-   python3 ~/.claude/skills/run-issues/draw_run_rail.py \
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind board --label "draw the rail" -- \
+       python3 ~/.claude/skills/run-issues/draw_run_rail.py \
        --briefing .scratch/<feature>/runs/<batch-id>/merge-briefing.md \
        --stages docs/agents/run-picture-stages.md
    ```
+
+   (The wrapper is ticket 37 ruling 19 and stamps this step's clock into
+   `steps.jsonl`. It prints nothing of its own on the success road and passes the
+   script's stdout and exit code straight through, so paste what it prints exactly as
+   before. **The board render's own SUBAGENT is not wrapped and needs no wrapping**:
+   it is an Agent spawn, so its clock is already in the transcript, and ruling 21
+   joins the two halves.)
 
    It prints four blocks, each with a comment saying where it goes: ten CSS tokens for
    `:root`, the same ten for the `@media (prefers-color-scheme: dark)` block, the
@@ -796,7 +872,7 @@ resolves it — and the board render is safe to repeat:
    refuses a board that finds some.
 
    **The pin is `opus`, ruled by the human on 2026-09-06.** It was `haiku`, then `fable`
-   when the board grew a run panel. His words: Fable is not needed for that simple job.
+   when the board grew a run panel. Their words: Fable is not needed for that simple job.
 
    Three facts settle it, and only one of them is about price.
 

@@ -18,6 +18,7 @@ only through the ledger the launch line writes.
 
 import importlib.util
 import os
+import sys
 import re
 import subprocess
 
@@ -416,7 +417,45 @@ def resolve_launch(command_text, session_model):
     if found:
         return "", [inversion_refusal(found)]
 
-    return header_lines(resolved, role_efforts(), session_model, typed), []
+    # Ticket 37, ruling 23: the launch also writes what the pipeline WAS.
+    # Additive to ruling 4's two lines, and after a refusal has been ruled out,
+    # so a refused launch still writes no header at all.
+    header = header_lines(resolved, role_efforts(), session_model, typed)
+    fingerprint = _fingerprint()
+    if fingerprint is not None:
+        header += "\n" + fingerprint.header_lines(fingerprint.measure())
+    return header, []
+
+
+def _fingerprint():
+    """`pipeline_fingerprint`, loaded by path, or None.
+
+    Loaded lazily and by path because the HOOKS load this file by path with the
+    skills directory NOT on `sys.path`, and they are a separate repository that
+    can sit at a different commit. A plain top-level import of a sibling throws
+    there, on every spawn on the machine -- the same fault ticket 37 sitting 1
+    met with `check_origin.py` and recorded.
+
+    None is a fail-open answer, and deliberately. No hook needs the
+    fingerprint: it is a launch-time reading. Ruling 23 says even a DIRTY tree
+    still runs, so a reading that is merely absent must stop even less.
+    """
+    import importlib.util
+    name = "pipeline_fingerprint"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")
+    if not os.path.isfile(path):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+    except Exception:
+        sys.modules.pop(name, None)
+        return None
 
 
 MODEL_ARG = re.compile(r"--model[=\s]+(\S+)")
@@ -444,7 +483,6 @@ def session_model_from_process(pid=None):
 
 def main(argv=None):
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(
         description="Resolve a run or hunt's model map and print the ledger header.")
@@ -477,3 +515,146 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# --------------------------------------------------------------------------
+# Ticket 37, ruling 9: the per-run line's second model cell.
+# --------------------------------------------------------------------------
+
+NOT_STATED = "not stated"
+
+
+def short_model(model):
+    """`claude-opus-5` -> `opus`. The tier name, which is what a reader
+    compares; the ledger keeps the full id and the per-role table proves it."""
+    return tier_name(model) or model
+
+
+def worker_cell(models, efforts):
+    """The worker map in shortest form, `role=model/effort` (ruling 9).
+
+    Shortest form is not an abbreviation for its own sake. The full twelve-role
+    map is 220 characters and would push every column after it off the page of
+    a markdown table a person scans. It is also NOT lossy: every role is named
+    by `all`, by its group, or by itself, so a role's tier can always be read
+    off the cell.
+    """
+    if not models:
+        return NOT_STATED
+
+    pairs = {role: (short_model(models.get(role, "")), efforts.get(role, ""))
+             for role in ROLES if role in models}
+    if not pairs:
+        return NOT_STATED
+
+    def render(value):
+        model, effort = value
+        return f"{model}/{effort}" if effort else model
+
+    distinct = set(pairs.values())
+    if len(distinct) == 1 and len(pairs) == len(ROLES):
+        return f"all={render(next(iter(distinct)))}"
+
+    # Name a group where every one of its roles agrees and the group is not a
+    # single role; name the rest individually. `finale` and `promotion` are in
+    # no group by ticket 39 sitting 1's ruling, so they always name themselves.
+    named, taken = [], set()
+    for group in ("workers", "gates"):
+        roles = [role for role in GROUPS[group] if role in pairs]
+        if len(roles) < 2:
+            continue
+        values = {pairs[role] for role in roles}
+        if len(values) == 1:
+            named.append(f"{group}={render(values.pop())}")
+            taken.update(roles)
+    for role in ROLES:
+        if role in pairs and role not in taken:
+            named.append(f"{role}={render(pairs[role])}")
+    return " ".join(named)
+
+
+# The ledger's own two session lines, written by `SKILL.md` step 1 (see
+# `SKILL.md:128`). Both are measured off the process command line at launch,
+# which is what ruling 9 asks the orchestrator cell to carry.
+# **These anchored on `\s*$` until ticket 37 sitting 5, and read 3 of the 22
+# ledgers on this machine.** A bold marker or any trailing word made the line
+# invisible, so ruling 9's first model cell wrote `not stated` onto runs whose
+# ledger states the model plainly. Four dialects are real and measured:
+#
+#     Session model at launch: claude-opus-5
+#     Session model at launch: **claude-opus-5** (measured from the process ...)
+#     Session model at launch: claude-opus-5   (read from `ps -o args= ...`)
+#     Session model at launch: **Opus 5**.
+#
+# The first three are read. The fourth is NOT, and that is the point of
+# `MODEL_ID` below: `Opus 5` is a display name, and writing it into the model
+# cell would give one model two spellings that nothing downstream can group.
+# `tier_name` would have accepted it -- `"opus" in "opus 5"` -- which is why
+# this uses the id shape and not the tier.
+#
+# **`[^\S\n]` and not `\s`.** `\s` matches a newline, so a line reading
+# `Session model at launch:` with nothing after it captured the first word of
+# the NEXT line: a ledger with an empty model line above `claude-opus-5 was
+# chosen later` reported `claude-opus-5/high` with confidence, for a run whose
+# ledger stated nothing. Found by the `/code-review` pass of 2026-09-06. The
+# value has to sit on the line that names it.
+_GAP = r"[^\S\n]*"
+SESSION_MODEL = re.compile(
+    r"^Session model at launch:" + _GAP + r"\**" + _GAP
+    + r"(?P<value>[^\s*`]+)", re.MULTILINE)
+SESSION_EFFORT = re.compile(
+    r"^Session effort at launch:" + _GAP + r"\**" + _GAP
+    + r"(?P<value>[^\s*`]+)", re.MULTILINE)
+
+# The shape the process command line carries, which is where both cells come
+# from. Trailing sentence punctuation is stripped before this is applied.
+MODEL_ID = re.compile(r"^claude-[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+# The efforts this pipeline states. A word outside the set is not an effort,
+# and a cell reading `claude-opus-5/(measured` would be worse than one reading
+# the model alone.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _token(match):
+    """The captured word with sentence punctuation off, or "" for no match."""
+    if not match:
+        return ""
+    return match.group("value").strip().rstrip(".,;:)")
+
+EFFORT_MAP_LINE = re.compile(
+    r"^" + re.escape(EFFORT_LABEL) + r"\s*`([^`]*)`", re.MULTILINE)
+
+
+def ledger_efforts(text):
+    """The ledger's per-role effort map, or `{}`.
+
+    Unlike `ledger_map` this has no three-answer contract: nothing refuses on an
+    effort, because the Agent tool has no effort field and ruling 7 records it
+    rather than setting it. So an absent line and a damaged one are the same
+    answer here, which is why this is a separate function and not a flag on
+    `ledger_map`.
+    """
+    match = EFFORT_MAP_LINE.search(text or "")
+    if not match:
+        return {}
+    found = {}
+    for word in match.group(1).split():
+        role, _, effort = word.partition("=")
+        if role in ROLES and effort:
+            found[role] = effort
+    return found
+
+
+def orchestrator_cell(text):
+    """The first model cell: the orchestrator's own model and effort (ruling 9).
+
+    Both are read from the ledger, which took them off the process command line
+    at launch. A session cannot read its own model from its context, so this is
+    the only measured road there is.
+    """
+    model = _token(SESSION_MODEL.search(text or ""))
+    if not MODEL_ID.match(model):
+        return NOT_STATED
+    effort = _token(SESSION_EFFORT.search(text or ""))
+    return f"{model}/{effort}" if effort in EFFORTS else model

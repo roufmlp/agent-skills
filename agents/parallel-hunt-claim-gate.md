@@ -46,7 +46,11 @@ them is the cheapest proof the colour belongs to your change. (Adopted by the hu
 
 **Then check the row itself.** `owner-notes` may hold a status word and a link to
 `bugs/<ID>.md`, and nothing else, inside 200 characters; `audience` must read
-`operator`, `tester` or `agent`. A row breaking either is refused — say so in your
+`operator`, `tester` or `agent`; `origin` must name the issue and the run that
+shipped the code, written `<issue>/<run>`, with `unknown` legal for either half
+(ticket 37, ruling 7 -- run `python3 ~/.claude/skills/run-issues/check_origin.py
+--register <the register path>` rather than reading it by eye). A row breaking any
+of the three is refused — say so in your
 verdict and leave the entry at `candidate` for the finder's successor to rewrite.
 Prose in that cell is what made an earlier register 65% unreadable weight, and no
 agent is allowed to read a verdict there anyway.

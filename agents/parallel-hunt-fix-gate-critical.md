@@ -64,7 +64,8 @@ or a URL.
 **Ask what else shares this cause.** A critical bug is rarely alone. If the
 diagnosed cause could produce the same failure elsewhere in the system, say where,
 and add those as new register candidates, each with `audience` `operator` or
-`tester` and its own severity — a finding only an agent can see goes in your bug
+`tester`, its own severity, and an `origin` naming the issue and the run that
+shipped the code, written `<issue>/<run>` (ticket 37, ruling 7) — a finding only an agent can see goes in your bug
 file, never the register (gates stopped writing `agent` rows, ruled 2026-08-29).
 The fix in front of you is verified on its own merits, but the class
 deserves a hunt. Register rows, never issue files: promotion is the only door into

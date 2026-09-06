@@ -320,3 +320,61 @@ class Main(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class RolesPerIssue(unittest.TestCase):
+    """Ticket 37 ruling 6's fourth count, and ruling 20's third kind fact.
+
+    Escalations and the critical review variant are both readable straight off
+    the transcripts BY ROLE NAME, and neither was read anywhere until sitting
+    3. The walk that attributes a spawn to an issue already exists here, so it
+    records the role rather than growing a second walk beside it -- the drift
+    `journal_for` taught ticket 39 in sitting 2 and `read_transcript` in
+    sitting 3.
+
+    Reading it from the transcript rather than from the ledger is ticket 39
+    ruling 21.3's proof rule: the ledger records what was asked for.
+    """
+
+    ROWS = [
+        ("2026-08-30T10:00:00Z", "2026-08-30T10:30:00Z",
+         "run-issues-implementer", "Implement issue **483**, attempt 1"),
+        ("2026-08-30T10:40:00Z", "2026-08-30T11:00:00Z",
+         "run-issues-review-gate-critical",
+         "Review gate for issue **483**, attempt 1"),
+        ("2026-08-30T11:10:00Z", "2026-08-30T12:00:00Z",
+         "run-issues-implementer-escalated",
+         "Implement issue **483**, attempt 3"),
+        ("2026-08-30T12:10:00Z", "2026-08-30T12:30:00Z",
+         "run-issues-implementer", "Implement issue **484**, attempt 1"),
+    ]
+
+    def spans(self):
+        path = transcript(self.ROWS)
+        try:
+            return tool.actuals(path)[0]
+        finally:
+            os.remove(path)
+
+    def test_an_escalated_spawn_is_recorded_against_its_issue(self):
+        self.assertIn("run-issues-implementer-escalated",
+                      self.spans()["483"]["roles"])
+
+    def test_an_issue_that_never_escalated_says_so(self):
+        self.assertNotIn("run-issues-implementer-escalated",
+                         self.spans()["484"]["roles"])
+
+    def test_the_critical_review_variant_is_recorded_against_its_issue(self):
+        self.assertIn("run-issues-review-gate-critical",
+                      self.spans()["483"]["roles"])
+
+    def test_an_issue_whose_review_was_not_critical_says_so(self):
+        self.assertNotIn("run-issues-review-gate-critical",
+                         self.spans()["484"]["roles"])
+
+    def test_the_roles_do_not_disturb_the_figures_already_read(self):
+        """`actuals` has three callers' worth of named keys. Adding a fourth
+        is additive only if the other three still read what they read."""
+        got = self.spans()["484"]
+        self.assertEqual(got["steps"], 1)
+        self.assertAlmostEqual(got["agent"], 20.0)

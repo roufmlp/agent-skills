@@ -54,7 +54,21 @@ real:
    unless the project's test layout puts it elsewhere — named by `<ID>`, that fails
    for the reason you claim, not incidentally.
 3. Add a register row with status `candidate`:
-   `ID | one-line summary | audience | severity | status | owner-notes`.
+   `ID | one-line summary | audience | severity | status | origin | owner-notes`.
+   - **`origin` names where the fault came from: the issue and the run that
+     shipped the code it is in, written `<issue>/<run>`.**
+     For you that is the issue whose work put the fault there, and the run that
+     merged it; `git log -L` on the line names both where the sweep group does
+     not. Use `unknown` for a half you cannot establish, never the issue you
+     happen to be standing in.
+     It is the only field that makes an escaped fault countable, and nothing
+     else in the record carries it -- the fact is written today as a sentence
+     inside `owner-notes`, where nothing can read it. Where you genuinely do
+     not know a half, write `unknown` in its place (`unknown/batch-170a59`),
+     or `unknown` alone for neither: it is legal, it is counted, and it is
+     worth more than a guess. `origin-row-guard.py` refuses a row without it,
+     and refuses a table that declares no `origin` column at all. (Ticket 37
+     of the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
    - **`audience`** is `operator`, `tester` or `agent` — who can see this fault at
      all. Promotion decides on this field, so it is not a formality. `agent` means
      nobody outside the loop would ever meet it.

@@ -6,8 +6,12 @@ The corpus is the shape a writer files: a markdown table whose header names a
 
 import importlib.util
 import os
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# The module under test imports `empty_input` from beside it. As a script that
+# is sys.path[0]; imported here it is not, unless this says so.
+sys.path.insert(0, HERE)
 spec = importlib.util.spec_from_file_location(
     "check_register_status", os.path.join(HERE, "check_register_status.py"))
 mod = importlib.util.module_from_spec(spec)
@@ -24,7 +28,13 @@ def row(rid, status, notes):
 
 
 def faults(text):
-    return mod.faults(text)
+    """The offences alone. `mod.faults` returns `(offences, graded)` since the
+    empty-input refusal of 2026-09-06; the count has its own cases at the end."""
+    return mod.faults(text)[0]
+
+
+def graded(text):
+    return mod.faults(text)[1]
 
 
 def test_a_clean_table_reports_nothing():
@@ -127,3 +137,58 @@ def test_an_audience_word_in_the_status_cell_is_still_refused():
     for word in ("operator", "agent", "tester", "medium", "low"):
         found = faults(HEADER + row("a-01", word, ""))
         assert len(found) == 1, word
+
+
+# --- The empty-input refusal, ruled by the human 2026-09-06 (ruling 6) -----------
+#
+# The class: a checker that parses nothing prints the same bytes as a checker
+# that passed. `check_commit_order.py` did it six times on run `batch-170a59`.
+# Here the vacuous pass was "every status cell reads a legal word" over zero
+# cells, and promotion calls this before it resolves a row.
+
+def test_a_clean_table_reports_how_many_rows_it_graded():
+    text = HEADER + row("a-01", "candidate", "") + row("a-02", "open", "")
+    assert graded(text) == 2
+
+
+def test_a_file_with_no_status_column_grades_nothing():
+    # The denominator that used to be discarded. Same corpus as
+    # test_a_table_with_no_status_column_is_skipped, read for its count.
+    text = (
+        "| id | what | audience |\n"
+        "|---|---|---|\n"
+        "| a-01 | something | operator |\n"
+    )
+    assert faults(text) == []
+    assert graded(text) == 0
+
+
+def test_prose_alone_grades_nothing():
+    assert graded("# a register\n\nno tables at all.\n") == 0
+
+
+def test_zero_graded_rows_exits_non_zero_and_names_the_shape(tmp_path, capsys):
+    path = tmp_path / "not-a-register.md"
+    path.write_text("# a register\n\nno tables at all.\n")
+    assert mod.main([str(path)]) == mod.empty_input.EXIT_EMPTY
+    err = capsys.readouterr().err
+    assert "REFUSED empty-input" in err
+    # It NAMES what it could not parse. "no rows" would not do.
+    assert "row under a `status` column" in err
+    assert "NOT a pass" in err
+
+
+def test_a_graded_file_still_exits_zero_and_says_the_count(tmp_path, capsys):
+    path = tmp_path / "register.md"
+    path.write_text(HEADER + row("a-01", "candidate", "") + row("a-02", "fixed", ""))
+    assert mod.main([str(path)]) == 0
+    assert "2 row(s) graded" in capsys.readouterr().out
+
+
+def test_a_file_with_faults_is_refused_as_faults_not_as_empty(tmp_path, capsys):
+    # Order matters: a file that produced offences is read, so it may never also
+    # be called unparseable. Exit 1, not EXIT_EMPTY.
+    path = tmp_path / "register.md"
+    path.write_text(HEADER + row("a-01", "nearly", ""))
+    assert mod.main([str(path)]) == 1
+    assert "REFUSED empty-input" not in capsys.readouterr().err

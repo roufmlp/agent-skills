@@ -80,8 +80,10 @@ in the bug file.
 **Scope.** Fix what the entry describes. Do not refactor around it, do not tidy
 neighbouring code, do not add error handling for cases that cannot occur. If you
 spot something else broken, add it to the register as a new `candidate`, carrying an
-`audience` of `operator`, `tester` or `agent`, a severity, and the same capped
-`owner-notes`. **You never write an issue file.** Findings leave this loop through
+`audience` of `operator`, `tester` or `agent`, a severity, the same capped
+`owner-notes`, and an `origin` -- the issue and the run that shipped the code the
+fault is in, written `<issue>/<run>`, with `unknown` for a half you cannot
+establish. `origin-row-guard.py` refuses a row without it (ticket 37, ruling 7). **You never write an issue file.** Findings leave this loop through
 promotion at round end, and through nothing else.
 
 **Ground every claim.** Before marking anything `fix-ready`, check it against a

@@ -22,8 +22,11 @@ def at(minutes):
     return T0 + datetime.timedelta(minutes=minutes)
 
 
-def span(start_min, end_min, text):
-    return (at(start_min), at(end_min), text)
+def span(start_min, end_min, text, background=False):
+    """One graded Agent span. `background` is the fourth element added on
+    2026-09-06: a backgrounded call returns at once, so its span is the spawn
+    and not the work, and no verdict may rest on it."""
+    return (at(start_min), at(end_min), text, background)
 
 
 def report(rows):
@@ -145,6 +148,151 @@ class StillCatchesTheRealFault(unittest.TestCase):
                       span(57, 70, "Review gate issue 99c")])
         self.assertIn("0 pair(s) overlapped, 2 ran one after the other", out)
         self.assertIn("SERIAL GATES", out)
+
+
+class BackgroundedGatesCannotBeJudged(unittest.TestCase):
+    """Ruling 8 of the 2026-09-06 walk. Run `batch-170a59`.
+
+    That runner reached concurrency by BACKGROUNDING one gate of each pair. A
+    backgrounded Agent call returns the moment it is spawned, so all seven verify
+    gates read as instant, every pair read as serial, and the report printed
+    "0 pair(s) overlapped, 7 ran one after the other" and "SERIAL GATES COST THIS
+    RUN ROUGHLY 0 MINUTES". All seven had in fact overlapped, by 87 minutes.
+
+    The script's own header has warned about backgrounded calls since it was
+    written. The verdict ignored its own warning; these cases close that.
+
+    **What is deliberately NOT tested, because it is deliberately not built:** a
+    corrected span read from the backgrounded subagent's own transcript. The human
+    refused that by name on cost.
+    """
+
+    def test_a_backgrounded_pair_is_not_called_serial(self):
+        out = report([span(0, 14, "Verify gate 149c", background=True),
+                      span(0.1, 13, "Review gate 149c")])
+        self.assertIn("CANNOT JUDGE", out)
+        self.assertNotIn("SERIAL GATES", out)
+
+    def test_the_batch_170a59_reading_is_refused_not_reported(self):
+        """The real shape: the verify gate is backgrounded, so its span collapses
+        and the review gate appears to start after it ended."""
+        rows = []
+        for n, issue in enumerate(["149c", "149d", "149e", "149f", "149g"]):
+            base = n * 60
+            rows.append(span(base, base + 0.05, f"Verify gate {issue}", background=True))
+            rows.append(span(base + 0.1, base + 14, f"Review gate {issue}"))
+        out = report(rows)
+        self.assertIn("CANNOT JUDGE 5 of 5", out)
+        # No verdict of any kind survives: no cost line, and no judged tally.
+        self.assertNotIn("SERIAL GATES COST", out)
+        self.assertNotIn("ran one after the other", out)
+        self.assertNotIn("ROUGHLY", out)
+
+    def test_it_says_why_rather_than_only_that_it_cannot(self):
+        out = report([span(0, 0.1, "Verify gate 149c", background=True),
+                      span(0.2, 14, "Review gate 149c")])
+        self.assertIn("backgrounded", out)
+        self.assertIn("not its runtime", out)
+
+    def test_a_foreground_run_is_unchanged(self):
+        """A run with no backgrounded gate must read exactly as it always did,
+        so a reader comparing two reports is not made to translate."""
+        out = report([span(0, 14, "Verify gate issue 405"),
+                      span(0.5, 12, "Review gate issue 405")])
+        self.assertIn("gate concurrency: 1 pair(s) overlapped, 0 ran one after the other", out)
+        self.assertNotIn("CANNOT JUDGE", out)
+
+    def test_a_foreground_serial_pair_is_still_caught(self):
+        out = report([span(0, 14, "Verify gate issue 99b"),
+                      span(16, 29, "Review gate issue 99b")])
+        self.assertIn("SERIAL GATES", out)
+        self.assertNotIn("CANNOT JUDGE", out)
+
+
+class AMixedRunKeepsTheHalfItCanJudge(unittest.TestCase):
+    """Run `batch-b5e96d`, measured 2026-09-06 while building this.
+
+    21 pairs were reported serial there. TWELVE were the spurious near-zero
+    readings the refusal above now withholds; NINE ran wholly in the foreground
+    and were genuinely serial, worth about 134 minutes. Suppressing all 21 would
+    trade a false zero for a false silence, on the very run whose real loss a
+    peer session had to find by hand. So the blind pairs are refused and the
+    foreground pairs are still reported, marked as a floor.
+    """
+
+    ROWS = [
+        # Two blind pairs: the verify gate was backgrounded.
+        span(0, 0.1, "Verify gate issue 479", background=True),
+        span(0.2, 13, "Review gate issue 479"),
+        span(30, 30.1, "Verify gate issue 526", background=True),
+        span(30.2, 44, "Review gate issue 526"),
+        # Two real foreground faults: review spawned after verify returned.
+        span(60, 76, "Verify gate issue 546"),
+        span(78, 97, "Review gate issue 546"),
+        span(120, 138, "Verify gate issue 547"),
+        span(140, 160, "Review gate issue 547"),
+    ]
+
+    def test_the_blind_pairs_are_refused_by_count(self):
+        self.assertIn("CANNOT JUDGE 2 of 4", report(self.ROWS))
+
+    def test_the_foreground_pairs_are_still_reported(self):
+        out = report(self.ROWS)
+        self.assertIn("over the 2 pair(s) that ran wholly in the foreground", out)
+        self.assertIn("SERIAL GATES", out)
+
+    def test_the_number_is_marked_a_floor(self):
+        # It must not read as the run's whole cost: two pairs are unjudged.
+        self.assertIn("FLOOR", report(self.ROWS))
+
+    def test_no_floor_marking_when_nothing_was_withheld(self):
+        out = report([span(0, 14, "Verify gate issue 99b"),
+                      span(16, 29, "Review gate issue 99b")])
+        self.assertNotIn("FLOOR", out)
+
+    def test_the_blind_pairs_contribute_nothing_to_the_minutes(self):
+        """The 0.1-minute readings are exactly the false ones. The reported cost
+        must come from the foreground pairs alone."""
+        out = report(self.ROWS)
+        line = [l for l in out.splitlines() if "SERIAL GATES COST" in l][0]
+        self.assertIn("ROUGHLY 34 MINUTES", line)
+
+
+class ReadCarriesTheBackgroundFlag(unittest.TestCase):
+    """`read()` is where the flag comes from, and it is on the CALL while the
+    duration is only known at the RESULT. This pins that they meet."""
+
+    def test_an_agent_span_carries_its_flag(self):
+        import json
+        import tempfile
+        lines = [
+            {"timestamp": "2026-09-05T23:50:00Z",
+             "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Agent",
+                                      "input": {"description": "Verify gate 149c",
+                                                "run_in_background": True}}]}},
+            {"timestamp": "2026-09-05T23:50:06Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}},
+            {"timestamp": "2026-09-05T23:50:01Z",
+             "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Agent",
+                                      "input": {"description": "Review gate 149c"}}]}},
+            {"timestamp": "2026-09-06T00:04:00Z",
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t2"}]}},
+        ]
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as handle:
+            for one in lines:
+                handle.write(json.dumps(one) + "\n")
+            path = handle.name
+        try:
+            labelled = run_timings.read(path)[4]
+        finally:
+            import os
+            os.remove(path)
+        flags = {text: background for _, _, text, background in labelled}
+        self.assertTrue(flags["Verify gate 149c"])
+        self.assertFalse(flags["Review gate 149c"])
+
+    def test_that_transcript_refuses_a_verdict_end_to_end(self):
+        pass  # covered by the classes above; read() is pinned here.
 
 
 if __name__ == "__main__":

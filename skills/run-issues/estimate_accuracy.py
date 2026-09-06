@@ -174,16 +174,27 @@ def issue_of(prompt: str) -> str | None:
 
 
 def actuals(path: pathlib.Path) -> tuple[dict[str, dict], list[str]]:
-    """Per issue: the wall-clock span it occupied, and the sum of its steps.
+    """Per issue: the wall-clock span it occupied, its steps, and its roles.
 
     Returns that map and a list of the heading lines of every per-issue spawn
     this could NOT attribute. The second value is the census that makes a
     silent loss impossible: 30 spawns went into run `batch-88624c` and 18 of
     them came out booked to the wrong issue, and nothing said so.
+
+    **`roles` is ticket 37 sitting 3, and it is read HERE rather than beside
+    this.** Ruling 6's fourth count is escalations and ruling 20's third kind
+    fact is whether the critical review variant ran; both are readable straight
+    off the transcripts by role name, and neither was read anywhere until that
+    sitting. This walk already attributes a spawn to an issue, so it records
+    the role too. A second walk beside it is the drift `journal_for` taught
+    ticket 39 in sitting 2 and `read_transcript` in sitting 3.
+
+    Reading a role from the transcript rather than from the ledger is ticket 39
+    ruling 21.3's proof rule: the ledger records what was ASKED for.
     """
     spans: dict[str, dict] = {}
     orphans: list[str] = []
-    open_calls: dict[str, tuple[str, str]] = {}
+    open_calls: dict[str, tuple[str, str, str]] = {}
     with open(path, errors="replace") as handle:
         for line in handle:
             try:
@@ -199,14 +210,16 @@ def actuals(path: pathlib.Path) -> tuple[dict[str, dict], list[str]]:
                     continue
                 if block.get("type") == "tool_use" and block.get("name") in ("Task", "Agent"):
                     given = block.get("input") or {}
-                    if str(given.get("subagent_type") or "") not in PER_ISSUE:
+                    role = str(given.get("subagent_type") or "")
+                    if role not in PER_ISSUE:
                         continue  # A run-wide role. It belongs to no single issue.
-                    open_calls[block.get("id")] = (when, str(given.get("prompt") or ""))
+                    open_calls[block.get("id")] = (
+                        when, str(given.get("prompt") or ""), role)
                 elif block.get("type") == "tool_result":
                     got = open_calls.pop(block.get("tool_use_id"), None)
                     if not got:
                         continue
-                    started, prompt = got
+                    started, prompt, role = got
                     issue = issue_of(prompt)
                     if not issue:
                         head = next((l.strip() for l in prompt.splitlines() if l.strip()), "")
@@ -217,12 +230,15 @@ def actuals(path: pathlib.Path) -> tuple[dict[str, dict], list[str]]:
                     except ValueError:
                         continue
                     row = spans.setdefault(
-                        issue, {"first": begin, "last": end, "agent": 0.0, "steps": 0}
+                        issue,
+                        {"first": begin, "last": end, "agent": 0.0,
+                         "steps": 0, "roles": set()},
                     )
                     row["first"] = min(row["first"], begin)
                     row["last"] = max(row["last"], end)
                     row["agent"] += (end - begin).total_seconds() / 60
                     row["steps"] += 1
+                    row["roles"].add(role)
     return spans, orphans
 
 

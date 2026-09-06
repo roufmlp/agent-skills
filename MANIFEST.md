@@ -49,7 +49,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/draw_run_rail.py` | `~/.claude/skills/run-issues/draw_run_rail.py` (draws the rail as SVG from that block; the only road to it) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (17 files, 423 cases, grading the skill text and its scripts) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (31 files, 1,295 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -170,18 +170,28 @@ for them.** That is the whole reason `hooks/README.md` exists: it carries the ex
 who copies the file and skips the block still loses. Publish no hook without a line in
 it.
 
-**Two of the four published hooks ship no test, because neither has one.** Re-measured
-2026-09-03, correcting a line that still counted three hooks two days after
-`retired-phrases-gate.py` got its row above. Of the four hooks published here,
-`run-issues-evidence-gate.py` and `retired-phrases-gate.py` carry a test each.
-`run-issues-foreground-gate.py` and `coderules-gate.py` have none anywhere in the live
-tree: its eight `test_*.py` files cover `machine-preflight.py`,
-`worktree-register-guard.py`, `worktree-snapshot-notice.py`, the `settings.json` `env`
-block, the evidence gate, the retired-phrases gate, and the two hooks withheld below,
-and not one of them imports either untested hook published here. Every other script in
-this pack ships its tests beside it. Those two do not. That is a gap in the live tree,
-not a scrub decision, and it is written here rather than left for a reader to discover
-by grepping.
+**Two of the five published hooks ship no test, because neither has one.** Re-measured
+2026-09-07, when `origin-row-guard.py` became the fifth; the line before it counted four
+hooks and eight live test files, and both figures had moved. Of the five hooks published
+here, `run-issues-evidence-gate.py`, `retired-phrases-gate.py` and `origin-row-guard.py`
+carry a test each. `run-issues-foreground-gate.py` and `coderules-gate.py` have none
+anywhere in the live tree: its fourteen `test_*.py` files cover `machine-preflight.py`,
+`worktree-snapshot-notice.py`, the `settings.json` `env` block, those three tested hooks,
+and the eight hooks withheld below. Two of them NAME `run-issues-foreground-gate.py` —
+`test_settings_env.py` checks that it is registered, and `test_model_landed_check.py`
+mentions it in a docstring — and neither imports it or drives a payload through it, so
+its behaviour is still ungraded. Every other script in this pack ships its tests beside
+it. Those two do not. That is a gap in the live tree, not a scrub decision, and it is
+written here rather than left for a reader to discover by grepping.
+
+**`origin-row-guard.py` ships with one road switched off, and the reason is a withheld
+file rather than a scrub of its own.** Its Bash branch resolves a redirect target with
+`generated-file-guard.py`'s `bash_targets` parser, and that file is withheld below. The
+published guard therefore passes every Bash write, judges Edit and Write in full, says so
+in its own docstring and in `hooks/README.md`, and its two Bash test classes skip
+themselves when the parser is absent rather than failing — five skips is the pass here.
+Publishing `generated-file-guard.py` would switch the road on with no change to either
+file, and that is a decision for a later sync, not a scrub.
 
 **Six hooks arrived in the 2026-09-06 sync and none of them shipped. They are held
 back on the rule that already withheld the two below, not on a new judgement.** Three

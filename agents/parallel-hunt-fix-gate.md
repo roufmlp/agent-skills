@@ -53,8 +53,11 @@ be quietly retuned into a passing one.
 
 **Check the row as well as the diff.** `owner-notes` may hold a status word and a
 link to `bugs/<ID>.md`, and nothing else, inside 200 characters; `audience` must
-read `operator`, `tester` or `agent`. A row breaking either goes back to `in-fix`
-with that as the reason. Promotion decides on `audience` at round end, so a row
+read `operator`, `tester` or `agent`; `origin` must name the issue and the run that
+shipped the code, written `<issue>/<run>`, with `unknown` legal for either half
+(ticket 37, ruling 7 -- run `python3 ~/.claude/skills/run-issues/check_origin.py
+--register <the register path>` rather than reading it by eye). A row breaking any
+of the three goes back to `in-fix` with that as the reason. Promotion decides on `audience` at round end, so a row
 without one cannot be resolved.
 
 Check the diff against the repo's coderules: no bypassed controls, no invented or
