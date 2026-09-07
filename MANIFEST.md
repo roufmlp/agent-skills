@@ -15,6 +15,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |
 | `skills/run-issues/resume.md` | `~/.claude/skills/run-issues/resume.md` |
+| `skills/run-issues/launch-harden.md` | `~/.claude/skills/run-issues/launch-harden.md` (the hardening phase a run reads at launch when a named issue in its scope carries no `Hardened:` stamp; off the common path, like `finale.md` and `resume.md`) |
 | `skills/run-issues/check_attempt_cap.py` | `~/.claude/skills/run-issues/check_attempt_cap.py` |
 | `skills/run-issues/check_finale_stage.py` | `~/.claude/skills/run-issues/check_finale_stage.py` |
 | `skills/run-issues/check_diff_coverage.py` | `~/.claude/skills/run-issues/check_diff_coverage.py` |
@@ -269,6 +270,17 @@ trees: a live file no row names (`unlisted`), a row whose live source has gone
 It reads presence only, never content. The two copies differ by design — the scrub
 rules rewrite names, paths and run ids on every sync — so a content check would alarm
 on every file for ever and be switched off within a day.
+
+**Two rows read `dead-publication` today, and both are deliberate.**
+`hooks/test_run_issues_foreground_gate.py` has waited since 2026-09-07 for a sync to
+copy it. `skills/run-issues/launch-harden.md` joins it: the file landed live on
+2026-09-07 with ticket 33 sitting 2, and publishing it alone would put a phase file
+in the pack that nothing points at — the published `run-issues/SKILL.md` predates
+the paragraph that names it and still carries the `Report, never repair` citation
+bullet the same sitting split in two. Both wait for the next real sync, which is
+four live commits' worth of drift across all three checkouts and is a sitting of its
+own. A row with no file is the honest state: the decision to publish is recorded,
+the copy is not yet made.
 
 It exists because the reminder it replaces had a hole the shape of the fault. That
 reminder fires "after editing any file listed in its MANIFEST.md", and a brand-new live
