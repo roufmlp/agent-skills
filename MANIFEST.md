@@ -50,7 +50,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/draw_run_rail.py` | `~/.claude/skills/run-issues/draw_run_rail.py` (draws the rail as SVG from that block; the only road to it) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (31 files, 1,295 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (32 files, 1,379 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -69,6 +69,8 @@ Listed in the order the loop runs.
 | `skills/lib/test_collect_shards.py` | `~/.claude/skills/lib/test_collect_shards.py` |
 | `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
+| `skills/lib/run_python_suites.py` | `~/.claude/skills/lib/run_python_suites.py` (runs every `test_*.py` under `~/.claude/skills` and `~/.claude/hooks` from its own directory, and refuses a suite that executed fewer checks than it defines) |
+| `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (54 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -271,14 +273,19 @@ It reads presence only, never content. The two copies differ by design — the s
 rules rewrite names, paths and run ids on every sync — so a content check would alarm
 on every file for ever and be switched off within a day.
 
-**Two rows read `dead-publication` today, and both are deliberate.**
+**Four rows read `dead-publication` today, and all four are deliberate.**
 `hooks/test_run_issues_foreground_gate.py` has waited since 2026-09-07 for a sync to
-copy it. `skills/run-issues/launch-harden.md` joins it: the file landed live on
-2026-09-07 with ticket 33 sitting 2, and publishing it alone would put a phase file
-in the pack that nothing points at — the published `run-issues/SKILL.md` predates
+copy it. `skills/lib/run_python_suites.py` and its drill join it the same day: the
+walker that refuses a suite reporting no executed check. It publishes because it
+assumes nothing outside the pack -- its two default roots are `~/.claude/skills` and
+`~/.claude/hooks`, which rule H1 keeps -- but its docstring cites
+`hooks/model-landed-check.py`, which this pack does not ship, and rule 3 means that
+sentence is rewritten or cut at copy time. `skills/run-issues/launch-harden.md` joins
+them: the file landed live on 2026-09-07 with ticket 33 sitting 2, and publishing it
+alone would put a phase file in the pack that nothing points at — the published `run-issues/SKILL.md` predates
 the paragraph that names it and still carries the `Report, never repair` citation
-bullet the same sitting split in two. Both wait for the next real sync, which is
-four live commits' worth of drift across all three checkouts and is a sitting of its
+bullet the same sitting split in two. All four wait for the next real sync, which is
+five live commits' worth of drift across all three checkouts and is a sitting of its
 own. A row with no file is the honest state: the decision to publish is recorded,
 the copy is not yet made.
 
