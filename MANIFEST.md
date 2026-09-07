@@ -166,7 +166,17 @@ than the four that govern everything else here.
 | `hooks/test_origin_row_guard.py` | `~/.claude/hooks/test_origin_row_guard.py` |
 | `hooks/retired-phrases-gate.py` | `~/.claude/hooks/retired-phrases-gate.py` (refuses a write that puts retired wording into a steering file) |
 | `hooks/test_retired_phrases_gate.py` | `~/.claude/hooks/test_retired_phrases_gate.py` |
+| `hooks/git-shared-state-guard.py` | `~/.claude/hooks/git-shared-state-guard.py` (refuses the git commands that reach across sessions sharing one checkout) |
+| `hooks/test_git_shared_state_guard.py` | `~/.claude/hooks/test_git_shared_state_guard.py` (68 behavioural cases against a real git fixture, mutation-tested, added 2026-09-08) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
+
+**`git-shared-state-guard.py` is here on a ruling, and it costs the sync one scrub.**
+Ticket 41 of the pilot-delivery map settled it on 2026-09-07: the fault the guard closes is
+a property of git, not of one machine. A worktree gets its own index; the main checkout has
+one, and every session working there shares it, so a wide `git add` stages whatever every
+other session has touched. Anyone running several agents against one checkout has this. What
+the sync must scrub is the closing line of the refusal, which cites the ticket and the two
+dates it was measured on. H2 forbids that, and the rest of the message names commands only.
 
 **A hook does nothing until a reader registers it, and a skill pack cannot register it
 for them.** That is the whole reason `hooks/README.md` exists: it carries the exact
