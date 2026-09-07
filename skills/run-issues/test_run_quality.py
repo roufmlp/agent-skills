@@ -854,10 +854,6 @@ class Cli(unittest.TestCase):
         self.assertIn("holds", printed.lower())
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheRunnerMarker(unittest.TestCase):
     """Ticket 37 ruling 28's second half: a fixed token per gate round.
 
@@ -1002,3 +998,7 @@ class BothGateVerdicts(unittest.TestCase):
         self.assertEqual(rows["149e"].verify, tool.PASS)
         self.assertEqual(rows["149e"].review, tool.REJECT)
         self.assertEqual(rows["149c"].review, tool.PASS)
+
+
+if __name__ == "__main__":
+    unittest.main()

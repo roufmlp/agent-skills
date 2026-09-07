@@ -6,14 +6,28 @@ or better", sitting 4, deliverable 4 and rulings 8, 12, 13, 14 and 24.
 
     python3 -m unittest test_run_compare
 
-## The two facts sitting 2 measured that this file exists to hold
+## The two facts sitting 2 measured, and the rules that replaced them
 
-**Seventeen of the eighteen lines on disk are marked `borrowed`**, and the mark
-names WHICH five fields came from another run: `issues`, `subagents`,
-`weighted`, `orchestrator` and `per_issue`. A trend that reads one of those on
-a marked line reports a fifteen-issue run's numbers as a two-spawn run's.
-**And every one of the eighteen reads `not measured` for ruling 6's counts**,
-because sitting 3 repaired the reader and no finale has run since.
+Sitting 2 measured that **seventeen of the eighteen lines on disk were marked
+`borrowed`**, and that **every one of the eighteen read `not measured` for
+ruling 6's counts**. This file held both as counts. Both counts are dead;
+neither reader fault they guarded is:
+
+  * Ticket 37 sitting 5 replayed six of the seven finale-written lines from
+    their own transcripts on 2026-09-06, on the human's ruling of that day, and
+    dropped the mark from five of them because their figures had stopped being
+    borrowed. `per_issue` alone was stored at 1.34M to 1.87M and measured at
+    4.29M to 9.98M. Twelve lines carry the mark today. What survives a replay
+    is the RULE and not the count: a line whose batch id is synthetic has no
+    run of its own to measure, so its five cells are always another run's.
+  * That same replay wrote ruling 6's counts onto the six replayed lines, and
+    `batch-207704`'s finale wrote its own on 2026-09-07.
+
+The mark still names WHICH five fields came from another run: `issues`,
+`subagents`, `weighted`, `orchestrator` and `per_issue`. A trend that reads one
+of those on a marked line reports a fifteen-issue run's numbers as a two-spawn
+run's, and `TheWholeRecord` now checks that against every comparison the reader
+prints, rather than against the newest line alone.
 
 So the reader's first duty is to say what it could NOT read. A trend over one
 comparable line is not a trend, and a reader that prints one without saying so
@@ -24,12 +38,14 @@ is the `ok`-on-nothing fault sitting 1 met on the live register.
 Ticket 39 sitting 4 measured a per-issue reader against ONE ledger, and it was
 blind to seven dialects in the other fifteen. Ticket 37 sitting 3 shipped two
 false-negative readings that were correct on the runs they were built against.
-`TheWholeRecord` below reads all eighteen real lines.
+`TheWholeRecord` below reads every real line on disk, nineteen today, and pins
+rules rather than counts wherever a count would age out of step with the file.
 """
 
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 import unittest
 
@@ -605,24 +621,82 @@ class TheWholeRecord(unittest.TestCase):
         self.records = run_records.read_lines(RECORDS).records
 
     def test_the_record_is_big_enough_to_be_a_net(self):
-        """Measured 2026-09-06: eighteen lines, nineteen rows carried in with
-        the duplicate `review-375cbf` deleted once by hand."""
-        self.assertGreaterEqual(len(self.records), 18)
+        """Measured 2026-09-07: nineteen lines. Eighteen stood on 2026-09-06,
+        nineteen rows carried in with the duplicate `review-375cbf` deleted
+        once by hand, and `batch-207704`'s finale wrote the nineteenth."""
+        self.assertGreaterEqual(len(self.records), 19)
 
-    def test_seventeen_of_the_eighteen_are_marked_borrowed(self):
-        """The fact sitting 2 measured, held here so that a reader which
-        stopped honouring the mark fails rather than reporting another run's
-        numbers as this run's."""
-        marked = [one for one in self.records if one.get("borrowed")]
-        self.assertGreaterEqual(len(marked), 17)
-        self.assertLess(len(marked), len(self.records))
+    def test_the_mark_follows_the_synthetic_id_and_nothing_else(self):
+        """The rule that replaced sitting 2's count of seventeen.
 
-    def test_not_one_line_carries_ruling_sixs_counts(self):
-        """The second fact sitting 2 measured. When a finale finally writes
-        one, this test fails and is the place to record that it did."""
-        graded = [one for one in self.records
-                  if (one.get("quality") or {}).get("issues_graded") is not None]
-        self.assertEqual(graded, [])
+        This test read `>= 17 marked` and broke on 2026-09-06, when ticket 37
+        sitting 5's replay measured five of those lines from their own
+        transcripts and dropped the mark. The record was right and the count
+        was stale: `per_issue` on those five was stored at 1.34M to 1.87M and
+        measured at 4.29M to 9.98M, so the stored cells really were another
+        run's and really did stop being so.
+
+        A count cannot survive a replay. The rule can, because it is derived
+        from each line rather than typed: a line carrying `batch_synthetic`
+        has no run of its own to measure, so its five cells are always
+        borrowed, and a line naming a real batch must never carry the mark.
+        That is the whole reason the mark exists, and it fails loudly both
+        ways -- a writer that drops the mark from a synthetic line, and one
+        that stamps it on a real run.
+
+        Measured 2026-09-07: nineteen lines, twelve synthetic and all twelve
+        marked, seven real and none marked.
+        """
+        marked, plain = [], []
+        for one in self.records:
+            (marked if one.get("borrowed") else plain).append(one)
+            self.assertEqual(
+                bool(one.get("batch_synthetic")), bool(one.get("borrowed")),
+                f"`{one.get('batch')}` carries batch_synthetic "
+                f"{one.get('batch_synthetic')!r} and borrowed "
+                f"{one.get('borrowed')!r}. One of the two is wrong.")
+        # Neither side may empty out. An all-marked or an all-plain file would
+        # satisfy the loop above and prove nothing about the reader.
+        self.assertTrue(marked, "no line is marked; the skip is untested")
+        self.assertTrue(plain, "every line is marked; no trend is testable")
+        for one in marked:
+            self.assertEqual(
+                sorted(one["borrowed"]), sorted(tool.BORROWABLE),
+                f"`{one.get('batch')}` is marked on a subset of the five. "
+                "The mark has one historical cause and covers all five cells.")
+
+    def test_ruling_sixs_counts_arrive_with_a_real_run_and_never_otherwise(self):
+        """The second fact sitting 2 measured, and the day it changed.
+
+        This test read `graded == []` and its own docstring named itself the
+        place to record the day a finale wrote one. That day came twice:
+        ticket 37 sitting 5's replay wrote the counts onto the six replayable
+        lines on 2026-09-06, and `batch-207704`'s finale wrote its own on
+        2026-09-07. The empty assertion is retired.
+
+        The rule that replaces it holds on both sides. A synthetic line has no
+        run behind it to grade, so it can never hold one of these counts. A
+        line naming a real batch must hold `issues_graded`, and that count is
+        the issues SCOPED, so it can never read below the issues shipped --
+        `batch-88624c` scoped ten and shipped eight.
+        """
+        for one in self.records:
+            quality = one.get("quality") or {}
+            if one.get("batch_synthetic"):
+                self.assertEqual(
+                    [], [key for key, value in sorted(quality.items())
+                         if value is not None],
+                    f"`{one.get('batch')}` is synthetic and holds a count "
+                    "there is no run to have measured.")
+                continue
+            graded = quality.get("issues_graded")
+            self.assertIsNotNone(
+                graded, f"`{one.get('batch')}` names a real batch and states "
+                        "no issues_graded.")
+            self.assertGreaterEqual(
+                graded, one.get("issues") or 0,
+                f"`{one.get('batch')}` graded {graded} and shipped "
+                f"{one.get('issues')}. Scoped can never be below shipped.")
 
     def test_every_headline_figure_is_skipped_or_read_on_every_line(self):
         """The property a narrowed reader breaks first: every figure on every
@@ -672,18 +746,62 @@ class TheWholeRecord(unittest.TestCase):
             self.assertTrue(
                 tool.render_show(self.records, one["batch"], text).strip())
 
-    def test_the_real_record_never_reports_a_trend_it_could_not_read(self):
-        """The corpus test that matters. On this history the newest run has a
-        predecessor marked `borrowed` on all five cells, so every borrowed
-        figure must read as SKIPPED and never as a movement."""
-        found = tool.render_last(self.records, register_text="")
-        self.assertIn("borrowed", found)
-        for name in ("issues", "subagents"):
-            label = tool.FIGURES[name].label
-            for row in found.splitlines():
-                if row.startswith(f"- {label}:") and "against `" in row:
-                    self.fail(f"{label} was compared across a borrowed line: "
-                              f"{row}")
+    def test_no_figure_the_reader_prints_is_compared_across_a_marked_line(self):
+        """The corpus test that matters, widened from one line to all of them.
+
+        It used to render the newest line alone and check two figures, resting
+        on "the newest run has a predecessor marked `borrowed`". Ticket 37
+        sitting 5's replay dropped the mark from those predecessors, and the
+        newest comparison became legitimate -- so the test failed on a reading
+        that was correct. It had been checking one accident of the history
+        rather than the property.
+
+        The property is this: wherever the reader prints "against `X`", the
+        line X must be comparable on that very figure. This walks every line
+        on disk and every headline figure, resolves the predecessor the reader
+        named, and asks `comparable` about it. Measured 2026-09-07: 44
+        comparisons checked across nineteen lines, where the old shape checked
+        two figures on one. A reader that stopped honouring the mark raises 24
+        of them, so this is a net and not a formality.
+        """
+        by_batch = {str(one.get("batch") or ""): one for one in self.records}
+        checked = 0
+        for one in self.records:
+            text = tool.render_show(self.records, one["batch"],
+                                    register_text="")
+            for name in tool.HEADLINE:
+                label = tool.FIGURES[name].label
+                for row in text.splitlines():
+                    if not row.startswith(f"- {label}:"):
+                        continue
+                    found = re.search(r"against `([^`]+)`", row)
+                    if not found:
+                        continue
+                    checked += 1
+                    before = by_batch.get(found.group(1))
+                    self.assertIsNotNone(
+                        before, f"`{one['batch']}` was compared against "
+                                f"`{found.group(1)}`, which is not on file: "
+                                f"{row}")
+                    ok, why = tool.comparable(before, name)
+                    self.assertTrue(
+                        ok, f"{label} was compared across a marked line "
+                            f"on `{one['batch']}`: {row} — {why}")
+        self.assertGreaterEqual(checked, 40)
+
+    def test_a_marked_line_still_states_its_skip_in_words(self):
+        """The other half of the same duty. Honouring the mark silently would
+        pass the test above and leave the reader printing a figure with no
+        movement and no reason, which is the `ok`-on-nothing fault sitting 1
+        met on the live register."""
+        marked = [one for one in self.records if one.get("borrowed")]
+        self.assertTrue(marked, "no marked line is on file to render")
+        for one in marked:
+            text = tool.render_show(self.records, one["batch"],
+                                    register_text="")
+            self.assertIn("borrowed", text,
+                          f"`{one['batch']}` is marked and its block never "
+                          "says so.")
 
     def test_the_real_record_raises_no_cache_alarm_it_cannot_support(self):
         """No line carries a cache reading yet, so ruling 14's one threshold

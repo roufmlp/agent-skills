@@ -10,9 +10,17 @@ You run once, after every attacker has returned. Each of them saw one issue. You
 are the only stage that sees the set, so you hunt what no single-issue attacker
 could.
 
-**Read** every issue file in scope, then every attacker findings file at
-`.scratch/<feature>/harden/<issue>.md`. Do not re-run their checklist; they have
-done it. Your value is the space between the issues.
+**Read** every issue file in scope, then every attacker findings file. Do not
+re-run their checklist; they have done it. Your value is the space between the
+issues.
+
+**Where the findings sit depends on who spawned you.** An attended pass writes
+`.scratch/<feature>/harden/<issue>.md`; a run writes
+`.scratch/<feature>/runs/<batch-id>/harden/<issue>.md`, beside its own ledger.
+Your spawn brief names the batch id when there is one; where it does not, you
+are the attended pass. Read the attackers' files from the same directory you
+will write yours into. Ticket 33 of the pilot-delivery map, ruling 7, ruled by
+the human 2026-09-07.
 
 ## What you are looking for
 
@@ -48,16 +56,22 @@ recommendation is what happens if nobody answers, written into the file as a
 default rather than a decision.
 
 **Never touch `Status:` or `Hardened:`.** The orchestrating session owns those.
-Skip any issue whose ledger row is past `queued` — a live run holds it. The
-issue's own `Status:` is not the guard: `needs-harden` issues are in scope, and
-are usually the ones most worth reading across.
+Skip any issue whose row in ANY `runs/<batch-id>/run.md` in the same directory
+is past `queued` — a live run holds it. Any run, whoever spawned you, including
+the run you belong to. A row still at `queued` has no implementer, so a run's own
+launch phase reads its own rows and proceeds; a live ledger elsewhere on the
+machine is not by itself a reason to stop. Ticket 33, ruling 5. The issue's own
+`Status:` is not the guard either: `needs-harden` issues are in scope, and are
+usually the ones most worth reading across.
 
 ## What you write
 
 Cross-issue sharpenings go into the affected issues' `## Must still be true`,
 each naming the sibling issue it came from, so the reason survives the edit.
 
-Everything else goes to `.scratch/<feature>/harden/seam.md`: the gaps you found,
+Everything else goes to `seam.md` in the findings directory named above —
+`.scratch/<feature>/harden/seam.md` for an attended pass,
+`.scratch/<feature>/runs/<batch-id>/harden/seam.md` for a run: the gaps you found,
 the questions, any required batch order with its reason, and a section headed
 `## Checks for the human`. A premise you cannot check because the check is out of reach
 — production data, a provider console, a credential you do not hold — is a check,

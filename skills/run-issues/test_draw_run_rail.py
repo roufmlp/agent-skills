@@ -416,10 +416,6 @@ class TheHolesAndTheQuestionsAreDrawn(unittest.TestCase):
         self.assertIn("--fork:", draw.TOKENS_LIGHT)
         self.assertIn("--fork:", draw.TOKENS_DARK)
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 # --------------------------------------------------------------------------
 # Issue 555. The band is the highest-judgement thing on the picture and the
 # renderer makes none of it: it draws the strip the block states, over the
@@ -655,3 +651,7 @@ class TheRailTakesTheWindowsWidthNotTheReadingColumns(unittest.TestCase):
         )
         self.assertNotIn("display: grid", rules)
         self.assertNotIn("margin-block", rules)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -246,10 +246,6 @@ class WriterNameTest(TreeFixture):
         self.assertEqual(writer_name(deep, self.trees), "run-a")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class RenderTest(TreeFixture):
     def test_one_history_shard_regenerates_the_file_byte_for_byte(self):
         """Day one: the whole of today's register becomes `00-history.md`.
@@ -732,3 +728,7 @@ class QueueIdTest(TreeFixture):
                 REGISTER.shards(self.main, self.feature), "main", f"{HISTORY}.md"),
                 encoding="utf-8") as handle:
             self.assertNotIn("q-h-", handle.read())
+
+
+if __name__ == "__main__":
+    unittest.main()

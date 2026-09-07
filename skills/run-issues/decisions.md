@@ -1484,3 +1484,244 @@ run's real launch state, `check_permission_floor.py` refuses all eight classes
 and names `npx vitest` first.
 
 Built 2026-08-30 on the human's instruction, closing `rn99f-03`.
+
+## The hardening pass folds into the launch (2026-09-07, ticket 33 sitting 2)
+
+Deliverable 3 of ticket 33 of the pilot-delivery map. The human's goal in their own
+words: "from issues i can directly go afk and if any decisions pending i can take
+later". Twenty-two rulings on 2026-09-07 settled the shape; sitting 1 landed the
+machinery around the phase and this is the phase itself. `launch-harden.md`
+carries the instructions and this section carries why they are those and not
+others.
+
+**Why a file beside `SKILL.md` and not a section inside it (ruling 16).** The
+phase is a full load. Measured on the attended pass of 2026-09-06 that hardened
+seven issues: 1.40 h wall clock, nine attacker spawns at 6.49M weighted tokens,
+one seam at 1.32M, 4.95M on the main thread — about 1.8M weighted per issue,
+against about 10M per issue for a run. A hundred-line file is about 1,560 tokens,
+and `SKILL.md` is re-read on every runner turn: run `batch-b5e96d` took 624 of
+them, so a section would add about 0.97M cache-read tokens to every run including
+the ones with nothing to harden. Off the common path it costs those runs nothing.
+It is the shape `finale.md` and `resume.md` already use, and removing the fold
+later is deleting one file and two lines. A new combined skill was refused for the
+same reason: two skills that must be launched together is a third thing to keep in
+step.
+
+**Why the launch line prints before the phase runs (ruling 9).** The line is the
+interrupt window, and an attacker wave costs about twenty-five minutes. A line
+printed after the phase would name the hardening after it had been paid for.
+
+**Why the citation check split into two roads (ruling 9).** One instrument, two
+jobs, and the difference is write authority rather than usefulness. A run may not
+write an issue file it did not harden — that rule is what keeps a run from grading
+itself against criteria it rewrote — so a stamped file's broken citations are
+reported. An unstamped file is inside the phase's own scope, and the phase IS a
+hardening pass, so the repair costs nothing there and costs an attacker a whole
+round anywhere else. The bullet read `Report, never repair` while there was only
+one road.
+
+**Why five attackers and not all of them (ruling 21).** Five concurrent spawns is
+what a usage window sees at once; fifteen is a batch that meets a limit mid-wave
+and resumes into a half-hardened set. Nothing is dropped to fit the cap, because a
+cap that drops work is a cap that quietly narrows a batch the human typed. It is a
+recipe read at spawn time and nothing refuses it: a hook gets built the first time
+a run is measured over the cap, which is his own rule that a reminder failing once
+is not answered with a second reminder.
+
+**Why exactly three drop classes (rulings 4 and 11).** Every reversible fork
+already has a default road — take the default, write it as a default, queue it —
+and two of the five rulings on the 2026-09-07 attended walk overturned a
+recommended default, both on issue 443, both reversible in under an hour by the
+pass's own estimate. So the cost of defaulting wrongly is an hour and the cost of
+waiting is the whole point of the fold. The three that cannot default are the ones
+where the default is not reversible in an hour: an `[irreversible]` question, a
+split the phase cannot complete, and a premise check. The premise class is four
+days old: on issue 465 an attacker, the seam pass and the orchestrating session
+all read the code correctly and still got the issue wrong, because the datum that
+settled it was on the human's phone.
+
+**Why a split is cut at launch rather than dropped (ruling 3).** `questionrules.md`
+already says the session settles a split it can complete, and the pass of
+2026-09-07 cut 572b and 388b that way and the live run took both. The overlap
+guard in `machine-preflight.py` covers both halves once they are in the ledger, so
+no second run can take one of them. A split that changes a migration's direction
+stays a drop, because a migration's direction is not reversible in an hour.
+
+**Why one commit before spawn 1 (ruling 10).** The phase is the most expensive
+part of a launch to lose and an uncommitted worktree loses it on any halt. Taking
+it first also keeps every issue commit single-purpose, which is what
+`check_diff_coverage.py` reads.
+
+**Why the defaults go under `## Ruled` (ruling 12).** `run_measures.py` reads that
+section and counts an issue as cut on a default when an item names it. There is no
+marker for it and there does not need to be one: the section already exists, the
+finale already writes it, and a default written anywhere else in the briefing is a
+default nothing counts.
+
+**Why all at launch rather than one before each implementer (ruling 15).** A
+per-issue road pays the same tokens and spends them serially, about ten minutes
+per issue instead of one wave. The case against it is a criterion that goes stale
+mid-run — issue 523 falsified 522's count one commit earlier on the live run —
+and that is one in fifteen, already covered by strike-2 mode. Three or four in one
+run reopens this.
+
+**Why no off switch (ruling 18).** The scope grammar has three override words and
+a fourth is a road nobody would test. An unstamped issue can still be run raw:
+stamp it in a standalone pass first. The criteria gate refuses a file with no
+criteria in any case.
+
+### The role count in the prose was twelve for a day (2026-09-07)
+
+Ruling 2 widened `model_map.ROLES` to fourteen at sitting 1 and `SKILL.md` stated
+twelve in five places and enumerated the old twelve keys in a sixth. None of them
+changed what a run wrote: the runner pastes what `model_map.py` prints rather than
+typing a role list, so every ledger header carried fourteen throughout. What the
+stale prose cost is a reader who counts roles off it and concludes the two
+hardening roles are outside the map — the opposite of the ruling. The correction
+is five words; the guard is `TheProseRoleCountIsTheRealOne` in
+`test_skill_structure.py`, which reads the live `ROLES`, `WORKERS` and `GATES` and
+sends the next widening red on the day it lands. Written as a refusal rather than
+a correction because prose beside a list in code goes stale on every widening, and
+this one went stale within a day.
+
+### The fold put the hardening phase above the concurrency gate (2026-09-07)
+
+Found by mock drive D of ticket 33 sitting 3, and fixed in the same sitting.
+
+`check_harden_branch.py` sat four bullets below the hardening-stamp bullet, which
+is the bullet that opens `launch-harden.md`. So the pre-flight read in this order:
+mint the batch id, write the ledger, seed the QA workspace, run the citation
+check, print the launch line, **run the whole hardening phase**, run the criteria
+gate — and only then ask whether a peer `/harden-issues` branch already held these
+issues. The refusal arrived after five attacker spawns, a citation repair, a
+stamp and a commit.
+
+That is worse than the fault the gate was built for. Run `bridge-cse` built four
+issues from unhardened files while a peer session held hardened copies; the fold
+made the run WRITE those same files, concurrently with the peer session, and then
+refuse the launch. Two hardening passes on one issue file with no merge between
+them is the second-writer collision the never-attack guard exists to prevent, and
+ruling 5's guard does not reach it: that guard reads live LEDGERS, and a peer
+hardening branch has none.
+
+The drive also measured a second cost of the same ordering. The batch id was
+minted before the refusal, so a launch that never started left
+`.scratch/example-feature/runs/batch-29e9c1/run.md` reading live and holding issue 909.
+`machine-preflight.py` counts that as one of the two live runs and refuses any
+later `/run-issues 909` as an overlapping range — a refused launch fencing off its
+own issues for the life of a batch that does not exist.
+
+The fix is order alone, and it costs nothing: `check_harden_branch.py` needs no
+batch id, no ledger and no worktree, so it runs first. Two assertions in
+`ThePeerHardenBranchIsRefusedBeforeThePhaseSpends` pin the two orderings against
+the text of `SKILL.md`, because both faults are positions in a bullet list and a
+position is exactly what a later edit moves without noticing.
+
+`launch-harden.md` states the same fact at the head of its own order section, and
+its `What this phase never does` list names the peer branch beside the live
+ledger. That is ticket 33's own gap 1 class — a rule ruled in one file and not
+written into the file that enforces it — and the phase file is what a launch
+caller actually reads.
+
+### The citation check's exit code is not a verdict about the batch (2026-09-07)
+
+Found by mock drives A and B of ticket 33 sitting 3, and fixed in the same sitting.
+
+Ruling 9 gave the pre-flight citation bullet two jobs by file — repair an
+unstamped one, report on a stamped one — and both need to know which scoped
+files are broken. The obvious instrument cannot answer.
+`scripts/check-issue-citations.mjs --quiet <one issue file>` runs the DECISION
+pass over the whole repository beside the citation pass over the named file, and
+there is no flag to turn it off. On 2026-09-07, on the mock feature, a file
+reading `0 citations in 1 file(s): 0 hold, 0 moved` exited 1 and a file carrying
+two genuinely moved citations exited 1. The 1 was eight `Touches:` faults in
+`docs/adr/` and other features' issue files, none of them in either batch.
+
+Before the fold that misreading cost a wrong sentence in the launch line. Since
+ruling 9 the phase WRITES on it, so it would open and repair every unstamped file
+in scope including the clean ones — and a repair that quotes text into a file
+nobody had a reason to touch is the class of edit no gate reads.
+
+The remedy is a reading rule in both places that run the instrument, not a change
+to the script: the verdict is the file's own summary line and the `MOVED`, `GONE`
+and `AMBIGUOUS` rows that name it. Fixing the script would mean a seventh exit
+code on a checker whose docstring already explains why six is the number it has,
+and the decision pass is genuinely useful where the finale reads it.
+
+### The phase works in the run's worktree, and the seam finds gaps it may not fix (2026-09-07)
+
+Two more from ticket 33 sitting 3's mock drives, both fixed in the same sitting.
+
+**Which tree.** `launch-harden.md` said the phase commits "on the run's own
+branch" and never said which tree its attackers read and write. Every other path
+it names is run-scoped, so the issue file was the one path a runner had to guess,
+and the tracker lives in the main checkout, so that is what a path completes to.
+Drive A guessed it and both halves of the failure landed at once: the run
+worktree's copy of issue 901 still held the unhardened text, so the implementer
+would have been graded against criteria the phase had already replaced, and the
+MAIN checkout carried a run's uncommitted edits to two issue files. `main`
+belongs to the human. Nothing mechanical would have caught either: the commit step
+would have found nothing to commit on the run's branch and reported success on an
+empty diff.
+
+**The seam's stamped siblings.** The seam agent reads every issue in the batch,
+because a gap between two issues does not care which of them was hardened today.
+The phase may write only the unstamped ones. Drive A hit the case on its first
+seam: it found that issue 901's criterion 1 carried an export-style ambiguity its
+own attacker had missed, applied the fix to 901, then found the identical gap in
+903 — already stamped — and correctly declined to edit it. It recorded the fact
+in `seam.md`, and the phase reads counts and `## Checks for the human` out of that
+file and nothing else, so the finding would have died there while 903's
+implementer built to a criterion the seam had just shown to be short.
+
+The fix needs no new authority. The runner already writes a spawn prompt per
+issue and a merge briefing, and neither is an issue file, so the finding travels
+in `Settlements:` and under `## Ruled`. Ruling 4's drop list is untouched: a seam
+finding against a stamped issue drops nothing.
+
+Both are the same shape as the concurrency-gate fault above — the phase was
+specified against the pass it folds in, and the pass has no worktree, no ledger
+and no stamped siblings it must not touch. Each gap only appears when the phase
+is actually driven, which is what the mock drive was for.
+
+### The review's own five, and the tree question the fold reopened (2026-09-07)
+
+`/code-review` at high effort over sitting 3's diff. Five findings, all confirmed,
+all fixed in the sitting. Three of the five are one fault seen from three sides.
+
+**Naming the tree in ONE file was not enough.** The phase file now pins every
+issue file it touches to the run's worktree, and two bullets in `SKILL.md` that
+feed it still named no tree: the citation check, whose rows the phase repairs
+from, and the hardening stamp, whose reading decides which issues enter the phase
+at all. Both now name it, and both carry the reason, because a worktree freezes
+the tracker at the moment it was cut. Drive `batch-800f60` was cut at `3d5fe7bf`
+while issue 914 landed on main at `b81bf6a4`: the worktree did not hold that file,
+the attacker was handed a path that did not exist, and it edited the main checkout
+and reported doing so — which is the only reason it was caught rather than merged.
+The same freeze makes an issue stamped on main after the cut read unstamped in the
+worktree, so the stamp bullet could put one into the phase twice or skip it once
+on nothing but which copy the runner opened.
+
+**A false absolute, in a sentence written to close a gap.** The new
+`What this phase never does` bullet said `check_harden_branch.py` refuses a peer
+branch "so the phase never meets the case". That check lists
+`refs/heads/claude/harden-issues-*` and diffs `main...<branch>`, so it sees
+committed work on one branch name and nothing else — a peer pass whose hardening
+is still uncommitted, or which branched under another name, walks past it. The
+bullet now says what the gate sees and what it does not, and names the remedy for
+the rest. It is the scopeless-negative class this skill's own step 5 forbids, and
+it appeared in the paragraph written to fix a different scoping fault.
+
+**A route that stopped at the drop.** The seam finding rule sent findings against
+a stamped issue into that issue's implementer spawn prompt. An issue step 5 drops
+has no implementer, and the seam reads dropped issues on purpose. Those findings
+now go to the briefing under `## Decide`, beside the drop, where whoever
+re-hardens the issue will read them.
+
+**A test anchored on a name instead of on the thing it pins.** The ordering check
+found the concurrency gate by the first occurrence of `check_harden_branch.py` in
+`SKILL.md`. The script is named in cross-references too, so an earlier mention
+would have satisfied the search while the bullet itself sat back below the phase
+trigger — green on exactly the regression the class exists to catch. It anchors on
+the bullet's opening words now, the way its sibling already anchored on
+`Then mint the batch id`.

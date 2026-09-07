@@ -86,6 +86,23 @@ SKILL_MARKS = [
     # The quoted-phrase citation rule, whose 228-citation incident is the story.
     "Every citation you WRITE from 2026-08-26 onward quotes text, never a line",
     "is the guard that makes it stick",
+    # Ticket 33 ruling 5, 2026-09-07: one never-attack rule for every caller.
+    # The rule is the row test; the blanket rule it replaced is the story.
+    "skip any issue whose row in any `runs/<batch-id>/run.md`",
+    "in any run, whoever is calling",
+    "Run A's launch phase runs while run B is live",
+    # Ticket 33 ruling 7: where a run's findings land.
+    "A run's findings go to `runs/<batch-id>/harden/`",
+    # Ticket 33 ruling 2: the two roles are in the model map, so a spawn inside
+    # a run carries a model. The old blanket "never pass a model" is reversed
+    # for that half only, and the standalone half is unchanged.
+    "carry the ledger's value for the role on every spawn",
+    # Ticket 33 ruling 16, sitting 2: the third entry point. A run's launch
+    # calls this pass, and the standalone pass survives beside it (ruling 6).
+    # Without the anchor a slim that thinned the entry-point list back to two
+    # would leave the fold with no door named in the skill it walks through.
+    "Three entry points, same pass",
+    "Inside a run's launch",
 ]
 
 # The story each move took, and the file it landed in. Filled as each move
@@ -127,6 +144,9 @@ DECISIONS_MARKS = [
     ("broke 228 citations across 49 open issue files", DECISIONS),
     # M9 — the pass that ran ahead of the no-minting rule.
     ("minted two more into it, leaving the queue", DECISIONS),
+    # M13 — the blanket never-attack rule ticket 33 ruling 5 replaced, and why
+    # it could not survive the fold.
+    ("skip EVERYTHING if any ledger's owner line named a live session", DECISIONS),
 ]
 
 
@@ -211,6 +231,65 @@ class TestTheDecisionsFileIsTheDeclaredHome(unittest.TestCase):
 
     def test_the_decisions_file_exists_beside_the_skill(self):
         self.assertTrue(DECISIONS.is_file())
+
+
+class TheThirdEntryPointIsNamed(unittest.TestCase):
+    """Ticket 33 of the pilot-delivery map, ruling 16, sitting 2.
+
+    Deliverable 3 gives this pass a third caller: a `/run-issues` launch that
+    finds an unstamped issue in its scope. Ruling 6 kept the standalone pass,
+    so the fold ADDS a door rather than replacing one, and the count in the
+    lead-in sentence is the thing that goes stale silently -- a reader who
+    counts two doors concludes a run cannot call this pass at all.
+    """
+
+    def setUp(self):
+        self.raw = read(SKILL)
+        self.skill = squash(self.raw)
+
+    def entry_block(self):
+        """The entry-point list, from its lead-in to the next `## ` heading."""
+        start = self.raw.index("entry points, same pass:")
+        rest = self.raw[start:]
+        stop = rest.find("\n## ")
+        return rest[:stop] if stop > 0 else rest
+
+    def test_the_lead_in_says_three(self):
+        self.assertIn("Three entry points, same pass", self.skill)
+
+    def test_the_count_word_matches_the_bullets_it_counts(self):
+        """Mechanical, because the count is prose and the list is data. A
+        fourth caller added without touching the word leaves the sentence
+        lying, and nothing else in the file would notice."""
+        bullets = [line for line in self.entry_block().splitlines()
+                   if line.startswith("- **")]
+        self.assertEqual(len(bullets), 3,
+                         f"the lead-in says three; the list holds {len(bullets)}")
+
+    def test_the_third_door_names_the_file_that_drives_it(self):
+        """The phase is specified in `run-issues/launch-harden.md` and nowhere
+        else. A door that does not name it sends the reader back to a
+        `/run-issues` SKILL.md that deliberately holds only the trigger."""
+        block = squash(self.entry_block())
+        self.assertIn("Inside a run's launch", block)
+        self.assertIn("launch-harden.md", block)
+
+    def test_the_third_door_states_its_own_trigger(self):
+        """An unstamped issue in a run's scope. Any other reading turns the
+        fold on for every run, including the ones with nothing to harden."""
+        block = squash(self.entry_block())
+        self.assertIn("Hardened:", block)
+
+    def test_the_standalone_door_survived_the_fold(self):
+        """Ruling 6, and it is the half easiest to lose: the fold reads like a
+        replacement. The human kept the attended pass for an issue they want to
+        rule on before any code is written."""
+        self.assertIn("Standalone, pre-batch", self.skill)
+
+    def test_the_phase_file_the_third_door_names_is_on_disk(self):
+        """The pointer and the file are in different skills' directories, so
+        nothing else joins them."""
+        self.assertTrue((SKILLS / "run-issues" / "launch-harden.md").is_file())
 
 
 if __name__ == "__main__":

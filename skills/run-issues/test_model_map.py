@@ -77,15 +77,46 @@ class ReadMap(unittest.TestCase):
             ("escalated", "finale", "finder", "fixer", "promotion"))
 
 
-class TheTwelveRoles(unittest.TestCase):
-    """Ruling 5's grammar names one key per agent type without its prefix, and
-    ruling 6 scopes this ticket to the twelve loop roles."""
+class TheFourteenRoles(unittest.TestCase):
+    """Ruling 5's grammar names one key per agent type without its prefix.
 
-    def test_the_keys_are_ruling_5s_twelve(self):
+    Ticket 39 ruling 6 scoped the map to twelve loop roles and deferred the two
+    hardening roles to ticket 33 by name. Ticket 33 ruling 2 of 2026-09-07 adds
+    them as `attacker` and `seam` inside the `gates` group, so the map is
+    fourteen roles and `model-map-gate.py` stops passing a harden spawn in
+    silence."""
+
+    def test_the_keys_are_ruling_5s_twelve_plus_ticket_33s_two(self):
         self.assertEqual(sorted(ROLES), sorted([
             "implementer", "escalated", "verify", "review", "review-critical",
             "finale", "finder", "fixer", "claim-gate", "fix-gate",
-            "fix-gate-critical", "promotion"]))
+            "fix-gate-critical", "promotion", "attacker", "seam"]))
+
+    def test_the_two_hardening_roles_name_the_two_harden_issues_briefs(self):
+        self.assertEqual(ROLES["attacker"], "harden-issues-attacker")
+        self.assertEqual(ROLES["seam"], "harden-issues-seam")
+
+    def test_both_hardening_roles_sit_inside_the_gates_group(self):
+        """Ruling 2's stated width. `gates=fable` therefore reaches them, which
+        is the whole point: one word still names every adversarial role."""
+        self.assertIn("attacker", GATES)
+        self.assertIn("seam", GATES)
+        self.assertEqual(resolve([("gates", "fable")], "opus")["attacker"], "fable")
+        self.assertEqual(resolve([("gates", "fable")], "opus")["seam"], "fable")
+
+    def test_neither_hardening_role_checks_a_worker_so_neither_can_invert(self):
+        """Ruling 14 refuses a gate below the worker it checks. An attacker
+        checks an ISSUE FILE, not a worker's diff, so it is in no pair. Putting
+        it in one would force `attacker` up to the implementer's tier for a job
+        that reads a markdown file, and would refuse a legal map."""
+        checked = {gate for gate, _ in _mm.CHECKS}
+        self.assertNotIn("attacker", checked)
+        self.assertNotIn("seam", checked)
+        self.assertEqual(
+            inversions(resolve([("implementer", "opus"), ("gates", "opus"),
+                                ("attacker", "haiku"), ("seam", "haiku")],
+                               "opus")),
+            [])
 
     def test_every_key_names_an_agent_file_that_exists(self):
         agents = os.path.expanduser("~/.claude/agents")
@@ -116,6 +147,27 @@ class WhichRolesACommandCanSpawn(unittest.TestCase):
     def test_a_run_spawns_no_hunt_role(self):
         self.assertEqual(set(SPAWNED_BY["/run-issues"]) & set(WORKERS),
                          {"implementer", "escalated"})
+
+    def test_a_run_spawns_both_hardening_roles_and_a_hunt_spawns_neither(self):
+        """Strike-2 mode spawns `harden-issues-attacker` inside a run today, and
+        the launch phase of ticket 33 sitting 2 spawns both. A hunt hardens
+        nothing, so naming them there would list roles that cannot start --
+        the exact fault the 2026-09-05 review of sitting 2 found for finders."""
+        self.assertTrue({"attacker", "seam"} <= set(SPAWNED_BY["/run-issues"]))
+        self.assertEqual(
+            {"attacker", "seam"} & set(SPAWNED_BY["/parallel-hunt"]), set())
+
+    def test_a_run_map_naming_only_the_old_twelve_leaves_the_two_inheriting(self):
+        """The behaviour change row 14 of `machine-preflight.py` now sees. Before
+        ticket 33 this map named every role a run could spawn."""
+        _, applied, refusals = read_map(
+            "512 models: implementer=opus escalated=opus verify=opus "
+            "review=opus review-critical=opus finale=opus promotion=opus")
+        self.assertEqual(refusals, [])
+        spawnable = set(SPAWNED_BY["/run-issues"])
+        self.assertEqual(
+            tuple(r for r in inheriting(applied) if r in spawnable),
+            ("attacker", "seam"))
 
 
 class ParseMap(unittest.TestCase):
@@ -290,13 +342,20 @@ class RoleEfforts(unittest.TestCase):
     """Ruling 7: effort stays in the agent file and the ledger records it. The
     Agent tool has no effort field, so this is read, never set."""
 
-    def test_it_reads_the_twelve_agent_files_as_they_stand_today(self):
+    def test_it_reads_the_fourteen_agent_files_as_they_stand_today(self):
         got = role_efforts()
         self.assertEqual(set(got), set(ROLES))
         self.assertEqual(got["finale"], "max")
         self.assertEqual(got["finder"], "xhigh")
         self.assertEqual(got["promotion"], "medium")
         self.assertEqual(got["implementer"], "high")
+
+    def test_the_two_hardening_briefs_state_their_effort_and_are_read(self):
+        """`harden-issues/SKILL.md` states `high` for both, and the ledger now
+        records it rather than the skill line being the only home."""
+        got = role_efforts()
+        self.assertEqual(got["attacker"], "high")
+        self.assertEqual(got["seam"], "high")
 
     def test_an_unreadable_agent_file_reads_unmeasured_never_a_guess(self):
         got = role_efforts(agents_dir="/nonexistent")
@@ -325,7 +384,7 @@ class HeaderLines(unittest.TestCase):
         self.efforts = role_efforts()
         self.text = header_lines(self.resolved, self.efforts, "claude-opus-5", "gates=fable")
 
-    def test_every_one_of_the_twelve_roles_is_named(self):
+    def test_every_one_of_the_fourteen_roles_is_named(self):
         for role in ROLES:
             self.assertIn(role + "=", self.text)
 
@@ -357,7 +416,7 @@ class HeaderLines(unittest.TestCase):
     def test_a_ledger_with_no_map_line_reads_as_nothing_not_as_a_guess(self):
         self.assertIsNone(ledger_map("# Run ledger\n\nOwner: sess-a\n"))
 
-    def test_a_map_line_naming_fewer_than_twelve_roles_is_a_fault_not_an_absence(self):
+    def test_a_map_line_naming_fewer_than_fourteen_roles_is_a_fault_not_an_absence(self):
         """Sitting 2's hook owes two different answers here: no ledger map passes
         the spawn (ruling 9), and a fault inside the check passes it AND journals
         a line (ruling 16). One `None` for both cannot carry that, so a damaged
@@ -370,6 +429,69 @@ class HeaderLines(unittest.TestCase):
         full = " ".join(f"{role}=opus" for role in ROLES).replace(
             "promotion=opus", "promotion=deepseek")
         self.assertEqual(ledger_map(f"Model map at launch: `{full}`\n"), {})
+
+
+class AMapWrittenBeforeARoleJoined(unittest.TestCase):
+    """Widening `ROLES` makes every ledger written before the widening read as
+    DAMAGED, and two readers want different answers about that.
+
+    The GATE wants strict: it may only refuse against a map that names every
+    role, so a twelve-role line has to read `{}`. The COST CELL wants whatever
+    the ledger stated: run `batch-170a59` and run `batch-207704` both carry a
+    twelve-role line, and `worker_cell({})` returns `not stated`, so re-taking
+    either reading would overwrite a row that names seven roles today with a
+    row that names none. Measured 2026-09-07 against both ledgers on disk.
+    """
+
+    def old_line(self):
+        """A ledger as the launch wrote it before ticket 33 ruling 2."""
+        twelve = [role for role in ROLES if role not in ("attacker", "seam")]
+        return ("Model map at launch: `"
+                + " ".join(f"{role}=opus" for role in twelve) + "`\n")
+
+    def test_the_strict_reader_still_calls_it_damaged(self):
+        self.assertEqual(ledger_map(self.old_line()), {})
+
+    def test_the_lax_reader_returns_the_roles_the_ledger_did_name(self):
+        found = _mm.ledger_map_partial(self.old_line())
+        self.assertEqual(len(found), len(ROLES) - 2)
+        self.assertNotIn("attacker", found)
+        self.assertEqual(found["implementer"], "opus")
+
+    def test_the_lax_reader_still_answers_nothing_for_no_map_line(self):
+        """An absent map is not a partial one. `{}` here means the ledger
+        stated nothing, which is what `not stated` is for."""
+        self.assertEqual(_mm.ledger_map_partial("Owner: sess-a\n"), {})
+
+    def test_the_lax_reader_drops_a_model_the_agent_tool_cannot_reach(self):
+        """`deepseek` in a ledger is a typo or another API. Rendering it into
+        the comparison table would put a tier nothing can group beside real
+        ones."""
+        line = self.old_line().replace("promotion=opus", "promotion=deepseek")
+        self.assertNotIn("promotion", _mm.ledger_map_partial(line))
+
+    def test_an_old_ledger_still_renders_a_worker_cell(self):
+        """The regression this pair of readers exists to prevent."""
+        found = _mm.ledger_map_partial(self.old_line())
+        cell = worker_cell(found, {role: "high" for role in ROLES})
+        self.assertNotEqual(cell, _mm.NOT_STATED)
+        self.assertIn("workers=opus", cell)
+
+    def test_a_half_named_group_is_never_rendered_as_the_whole_group(self):
+        """`gates=opus` on a ledger that named six of the eight gates would
+        state a tier for `attacker` and `seam` that the launch never recorded.
+        The cell's own docstring promises it is not lossy, so a group is named
+        only when every one of its roles is in the map."""
+        found = _mm.ledger_map_partial(self.old_line())
+        cell = worker_cell(found, {role: "high" for role in ROLES})
+        self.assertNotIn("gates=", cell)
+        self.assertIn("verify=opus", cell)
+        self.assertNotIn("attacker", cell)
+
+    def test_a_full_map_still_groups_exactly_as_it_did(self):
+        resolved = resolve([("all", "opus")], "opus")
+        cell = worker_cell(resolved, {role: "high" for role in ROLES})
+        self.assertEqual(cell, "all=opus/high")
 
 
 class ResolveLaunch(unittest.TestCase):
@@ -493,7 +615,7 @@ class TheLaunchHeaderCarriesThePipelineFingerprint(unittest.TestCase):
         header, _ = resolve_launch("512 models: all=opus", "claude-opus-5")
         self.assertIn("Model map at launch:", header)
         self.assertIn("Role effort at launch:", header)
-        self.assertEqual(12, len(ledger_map(header) or {}))
+        self.assertEqual(len(ROLES), len(ledger_map(header) or {}))
 
     def test_the_fingerprint_is_readable_back_out_of_the_header(self):
         header, _ = resolve_launch("512 513", "claude-opus-5")
@@ -738,7 +860,7 @@ class TheHooksLoadThisFileByPath(unittest.TestCase):
         module = self._loaded_without_the_skills_dir()
         line = "Model map at launch: `" + " ".join(
             f"{role}=opus" for role in module.ROLES) + "`"
-        self.assertEqual(12, len(module.ledger_map(line)))
+        self.assertEqual(len(ROLES), len(module.ledger_map(line)))
 
     def test_a_launch_with_no_fingerprint_module_still_writes_a_header(self):
         """Fail open. Ruling 23 says a dirty tree still runs and the mark is a

@@ -36,6 +36,10 @@ SKILL = RUN_ISSUES / "SKILL.md"
 FINALE = RUN_ISSUES / "finale.md"
 DECISIONS = RUN_ISSUES / "decisions.md"
 RESUME = RUN_ISSUES / "resume.md"
+# Ticket 33 of the pilot-delivery map, ruling 16, ruled by the human 2026-09-07.
+# The launch hardening phase, off the common path for the same reason the
+# finale is: a run with nothing unstamped in scope never opens it.
+LAUNCH_HARDEN = RUN_ISSUES / "launch-harden.md"
 
 # Sentences that live inside the finale block and nowhere else. Every one is
 # load-bearing prose a reader would miss if the move dropped it.
@@ -60,6 +64,30 @@ RESUME_MARKS = [
     "report what it printed in the launch message and spawn nothing",
     "chasing it cost 25 minutes",
     "recreate the cron",
+]
+
+# Sentences that live inside the launch hardening phase and nowhere else.
+# Same shape as FINALE_MARKS: present in `launch-harden.md`, absent from
+# SKILL.md. The phase is a full load, paid only by a run that has an unstamped
+# issue in scope, so a paste-back into SKILL.md bills every other run for it.
+LAUNCH_HARDEN_MARKS = [
+    # Ruling 21 -- the wave recipe, read at spawn time.
+    "Five attackers at a time, and no more.",
+    "Nothing is dropped to fit the cap",
+    # Ruling 3 -- the split.
+    "A split this phase can complete is cut here",
+    "A split that changes a migration's direction is a drop",
+    # Rulings 4 and 11 -- the three drop classes, and the closed list.
+    "Only three things drop an issue from this run",
+    "Every other fork takes its recommended default",
+    # Ruling 10 -- the commit.
+    "Harden at launch: NN, NN",
+    # Ruling 12 -- what the run owes the merge briefing.
+    "Every default this phase took is an item under",
+    # Ruling 15 -- one pass at launch, never one before each implementer.
+    "every unstamped issue in scope, at launch, in one pass",
+    # Ruling 18 -- no off switch.
+    "There is no off switch on the command line.",
 ]
 
 # --- The class-(a) slim, 2026-08-23 -----------------------------------------
@@ -394,7 +422,7 @@ class TestCitationsResolveAnywhere(unittest.TestCase):
     """
 
     def files(self):
-        return sorted(SKILLS.glob("*/SKILL.md")) + [FINALE, RESUME]
+        return sorted(SKILLS.glob("*/SKILL.md")) + [FINALE, RESUME, LAUNCH_HARDEN]
 
     def test_no_skill_cites_a_machine_local_absolute_path(self):
         for path in self.files():
@@ -1118,8 +1146,6 @@ class TheHolesAndTheQuestionsLandOnTheRail(unittest.TestCase):
                 for key in ("needs-you", "catalogue"):
                     self.assertNotIn(f"`{key}`", text.split("## The run on the rail")[0])
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TheFinaleStatesTheBandAndItsFloor(unittest.TestCase):
@@ -1336,3 +1362,573 @@ class TicketThirtySevenSittingThree(unittest.TestCase):
         """Ruling 28 is explicit that minting the token does not make a strike
         countable: two roads cancel one in prose and write no marker."""
         self.assertIn("A strike is still DERIVED", self.skill)
+
+
+class PromotionWritesTheOriginKey(unittest.TestCase):
+    """Ticket 37 ruling 7, the issue half, built at ticket 33 sitting 1.
+
+    Sitting 1 of ticket 37 gave seven briefs the register COLUMN and built
+    `check_origin.py`. Its `--issue` mode had no caller: nothing wrote the key
+    into an issue file, so an escaped fault could be counted at the row and lost
+    at the file promotion minted from it. This is that caller.
+    """
+
+    def brief(self):
+        return squash(read(AGENTS / "promotion.md"))
+
+    def rule(self):
+        """The Origin bullet, read from the key to the start of the next one.
+
+        A fixed character window was 1200 and cut the paragraph that says the
+        check is never run over the issue directory. Ending at the next bullet
+        is what the rule actually occupies, so it cannot go silently stale as
+        the text grows.
+        """
+        brief = self.brief()
+        rule = brief[brief.index("Origin:"):]
+        end = rule.find("- **A `## Target database` section.**")
+        return rule[:end] if end > 0 else rule
+
+    def test_promotion_is_told_to_write_the_origin_line(self):
+        # assertTrue, not assertIn: the haystack is the whole brief, and a red
+        # that buries its message under a 20 KB document is one people switch
+        # off. Same convention as the harden-issues structure test.
+        self.assertTrue("Origin:" in self.brief(),
+                        "promotion.md names no `Origin:` key")
+
+    def test_the_line_carries_both_halves_in_the_checkers_own_grammar(self):
+        """`<issue>/<run>`. A shape only the writer understands is a key the
+        check refuses on the file it was just written into."""
+        self.assertIn("<issue>/<run>", self.rule())
+
+    def test_unknown_is_stated_as_legal_for_either_half(self):
+        """The explicit null, copied from `Owed: unsorted`. A writer with no
+        legal way to say "I do not know" invents one, and the production watcher
+        genuinely does not know either half."""
+        self.assertIn("unknown", self.rule())
+
+    def test_the_line_sits_in_the_header_beside_the_other_keys(self):
+        """`check_origin.py` reads only what is ABOVE the title. A key written
+        below it is body prose, whatever it is called."""
+        rule = self.rule()
+        self.assertIn("header", rule)
+        self.assertIn("Owed:", rule)
+
+    def test_promotion_runs_the_check_on_the_file_it_just_wrote(self):
+        """The rule without its caller is the remember class. `check_origin.py
+        --issue` grades one file promotion has just written."""
+        rule = self.rule()
+        self.assertIn("check_origin.py", rule)
+        self.assertIn("--issue", rule)
+
+    def test_the_check_is_run_before_the_row_is_closed(self):
+        """A row closed on an ungraded file is a fault nobody comes back to:
+        the register row is gone and the issue file is the only record left."""
+        self.assertIn("before you close the row", self.rule())
+
+    def test_the_brief_says_the_check_is_never_run_over_the_issue_directory(self):
+        """The check backfills nothing on purpose. Pointing it at the tracker
+        would refuse every issue minted before 2026-09-07, which is a check
+        people learn to ignore."""
+        self.assertIn("never over the issue directory", self.rule())
+
+
+class TheLaunchHardenPhaseIsOffTheCommonPath(unittest.TestCase):
+    """Ticket 33 of the pilot-delivery map, sitting 2. Rulings 9, 16 and 18.
+
+    Deliverable 3 folds the hardening pass into a run's launch. Ruling 16 put
+    the phase in its own file for the same reason the finale sits in one: it is
+    a full load, and a run whose scope is entirely stamped must not be billed
+    for reading it. That split breaks in two ways nobody would notice by
+    reading either file -- the body gets pasted back into SKILL.md, or the
+    trigger line goes and the file is never opened. These are the refusal.
+    """
+
+    def test_the_phase_file_exists_beside_the_skill(self):
+        self.assertTrue(LAUNCH_HARDEN.is_file(), f"{LAUNCH_HARDEN} does not exist")
+
+    def test_every_phase_sentence_lives_in_the_phase_file(self):
+        phase = squash(read(LAUNCH_HARDEN))
+        for mark in LAUNCH_HARDEN_MARKS:
+            with self.subTest(mark=mark):
+                self.assertTrue(
+                    squash(mark) in phase,
+                    f"the phase file no longer carries its own rule: {mark!r}",
+                )
+
+    def test_the_phase_body_is_not_resident_in_the_skill(self):
+        """A paste-back costs every run that has nothing to harden."""
+        skill = squash(read(SKILL))
+        for mark in LAUNCH_HARDEN_MARKS:
+            with self.subTest(mark=mark):
+                self.assertFalse(
+                    squash(mark) in skill,
+                    f"the phase is resident in SKILL.md again: {mark!r}",
+                )
+
+    def test_the_skill_still_carries_the_trigger(self):
+        skill = read(SKILL)
+        self.assertIn("launch-harden.md", skill)
+
+    def test_the_trigger_ties_the_missing_stamp_to_the_read(self):
+        """A pointer that says the file exists is a reminder. The trigger has
+        to name both halves in one sentence: the condition the runner reads off
+        the issue files, and the file it opens because of it."""
+        skill = read(SKILL)
+        sentences = re.split(r"(?<=[.:])\s", skill)
+        tying = [s for s in sentences
+                 if "launch-harden.md" in s and "Hardened:" in s]
+        self.assertTrue(
+            tying,
+            "no single sentence names both a missing `Hardened:` line and "
+            "`launch-harden.md`",
+        )
+
+    def test_the_skill_no_longer_defers_hardening_to_the_next_run(self):
+        """The bullet the phase replaces said `/harden-issues` was the fix FOR
+        THE NEXT RUN and that it must never run against issues this run holds.
+        Both sentences refuse the phase outright, so a green suite with either
+        still resident would be describing a machine that cannot start."""
+        skill = squash(read(SKILL))
+        self.assertNotIn("naming `/harden-issues` as the fix **for the next run**",
+                         skill)
+        self.assertNotIn("Never run it against issues this run holds", skill)
+
+    def test_the_citation_bullet_grades_stamped_and_unstamped_apart(self):
+        """Ruling 9's second half. One instrument, two jobs: it repairs an
+        unstamped file, because the phase holds the write authority to repair
+        it, and it reports on a stamped one, because a run may not write an
+        issue file it did not harden."""
+        skill = squash(read(SKILL))
+        self.assertIn("report-only on a stamped file", skill)
+        self.assertIn("the phase repairs an unstamped one", skill)
+
+    def test_the_phase_names_the_wave_cap_as_a_number(self):
+        """Ruling 21. `five` is the recipe; a cap written as "a few" is a cap
+        every runner resolves differently."""
+        self.assertIn("Five attackers at a time", squash(read(LAUNCH_HARDEN)))
+
+    def test_the_phase_names_all_three_drop_classes(self):
+        """Ruling 4 made the list closed, so the phase has to enumerate it.
+        A fourth class invented mid-run is an issue dropped on nobody's rule."""
+        phase = squash(read(LAUNCH_HARDEN))
+        for clause in ("[irreversible]", "split", "premise check"):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, phase)
+
+    def test_the_commit_is_named_and_sits_before_spawn_one(self):
+        """Ruling 10. A halt between the phase and spawn 1 must keep the
+        hardened files, and an uncommitted worktree loses them."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("Harden at launch: NN, NN", phase)
+        self.assertIn("before spawn 1", phase)
+
+    def test_the_phase_does_not_restate_the_attack_checklist(self):
+        """The checklist has one home, `harden-issues/SKILL.md`. A second copy
+        drifts, and the drift is invisible: both files read as authoritative.
+        The phase says which pass to run, never how to attack."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertNotIn("Unstated invariants", phase)
+        self.assertNotIn("Joint satisfiability", phase)
+        self.assertIn("harden-issues/SKILL.md", phase)
+
+    def test_the_phase_names_the_run_scoped_findings_path(self):
+        """Ruling 7, landed at sitting 1. A phase that writes to the shared
+        directory overwrites the last attended pass's file for that issue."""
+        self.assertIn("runs/<batch-id>/harden/", squash(read(LAUNCH_HARDEN)))
+
+    def test_the_phase_names_the_two_model_map_keys(self):
+        """Ruling 2, landed at sitting 1. `model-map-gate.py` refuses a spawn
+        carrying the wrong model or none, so a phase that does not read the
+        ledger stops on its first attacker."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("attacker", phase)
+        self.assertIn("seam", phase)
+        self.assertIn("Model map at launch:", phase)
+
+    def test_a_drop_clears_every_place_the_ledger_reader_looks(self):
+        """`find_live_ledger.parse_scope_ids` reads the title line, any `Scope`
+        line and the status table. An id left in one of the three is an issue
+        this ledger still holds, so `machine-preflight.py` refuses another run
+        that types it -- for the whole remaining life of the batch, on an issue
+        this run deliberately let go."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("status table", phase)
+        self.assertIn("title line", phase)
+        self.assertIn("`Scope` line", phase)
+        self.assertIn("parse_scope_ids", phase)
+
+    def test_a_failed_attacker_is_not_a_fourth_drop_class(self):
+        """Ruling 4's list is closed, and it closes over FORKS. An attacker
+        that wrote nothing settled no fork, so the file has to say which of the
+        two things it is -- otherwise a runner meeting an empty findings file
+        twice either invents a class or stamps an unattacked issue."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("not a fourth drop class", phase)
+
+    def test_the_criteria_gate_runs_over_what_survived_the_drops(self):
+        """A dropped issue handed to `check_issue_ready.py` exits 1 on the
+        section it never had, and stops a launch on an issue the phase had
+        already removed."""
+        self.assertIn("over the scope that survived", squash(read(LAUNCH_HARDEN)))
+
+    def test_the_seam_condition_is_stated_in_both_files_that_carry_it(self):
+        """The class ticket 33's own gap 1 names: a rule ruled in one file and
+        not written into the file that enforces it. A launch caller reads the
+        harden skill for the checklist and this file for the phase, so the
+        condition has to read the same way in both."""
+        harden = squash(read(SKILLS / "harden-issues" / "SKILL.md"))
+        self.assertIn("skipped where only ONE issue was attacked", harden)
+        self.assertIn("where two or more", squash(read(LAUNCH_HARDEN)))
+
+    def test_the_phase_says_a_run_still_never_widens_its_own_batch(self):
+        """Ruling 1. The phase hardens what was typed; it does not go looking
+        for the 148 `needs-harden` issues the backlog holds."""
+        self.assertIn("does not pick its own batch", squash(read(LAUNCH_HARDEN)))
+
+
+class TheProseRoleCountIsTheRealOne(unittest.TestCase):
+    """Ticket 33 sitting 2, the item sitting 1 carried forward.
+
+    Ruling 2 widened `model_map.ROLES` from twelve to fourteen. SKILL.md stated
+    the old count in five places and enumerated the old key list in a sixth,
+    and every one of them is descriptive: `SKILL.md` has the runner paste what
+    `model_map.py` prints rather than type a role list, so a ledger header
+    carried fourteen roles whatever the prose said. What the stale prose cost
+    is a reader who counts roles off it and concludes the two hardening roles
+    are outside the map -- which is the opposite of ruling 2.
+
+    A count in prose beside a list in code goes stale on the next widening too,
+    so this is a refusal rather than a correction. It reads the live `ROLES`
+    dict, and the next role to join sends it red on the day it lands.
+    """
+
+    WORDS = {2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven",
+             8: "eight", 9: "nine", 10: "ten", 11: "eleven", 12: "twelve",
+             13: "thirteen", 14: "fourteen", 15: "fifteen", 16: "sixteen"}
+
+    def setUp(self):
+        import model_map
+        self.map = model_map
+        self.raw = read(SKILL)
+        self.skill = squash(self.raw)
+
+    def keys_paragraph(self):
+        """The `models:` key list, from `Keys are` to the end of its sentence."""
+        start = self.skill.index("Keys are `all`")
+        return self.skill[start:start + 600]
+
+    def test_every_role_the_map_knows_is_named_in_the_key_list(self):
+        """A key a runner cannot see is a key nobody types. `attacker` and
+        `seam` were absent for the whole of sitting 1."""
+        listed = self.keys_paragraph()
+        for role in self.map.ROLES:
+            with self.subTest(role=role):
+                self.assertIn(f"`{role}`", listed)
+
+    def test_the_skill_states_the_current_role_count(self):
+        self.assertIn(self.WORDS[len(self.map.ROLES)], self.skill)
+
+    def test_no_stale_count_survives_outside_a_historical_clause(self):
+        """Every counted mention of the roles states today's count.
+
+        The one legal `twelve` is the sentence about the era before ticket 39,
+        where twelve was true. A sentence is historical only if it says so in
+        its own words, so this reads the sentence rather than a line number --
+        the five stale ones moved six lines during this same sitting.
+
+        A group count is legal at its own size: `the four roles that build` is
+        `WORKERS`, not a stale reading of `ROLES`, and the sentence naming the
+        group is what tells the two apart.
+        """
+        words = "|".join(self.WORDS.values())
+        counted = re.compile(
+            rf"\b({words})\b(?:\s+\S+){{0,2}}\s+(?:roles?|agent files?)\b"
+        )
+        whole = self.WORDS[len(self.map.ROLES)]
+        workers = self.WORDS[len(self.map.WORKERS)]
+        history = ("That was right while",)
+        seen = 0
+        for sentence in re.split(r"(?<=[.:])\s", self.raw):
+            flat = squash(sentence)
+            for found in counted.finditer(flat):
+                word = found.group(1)
+                seen += 1
+                if any(clause in flat for clause in history):
+                    continue
+                if "that build" in flat and word == workers:
+                    continue
+                with self.subTest(sentence=flat[:90]):
+                    self.assertEqual(
+                        word, whole,
+                        "a role count states a number the map does not hold: "
+                        f"{flat[:160]!r}",
+                    )
+        # A guard that matched nothing would pass on a file that had deleted
+        # every count, which is not the same thing as a file that is right.
+        self.assertGreater(seen, 3)
+
+    def test_the_group_sizes_in_prose_match_the_groups_in_code(self):
+        """`workers` and `gates` are what a launch line actually types, and
+        ruling 2 put the two hardening roles in `gates`, so the group grew with
+        the role list."""
+        self.assertIn(f"the {self.WORDS[len(self.map.WORKERS)]} roles that build",
+                      self.skill)
+        self.assertIn(f"the {self.WORDS[len(self.map.GATES)]} that check",
+                      self.skill)
+
+
+class ThePeerHardenBranchIsRefusedBeforeThePhaseSpends(unittest.TestCase):
+    """Ticket 33 sitting 3, the mock drive. Drive D measured this.
+
+    `check_harden_branch.py` refuses a launch while an unmerged
+    `claude/harden-issues-*` branch holds an issue in the batch. Before the
+    fold that refusal cost the run nothing: it arrived while the pre-flight was
+    still reading files. The fold put the hardening phase ABOVE it in the
+    bullet order, so an unstamped issue a peer branch already holds is attacked,
+    repaired, stamped and committed -- and only then is the launch refused.
+    That is the fault `check_harden_branch.py` exists to prevent, made worse: two
+    hardening passes now write the same issue file at the same time.
+
+    Measured on mock drive D, 2026-09-07: `/run-issues 909 models: all=sonnet`
+    against an unmerged `claude/harden-issues-909-mock33`. The prompt gate
+    passed, the map resolved, the batch id was minted, the ledger was written,
+    the hardening-stamp bullet listed 909 as unstamped -- and the refusal came
+    four bullets later. A live ledger holding 909 was left behind by a launch
+    that never started, so `machine-preflight.py` then refused the retry as an
+    overlapping range.
+
+    Two refusals, and both are about ORDER rather than about wording.
+    """
+
+    def setUp(self):
+        self.skill = read(SKILL)
+        self.phase = squash(read(LAUNCH_HARDEN))
+
+    def _at(self, needle):
+        where = self.skill.find(needle)
+        self.assertNotEqual(where, -1, f"{needle!r} is not in SKILL.md at all")
+        return where
+
+    GATE_BULLET = "**Concurrency gate — REFUSE to start while an unmerged"
+
+    def test_the_concurrency_gate_is_read_before_the_phase_is_triggered(self):
+        """The hardening-stamp bullet is what opens `launch-harden.md`. A peer
+        branch holding one of these issues has to have refused the launch
+        already, or the phase spends five attacker spawns on a file another
+        session is hardening at the same moment.
+
+        Anchored on the BULLET's own opening words, not on the bare script name:
+        the script is named in the resume section and in cross-references, and
+        an earlier mention would satisfy a name search while the bullet itself
+        sat back below the trigger -- which is the regression this class
+        exists to catch."""
+        gate = self._at(self.GATE_BULLET)
+        trigger = self._at("is the trigger to read `launch-harden.md`")
+        self.assertLess(
+            gate, trigger,
+            "the hardening phase is triggered above the concurrency gate, so "
+            "a launch a peer harden branch refuses has already attacked, "
+            "repaired, stamped and committed its issue files",
+        )
+
+    def test_the_refusing_gate_runs_before_the_batch_id_is_minted(self):
+        """A refused launch must leave nothing. The batch id is what mints the
+        run directory and what `find_live_ledger.py` reads, so a refusal after
+        it leaves a live ledger holding an issue nothing is building."""
+        gate = self._at(self.GATE_BULLET)
+        mint = self._at("Then mint the batch id")
+        self.assertLess(
+            gate, mint,
+            "the batch id is minted before the concurrency gate can refuse, so "
+            "a refused launch leaves a live ledger holding its issues",
+        )
+
+    def test_the_phase_file_names_the_peer_branch_as_something_it_never_takes(self):
+        """The phase's own `What this phase never does` list is where a caller
+        reads its scope. The never-attack guard covers an issue a live LEDGER
+        holds; a peer hardening BRANCH is the other second writer, and ruling 5
+        does not reach it."""
+        self.assertIn("check_harden_branch.py", self.phase)
+
+
+class TheCitationVerdictComesFromTheRowsNotTheExitCode(unittest.TestCase):
+    """Ticket 33 sitting 3, the mock drive. Drives A and B measured this.
+
+    Ruling 9 gave the pre-flight citation bullet two jobs: repair an unstamped
+    file, report on a stamped one. Both need to know WHICH scoped files are
+    broken, and the obvious instrument -- the process exit code -- cannot say.
+
+    `scripts/check-issue-citations.mjs --quiet <one issue file>` always runs the
+    decision pass over the whole repository beside the citation pass over the
+    named file, and there is no flag to turn it off. Measured 2026-09-07 on the
+    mock feature: a file with `0 citations ... 0 moved` exits 1, and a file with
+    two genuinely moved citations exits 1. The 1 came from eight `Touches:`
+    faults in `docs/adr/` and `.scratch/pilot-delivery/issues/`, none of them in
+    the batch.
+
+    So a runner reading the exit code names every scoped file as broken, and the
+    phase repairs files that have nothing wrong with them. The verdict is the
+    summary line and the rows that NAME the file. Both places that read the
+    instrument have to say so.
+    """
+
+    MARK = "never the exit code"
+
+    def test_the_preflight_bullet_says_which_reading_is_the_verdict(self):
+        self.assertIn(self.MARK, squash(read(SKILL)))
+
+    def test_the_phase_step_says_it_too(self):
+        """The phase is the caller that WRITES on this reading, so it is the one
+        place where a wrong reading edits an issue file."""
+        self.assertIn(self.MARK, squash(read(LAUNCH_HARDEN)))
+
+
+class ThePhaseHardensTheCopyOnTheRunsOwnBranch(unittest.TestCase):
+    """Ticket 33 sitting 3, the mock drive. Drive A measured this.
+
+    `launch-harden.md` said to commit the phase's work "on the run's own branch"
+    and never said which TREE the attackers read and write. Every other path in
+    the phase is absolute or run-scoped -- the findings file, the ledger, the
+    decisions shard -- so the issue file is the one path a runner has to guess.
+
+    Drive A guessed the main checkout, and both failure halves landed at once.
+    The run worktree's copy of issue 901 still read the unhardened text, so the
+    implementer would have been graded against criteria the phase had already
+    replaced; and `git status` in the MAIN checkout showed two modified issue
+    files, which is a run writing main. `SKILL.md` says main belongs to the human and
+    that a run may not write an issue file it did not harden -- the phase is the
+    exception to the second, and it is not an exception to the first.
+
+    Nothing mechanical would have caught it. The commit step would have found
+    nothing to commit on the run's branch and reported success on an empty diff.
+    """
+
+    def setUp(self):
+        self.phase = squash(read(LAUNCH_HARDEN))
+
+    def test_the_phase_names_the_tree_it_works_in(self):
+        self.assertIn("run's own worktree", self.phase)
+
+    def test_the_phase_says_the_main_checkout_is_never_written(self):
+        """The half a reader is likeliest to skip: knowing where to work does
+        not by itself say that the other copy is out of bounds."""
+        self.assertIn("never the main checkout", self.phase)
+
+    def test_the_attacker_spawn_carries_that_path(self):
+        """A rule the phase states and the spawn prompt does not carry is a rule
+        the attacker never sees: the brief is the only thing it reads."""
+        self.assertIn("worktree path", self.phase)
+
+
+class ASeamFindingAgainstAStampedIssueHasSomewhereToGo(unittest.TestCase):
+    """Ticket 33 sitting 3, the mock drive. Drive A's seam pass measured this.
+
+    The seam agent reads every issue in the batch, stamped ones included, because
+    a gap between two issues does not care which of them was hardened today. But
+    the phase may only WRITE the unstamped ones -- a run may not write an issue
+    file it did not harden, and editing a criterion under an existing stamp
+    leaves the stamp describing a file it no longer matches.
+
+    Drive A hit it on the first try. The seam found that issue 901's criterion 1
+    carried an export-style ambiguity its own attacker had missed, applied the
+    fix to 901, and found the identical gap in 903 -- which was already stamped.
+    It correctly declined to edit 903 and recorded the fact in `seam.md`. The
+    phase reads counts and `## Checks for the human` out of that file and nothing
+    else, so the finding would have died there while 903's implementer built to
+    the criterion the seam had just shown to be short.
+
+    The remedy costs nothing and needs no write authority: the runner already
+    builds a spawn prompt per issue, and the merge briefing already has a place
+    for what the run learned. Ruling 4's drop list stays closed -- a seam finding
+    against a stamped issue drops nothing.
+    """
+
+    def test_the_phase_says_where_a_stamped_issues_seam_finding_goes(self):
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("seam finding against a stamped issue", phase)
+
+    def test_it_reaches_the_implementer_and_the_briefing(self):
+        """A finding recorded only in `seam.md` is a finding nobody reads: the
+        phase takes counts and questions out of that file, never the working."""
+        phase = squash(read(LAUNCH_HARDEN))
+        self.assertIn("spawn prompt", phase)
+        self.assertIn("merge briefing", phase)
+
+
+class ACheckOnlyTheHumanCanRunHasAHomeInsideARun(unittest.TestCase):
+    """Ticket 33 sitting 3, the mock drive. Drive B measured this.
+
+    `harden-issues/SKILL.md` heads a whole section "Checks only the human can run
+    happen HERE, not mid-run", and settles them by putting the list to the human
+    at the end of the attended pass. The launch phase is mid-run. There is no end of an
+    attended pass, nobody to put a list to, and nothing in a run ever waits.
+
+    So the fold gave the pass a third caller and left one of its outputs without a
+    reader. Drive B produced one on the first batch that could: issue 907's
+    attacker exhausted the instruments this machine has, read the premise out of a
+    dated snapshot, and filed the live re-read as a check -- correctly, since only
+    a read outside the sandbox closes it. The issue stays in scope, so no drop
+    class covers it, and `seam.md` is not a place anyone acts from.
+
+    A check is not a fork, so ruling 4's list is untouched and ruling 12's
+    `## Ruled` items are the wrong home: nobody has ruled anything. It goes where
+    every other thing a run needs from the human's hands goes -- the pending file,
+    which the daily brief reads every morning -- and it is named under `## Decide`
+    so the merge read sees it too.
+    """
+
+    def setUp(self):
+        self.phase = squash(read(LAUNCH_HARDEN))
+
+    def test_the_phase_says_where_a_check_for_the_human_goes(self):
+        self.assertIn("Checks for the human", self.phase)
+
+    def test_it_lands_in_the_projects_pending_actions_file(self):
+        """The live tree names one file by its absolute path, because there the
+        path is real and a bare name sent a merge briefing's reader searching a
+        repo tree on 2026-08-03. No reader of this pack has that file, so the
+        phase names the role instead and carries the citation rule with it."""
+        phase = read(LAUNCH_HARDEN)
+        self.assertIn("pending-actions file", phase)
+        self.assertIn("cite its path in full", phase)
+
+    def test_a_check_does_not_drop_the_issue(self):
+        """907's attacker was explicit that the issue stays in scope. Reading a
+        check as a fourth drop class would take an issue out of a run over a
+        question nobody had to answer to build it."""
+        self.assertIn("does not drop the issue", self.phase)
+
+
+class EveryBulletThatReadsAnIssueFileNamesItsTree(unittest.TestCase):
+    """Ticket 33 sitting 3's review, and drive G measured the fault.
+
+    `launch-harden.md` now pins every issue file the phase reads and writes to
+    the run's own worktree. Two bullets in `SKILL.md` feed that phase and named
+    no tree at all: the citation check, whose rows the phase repairs from, and
+    the hardening stamp, whose reading decides which issues enter the phase.
+
+    A worktree freezes the tracker at the moment it was cut, so the two copies
+    are not interchangeable. Drive `batch-800f60` was cut at `3d5fe7bf` while
+    issue 914 landed on main at `b81bf6a4`: the worktree did not hold that file
+    at all, an attacker was handed a path that did not exist, and it edited the
+    main checkout instead -- and said so, which is the only reason it was
+    caught. The same freeze makes a file stamped on main after the cut read
+    unstamped in the worktree, so the stamp bullet can put an issue into the
+    phase twice or skip it once, depending only on which copy the runner opened.
+    """
+
+    def setUp(self):
+        self.skill = squash(read(SKILL))
+
+    def test_the_citation_bullet_names_the_tree_it_reads(self):
+        bullet = self.skill.split("Run the citation check over the batch's own")[1][:2200]
+        self.assertIn("run's own worktree", bullet)
+
+    def test_the_stamp_bullet_names_the_tree_it_reads(self):
+        bullet = self.skill.split("Hardening stamp, and the phase it triggers")[1][:2200]
+        self.assertIn("run's own worktree", bullet)
+
+
+if __name__ == "__main__":
+    unittest.main()

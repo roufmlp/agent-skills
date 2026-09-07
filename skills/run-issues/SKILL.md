@@ -157,8 +157,8 @@ never a halt.
   all along; nothing had written down how.
 
   **Two more header lines, written at launch BY `model_map.py`:** `Model map at
-  launch:` and `Role effort at launch:`, a `role=value` list each, all twelve loop
-  roles named in both (ticket 39 of the pilot-delivery map,
+  launch:` and `Role effort at launch:`, a `role=value` list each, all fourteen
+  loop roles named in both (ticket 39 of the pilot-delivery map,
   every-worker-inherits-the-session-model, rulings 4 and 7). Run this before spawn
   1 and paste what it prints:
 
@@ -190,10 +190,11 @@ never a halt.
 
   Keys are `all`, `workers`, `gates`, or one agent type without its prefix —
   `implementer`, `escalated`, `verify`, `review`, `review-critical`, `finale`,
-  `finder`, `fixer`, `claim-gate`, `fix-gate`, `fix-gate-critical`, `promotion`.
+  `finder`, `fixer`, `claim-gate`, `fix-gate`, `fix-gate-critical`, `attacker`,
+  `seam`, `promotion`.
   More specific wins, whatever the order typed. Values are `haiku`, `sonnet`,
   `opus`, `fable` and `inherit`. `workers` is the four roles that build and
-  `gates` the six that check; `finale` and `promotion` are reached by `all` or by
+  `gates` the eight that check; `finale` and `promotion` are reached by `all` or by
   their own key. With no `models:` word the default file
   `model-map.default` in this directory is read, and it ships at `all=inherit`, so
   a launch that types nothing behaves exactly as every run did before the map
@@ -201,7 +202,7 @@ never a halt.
 
   **`inherit` never reaches a ledger.** Every role is resolved to a concrete name
   at launch, so a resume on a different session model changes the orchestrator
-  only. The twelve agent files stay `model: inherit`, so a spawn by hand is
+  only. The fourteen agent files stay `model: inherit`, so a spawn by hand is
   untouched — the map reaches a run through the ledger and nowhere else.
 
   **An inverted map is refused before anything is spawned.** No adversarial gate
@@ -765,6 +766,16 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    to promotion untouched. Adopted by the human 2026-08-27 as F6, because it moves work
    earlier rather than adding it.
 
+   **A hook refuses the commit until this is done**, so read the sweep back before you
+   commit rather than being told (ticket 36, ruling 16). A row it did not close stays
+   `open` WITH THE REASON, never bare:
+
+   ```
+   python3 ~/.claude/skills/run-issues/check_register_status.py <register or shard> --sweep <issue>
+   ```
+
+   The finale runs the same command with `--sweep <batch-id>` before promotion.
+
    The exit codes a collector reads: 0 clean, 1 a fault, 2 no issue file matched, 3 not a git
    repository, 4 the unchecked-majority refusal, 5 `--at` could not be honoured, 6 named paths
    went ungraded. Codes 4, 5 and 6 are refusals to answer, not answers, and all three outrank 1.
@@ -1155,6 +1166,32 @@ procedure is a script and not a judgement. Resume keys on the current directory
   it buys is that the interrupt window exists at all. (Adopted by the human
   2026-08-07; `decisions.md` holds the run whose line printed too late to
   interrupt, and the older 11.5-hour misread halt.)
+- **Concurrency gate — REFUSE to start while an unmerged hardening branch holds
+  an issue in this batch. This is the FIRST thing the pre-flight runs, before
+  the batch id is minted and before the hardening phase is triggered.**
+
+  ```
+  python3 ~/.claude/skills/run-issues/check_harden_branch.py \
+      --issue <id> [--issue <id> ...] [--repo <path>] [--base main]
+  ```
+
+  Exit 1 blocks the launch. The remedy is to merge that branch and re-read the
+  issue files, which costs a fast-forward: those branches touch `.scratch/` only.
+  It needs no batch id, no ledger and no worktree, which is why it can run first.
+
+  **Run `bridge-cse`, 2026-08-24, is the instance.** It built 408, 407, 409 and
+  338 from unhardened files while a peer `/harden-issues` session held hardened
+  copies of all four on `claude/harden-issues-407-408-ce713b`. That session even
+  messaged the run mid-issue with five findings, all of which held. Its branch
+  merged at 23:12, about ten hours after the run finished the same four files
+  without it. The hardening existed, on disk, before the run started. Nothing
+  read it, because nothing looked. (Approved by the human 2026-08-24.)
+
+  **It sat four bullets lower until 2026-09-07, and the fold made that
+  position wrong.** `decisions.md` holds what mock drive D measured; the short
+  of it is that the hardening phase and the batch id both came first, so a
+  refused launch had already attacked and rewritten the issue files a peer
+  session was hardening, and had left a live ledger holding them.
 - **The ceiling and the issue range are refused at the prompt, not checked
   here.** `~/.claude/hooks/machine-preflight.py` refuses a third `/run-issues`
   while two runs are live, any `/run-issues` whose typed issue range overlaps a
@@ -1185,10 +1222,38 @@ procedure is a script and not a judgement. Resume keys on the current directory
 - **Run the citation check over the batch's own issue files, and name the broken
   ones in the launch line.** `node scripts/check-issue-citations.mjs --quiet
   <file>` per issue in scope — about ten seconds a file, no `node_modules`
-  needed, batch files only, never `--all`. Report, never repair: a run may not
-  write an issue file, so the repair still belongs to a hardening pass; what this
-  buys is that a stale spec is visible in the interrupt window instead of met
-  mid-run by an implementer as a wrong premise.
+  needed, batch files only, never `--all`.
+
+  **It is report-only on a stamped file, and the phase repairs an unstamped
+  one.** A run may not write an issue file it did not harden, so a stamped
+  file's broken citations are named in the launch line and left where they are.
+  An unstamped one is inside `launch-harden.md`'s scope, which is a hardening
+  pass and carries the write authority to repair it. Either way what this buys
+  is that a stale spec is visible in the interrupt window instead of met mid-run
+  by an implementer as a wrong premise. (Ruling 9 of the same ticket split the
+  two roads; the bullet read `Report, never repair` while there was only one.)
+
+  **Read the copies in the run's own worktree, not the main checkout's**, so
+  that this reading and the phase's repair are about the same files. A worktree
+  freezes the tracker at the moment it was cut: an issue file committed to main
+  afterwards is not in it at all, and one stamped afterwards still reads
+  unstamped there. Measured 2026-09-07 on drive `batch-800f60`, cut at
+  `3d5fe7bf` while issue 914 landed at `b81bf6a4` — an attacker was handed a
+  worktree path that did not exist. **Where a scoped file is missing from the
+  worktree, bring it onto the branch before the phase runs**; the criteria gate
+  below refuses it either way, and its per-issue row names the real cause.
+
+  **The verdict is the file's own summary line and the `MOVED`, `GONE` and
+  `AMBIGUOUS` rows that NAME it — never the exit code.** There is no flag that
+  turns the decision pass off, so `--quiet <one issue file>` always grades every
+  landed decision in the repository beside the citations in the file you named,
+  and one stale `Touches:` line anywhere makes the process exit 1. Measured on
+  2026-09-07 during ticket 33's mock drive: a scoped file reading `0 citations
+  ... 0 moved` and a scoped file carrying two genuinely moved citations both
+  exited 1, on eight `Touches:` faults in `docs/adr/` and other features'
+  issue files. A runner reading the exit code names every scoped file as broken
+  — and since ruling 9 the phase WRITES on that reading, so it would repair
+  files with nothing wrong with them.
 
   **A zero from that check is a fact about the FILE, not about the instrument.**
   Report it as "this file carries no parsed citations at this moment" and never
@@ -1223,10 +1288,6 @@ procedure is a script and not a judgement. Resume keys on the current directory
   Read `Model map at launch:` in `run.md`, take this role's value, and pass it in
   the Agent call's `model` field. Every spawn, every role, every attempt.
 
-  **The twelve agent files still say `model: inherit`.** A spawn by hand in an
-  ordinary sitting therefore behaves exactly as it always did: no live ledger, no
-  map, no change.
-
   **A map that cannot be forgotten needs a refusal, and this pack does not ship
   one.** Two `PreToolUse` and `SubagentStop` hooks do that job in the author's
   own setup — one refuses a spawn whose `model` field does not match the ledger
@@ -1244,22 +1305,34 @@ procedure is a script and not a judgement. Resume keys on the current directory
   a model choice.
 
   **A journal with no landed line reads `not measured`, which is not a pass.**
+  Run `batch-b5e96d` is the case, measured 2026-09-06: it ran before the hook
+  landed, so nothing looked at what its workers ran on.
+
+  **The fourteen agent files still say `model: inherit`** (ruling 6). A spawn by
+  hand in an ordinary sitting therefore behaves exactly as it always did: no
+  live ledger, no refusal (ruling 9).
 
   **One spawn falls outside all of this, and it is the one with no agent file.**
-  The finale's board render is not one of the twelve roles, so the map does not
-  name it. `finale.md` step 5 requires `model: "opus"` named explicitly on that
-  Agent call — an unnamed spawn there inherits whatever the session runs, to
-  convert a 283 KB markdown file into HTML, measured 2026-08-06. **The pin is
-  `opus`: the top reasoning tier below the most expensive one**, and it was
-  `haiku`, then `fable`, before that. The render cost 0.30M weighted
-  tokens against a run's 149.70M, so the saving is not what decides it, and the
-  tier order in this pack ranks review authority and never price. `finale.md`
-  step 5 carries the rest of that reasoning. Read the two together: this bullet
-  governs the twelve briefed roles, which take their model from the ledger;
-  `finale.md` governs the one spawn that has no brief and no map row. (Scoped by
-  the human on 2026-08-22, answering C7 of the skills audit. The alternative —
-  minting an agent file for the board renderer — was refused, because it adds a
-  file to fix a wording problem.)
+  The finale's board render is not one of the fourteen roles, so the map does not
+  name it and the gate does not judge it. `finale.md` step 5 requires
+  `model: "opus"` named explicitly on that Agent call — an unnamed spawn there
+  inherits whatever the session runs, which since this ticket can be Fable, to
+  convert a 283 KB markdown file into HTML, measured 2026-08-06.
+
+  **The pin was `fable` until 2026-09-06, and the human moved it to `opus`**, closing
+  `q-t39-s2-1`: ruling 14 makes `fable` the top tier, so the pin was naming the
+  most expensive model for the cheapest job in the pipeline. Measured on run
+  `batch-b5e96d`, the render cost 0.30M weighted tokens against that run's
+  149.70M. **The tier order ranks review authority and never price**, and
+  `finale.md` step 5 carries the rest of the reasoning, including why the pin
+  does not go below Opus. (This bullet cited `finale.md:147-166` and `haiku`
+  until 2026-09-05. Line 147 is about migration `0086`; the review of sitting 2
+  measured both, and line numbers are not cited here any more.) Read the two together: this bullet governs
+  the fourteen briefed roles, which take their model from the ledger; `finale.md`
+  governs the one spawn that has no brief and no map row. (Scoped by the human on
+  2026-08-22, answering C7 of the skills audit. The alternative — minting an
+  agent file for the board renderer — was refused, because it adds a file to fix
+  a wording problem.)
 - **Record the session model in the ledger's owner line and in the merge
   briefing.** Every tier this pipeline has evidence for was earned at Opus 5
   (decisions.md). A run on any other tier is still a valid run, and it is also
@@ -1293,10 +1366,24 @@ procedure is a script and not a judgement. Resume keys on the current directory
   before it. Four issues cost it 0.96M weighted tokens per issue, nine cost 1.44M to
   1.67M, and thirteen cost 2.45M. Nothing else in the audit moved a number this far.
 
-- **Hardening stamp.** List every scoped issue whose file lacks a `Hardened:`
-  line in the launch message, naming `/harden-issues` as the fix **for the next
-  run**. Never run it against issues this run holds. Launch-time information for
-  the human only — not a gate, and nothing mid-run.
+- **Hardening stamp, and the phase it triggers.** List every scoped issue whose
+  file lacks a `Hardened:` line in the launch message. **A typed issue in scope
+  with no `Hardened:` line is the trigger to read `launch-harden.md`, beside this
+  file, and the phase it holds runs here — after this line prints, before the
+  criteria gate below it, and before spawn 1.** The phase reads the batch id and
+  the model map off `run.md`, so it cannot run before the bullets that mint
+  them. That file holds the whole
+  phase — the scope it takes, the waves, what settles a fork and what drops an
+  issue, the commit, and what the run then owes the merge briefing. Where the
+  list is empty the file is never opened and the run costs what every run before
+  the fold cost. (Ticket 33 of the pilot-delivery map, ruling 16, ruled by the human
+  2026-09-07; `decisions.md` holds why the phase is a file rather than a section
+  here.)
+
+  **Read the `Hardened:` lines in the run's own worktree**, the same copies the
+  phase repairs and commits, for the reason the citation bullet above gives: a
+  worktree cut before an issue was stamped still reads it unstamped, so the two
+  copies put different issues into the phase.
 
   An `all` run takes stamped issues, and `Hardened (provisional)` counts as
   stamped — a pending default is not a reason to drop an issue. An explicitly
@@ -1333,24 +1420,6 @@ procedure is a script and not a judgement. Resume keys on the current directory
   `bridge-cse`: 408 and 407 were both that shape, the runner authored their
   criteria, two citations in that brief were wrong, and they reached a shipped
   code comment. (Approved by the human 2026-08-24, override per issue, cost printed.)
-- **Concurrency gate — REFUSE to start while an unmerged hardening branch holds
-  an issue in this batch.**
-
-  ```
-  python3 ~/.claude/skills/run-issues/check_harden_branch.py \
-      --issue <id> [--issue <id> ...] [--repo <path>] [--base main]
-  ```
-
-  Exit 1 blocks the launch. The remedy is to merge that branch and re-read the
-  issue files, which costs a fast-forward: those branches touch `.scratch/` only.
-
-  **Run `bridge-cse`, 2026-08-24, is the instance.** It built 408, 407, 409 and
-  338 from unhardened files while a peer `/harden-issues` session held hardened
-  copies of all four on `claude/harden-issues-407-408-ce713b`. That session even
-  messaged the run mid-issue with five findings, all of which held. Its branch
-  merged at 23:12, about ten hours after the run finished the same four files
-  without it. The hardening existed, on disk, before the run started. Nothing
-  read it, because nothing looked. (Approved by the human 2026-08-24.)
 - **Permission floor — REFUSE to start when the run's own commands are not in
   the TRACKED allow list.** Run it INSIDE the run's worktree, after the worktree
   exists and before the first issue spawns.

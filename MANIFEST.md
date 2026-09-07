@@ -170,13 +170,20 @@ than the four that govern everything else here.
 | `hooks/test_git_shared_state_guard.py` | `~/.claude/hooks/test_git_shared_state_guard.py` (68 behavioural cases against a real git fixture, mutation-tested, added 2026-09-08) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
-**`git-shared-state-guard.py` is here on a ruling, and it costs the sync one scrub.**
+**`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**
 Ticket 41 of the pilot-delivery map settled it on 2026-09-07: the fault the guard closes is
 a property of git, not of one machine. A worktree gets its own index; the main checkout has
 one, and every session working there shares it, so a wide `git add` stages whatever every
-other session has touched. Anyone running several agents against one checkout has this. What
-the sync must scrub is the closing line of the refusal, which cites the ticket and the two
-dates it was measured on. H2 forbids that, and the rest of the message names commands only.
+other session has touched. Anyone running several agents against one checkout has this.
+
+Copied on 2026-09-08, three things moved. The refusal's closing line cited the ticket and
+the dates it was measured on, which H2 forbids; it now states the fact that line carried —
+naming what you stage does not protect it while the index is shared — and the test pins that
+sentence instead of the ticket number. The docstring gained a blast-radius paragraph at the
+top under H4, and its two instances lost a run id, a commit sha and two ticket numbers,
+keeping the measured 1,472 lines. And it claimed to copy the shape of
+`generated-file-guard.py` "in this same directory", which is withheld: under H3 it now names
+the published hooks beside it.
 
 **A hook does nothing until a reader registers it, and a skill pack cannot register it
 for them.** That is the whole reason `hooks/README.md` exists: it carries the exact
@@ -184,13 +191,15 @@ for them.** That is the whole reason `hooks/README.md` exists: it carries the ex
 who copies the file and skips the block still loses. Publish no hook without a line in
 it.
 
-**One of the five published hooks ships no test, `coderules-gate.py`, because it has none
-anywhere in the live tree.** Re-measured 2026-09-07 by the session verifying ticket 36. The
-line before it said two, and named `run-issues-foreground-gate.py` as the other; that hook
-gained `test_run_issues_foreground_gate.py` in ticket 36 sitting 1, 27 cases that drive
-payloads through it, and the test is published in the row above. `coderules-gate.py` is
-named by no test file at all. That is a gap in the live tree, not a scrub decision, and it is
-written here rather than left for a reader to discover by grepping.
+**One of the six published hooks ships no test, `coderules-gate.py`, because it has none
+anywhere in the live tree.** Re-measured 2026-09-07 by the session verifying ticket 36, and
+still true on 2026-09-08. `run-issues-foreground-gate.py` gained
+`test_run_issues_foreground_gate.py` in ticket 36 sitting 1, 27 cases that drive payloads
+through it, and that test went out in the 2026-09-08 sync with one paragraph rewritten under
+H3: it had listed five sibling test files as evidence of the gap it closed, and four of the
+five are withheld from this pack. `coderules-gate.py` is named by no test file at all. That
+is a gap in the live tree, not a scrub decision, and it is written here rather than left for
+a reader to discover by grepping.
 
 **`origin-row-guard.py` ships with one road switched off, and the reason is a withheld
 file rather than a scrub of its own.** Its Bash branch resolves a redirect target with
@@ -283,21 +292,21 @@ It reads presence only, never content. The two copies differ by design — the s
 rules rewrite names, paths and run ids on every sync — so a content check would alarm
 on every file for ever and be switched off within a day.
 
-**Four rows read `dead-publication` today, and all four are deliberate.**
-`hooks/test_run_issues_foreground_gate.py` has waited since 2026-09-07 for a sync to
-copy it. `skills/lib/run_python_suites.py` and its drill join it the same day: the
-walker that refuses a suite reporting no executed check. It publishes because it
-assumes nothing outside the pack -- its two default roots are `~/.claude/skills` and
-`~/.claude/hooks`, which rule H1 keeps -- but its docstring cites
-`hooks/model-landed-check.py`, which this pack does not ship, and rule 3 means that
-sentence is rewritten or cut at copy time. `skills/run-issues/launch-harden.md` joins
-them: the file landed live on 2026-09-07 with ticket 33 sitting 2, and publishing it
-alone would put a phase file in the pack that nothing points at — the published `run-issues/SKILL.md` predates
-the paragraph that names it and still carries the `Report, never repair` citation
-bullet the same sitting split in two. All four wait for the next real sync, which is
-five live commits' worth of drift across all three checkouts and is a sitting of its
-own. A row with no file is the honest state: the decision to publish is recorded,
-the copy is not yet made.
+**No row reads `dead-publication` today.** The 2026-09-08 sync copied the six that did:
+`skills/run-issues/launch-harden.md`, `skills/lib/run_python_suites.py` and its drill,
+`hooks/test_run_issues_foreground_gate.py`, and `hooks/git-shared-state-guard.py` with its
+test. Four of them had waited since 2026-09-07, which was the state this paragraph recorded:
+a row with no file is the honest state, because the decision to publish is recorded before
+the copy is made.
+
+Two of the six needed a rewrite rather than a copy, both under rule 3.
+`run_python_suites.py` cited `hooks/model-landed-check.py` in its docstring as a second
+instance of the shape it refuses; that hook is withheld, so the sentence now states the
+shape without naming a file no reader has. `launch-harden.md` named `model-map-gate.py` and
+`machine-preflight.py` as controls its reader holds, and both are withheld: the model-map
+line now says in as many words that this pack ships no refusal for it, matching what
+`run-issues/SKILL.md` already says, and the two overlap-guard lines became conditionals on
+the reader's own setup.
 
 It exists because the reminder it replaces had a hole the shape of the fault. That
 reminder fires "after editing any file listed in its MANIFEST.md", and a brand-new live

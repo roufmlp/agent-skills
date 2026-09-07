@@ -299,6 +299,50 @@ The rule was already written and the practice ran ahead of it anyway: one pass
 cleared two issues out of `needs-harden` and minted two more into it, leaving
 the queue exactly where it started.
 
+### The blanket never-attack rule, and why the fold could not keep it
+
+Until 2026-09-07 the never-attack guard had a second half: skip EVERYTHING if
+any ledger's owner line named a live session, not only the issues that ledger
+holds. The reason it was written that way is real — a live run's promotion mints
+issue files no ledger title carries, so a pass reading titles alone could pick
+one up mid-mint.
+
+Ticket 33 of the pilot-delivery map, ruling 5, removed it. Deliverable 3 folds
+the hardening pass into a run's launch, and read literally the blanket half
+refuses the run's own launch attackers: the ledger exists, its owner line names
+a live session, so the pass skips everything including the issues it was spawned
+to harden. It also refused run A's launch phase for as long as run B was live,
+which is a second measured cost on a machine that carries two runs by design
+(ticket 38, the one-run-per-feature layout ticket).
+
+What replaces it is the row test alone, which is the half that names the actual
+danger: a second writer on a file an implementer is reading. A row still at
+`queued` has no implementer. The freshly minted file the blanket half protected
+is now covered by promotion itself, which mints with `Status: needs-harden` and
+re-derives its citations before it writes (`promotion.md`).
+
+## The third entry point: a run's launch calls this pass (2026-09-07)
+
+Ticket 33 of the pilot-delivery map, ruling 16, sitting 2. The phase itself is
+specified in `run-issues/launch-harden.md`, and `run-issues/decisions.md` holds
+why it is shaped that way. Two things belong here, because they are facts about
+THIS skill rather than about the run.
+
+**The pass gained a caller and lost nothing.** Ruling 6 kept the standalone,
+pre-batch door. The human wanted the attended walk available for an issue they mean to
+rule on before any code is written, and the fold does not serve that: a launch
+phase defaults every reversible fork by design, which is the whole point of going
+AFK. So the fold ADDS a door. The count word in the lead-in sentence is the part
+that goes stale silently -- a reader who counts two doors concludes a run cannot
+call this pass at all -- so `TheThirdEntryPointIsNamed` in
+`test_skill_structure.py` counts the bullets and grades the word against them.
+
+**The checklist has exactly one home, and the fold is where a second copy would
+have appeared.** `launch-harden.md` says which pass to run and never how to
+attack. Two copies of eleven classes drift, and the drift is invisible, because
+both files read as authoritative while they disagree. The structure test refuses
+a class name appearing in the phase file.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel, taken by the human: three personas

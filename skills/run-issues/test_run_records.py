@@ -517,10 +517,6 @@ class GeneratedView(unittest.TestCase):
         self.assertIn("runs.jsonl", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheReviewOf2026_09_06(unittest.TestCase):
     """The `/code-review` pass on this sitting's own diff, four findings."""
 
@@ -714,3 +710,7 @@ class AValidatorNeverRaises(unittest.TestCase):
         batch, why = tool.validate_issues([])
         self.assertEqual("", batch)
         self.assertTrue(why)
+
+
+if __name__ == "__main__":
+    unittest.main()

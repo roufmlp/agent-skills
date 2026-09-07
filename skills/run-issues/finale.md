@@ -205,6 +205,20 @@ resolves it — and the board render is safe to repeat:
    run slot and a hardening pass (register row `seam-h04`; remedy chosen by the human,
    2026-08-10).
 
+   **Then read the sweep back over the whole run, and a non-zero exit stops the finale
+   BEFORE promotion** (ticket 36, ruling 12). Every row this run owns must be one
+   somebody decided: a status the machine knows, and a note saying why it stands where
+   it does. A row left `open` WITH ITS REASON passes and that is deliberate; a row
+   saying nothing does not, because promotion reads the status cell and would mint an
+   issue file for work nobody has judged.
+
+   ```
+   python3 ~/.claude/skills/run-issues/check_register_status.py <register> --sweep <batch-id>
+   ```
+
+   Repair what it names and run it again. It is not a halt and it never waits for
+   the human: exit 1 lists every offending row and the repair is the runner's, now.
+
    If the finale fails on a usage limit, leave the ledger at
    `finale-judgment`, write the halt block, and revive after reset — never
    downgrade it to save the wait, and never declare the run complete with the

@@ -89,7 +89,7 @@ class Contradiction:
 
 # The catalogue. One entry per assertion, grouped by the invariant it grades.
 # Sources: `.scratch/skills-audit/2026-08-22-invariants-and-shared-protocol.md`
-# in the procurement repo, sections 1 (conflicts C1-C8) and 2 (INV-01..INV-29).
+# in the author's own repo, sections 1 (conflicts C1-C8) and 2 (INV-01..INV-29).
 #
 # READ THIS BEFORE ADDING AN ENTRY. Six of that audit's eight conflicts were
 # already repaired by hand on 2026-08-23, hours after it was written. So most

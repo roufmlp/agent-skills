@@ -141,10 +141,6 @@ class MainTest(unittest.TestCase):
             os.remove(path)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TheCommitClockIsOptional(unittest.TestCase):
     """The human deleted the ledger's per-step clocks on 2026-08-31.
 
@@ -366,3 +362,7 @@ class AHeaderBelowAnotherPipeLine(unittest.TestCase):
         which is what keeps a second table's data out."""
         for issue, _ in guard.status_rows(self.LEDGER):
             self.assertNotEqual(issue, "Run")
+
+
+if __name__ == "__main__":
+    unittest.main()

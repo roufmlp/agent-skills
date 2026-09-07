@@ -10,7 +10,7 @@ So the install is two steps, and the second one is the step that matters.
 mkdir -p ~/.claude/hooks
 cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/coderules-gate.py hooks/retired-phrases-gate.py \
-   hooks/origin-row-guard.py ~/.claude/hooks/
+   hooks/origin-row-guard.py hooks/git-shared-state-guard.py ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
@@ -66,13 +66,22 @@ its `PreToolUse` array rather than replacing the array.
             "command": "python3 /ABSOLUTE/PATH/TO/origin-row-guard.py"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/git-shared-state-guard.py"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-All five are `PreToolUse` hooks, so each runs before the tool call it matches
+All six are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -205,6 +214,35 @@ of faults nobody can act on. A hook sees only writes happening now, so it can
 demand the column without ever meeting history. That is the whole of what you
 lose.
 
+## git-shared-state-guard.py, on `Bash`
+
+It refuses the git commands that reach across sessions sharing one checkout. A
+git worktree gets its own index; the MAIN checkout has exactly one, and every
+session working there shares it. So a wide `git add` there stages whatever every
+other session has touched, and the commit that follows carries work its message
+does not describe.
+
+In the main checkout it refuses a wide `git add`, a `git commit` that names no
+paths, and the destructive whole-tree commands. In a linked worktree it refuses
+one thing, a bare `git stash` and a `git stash pop`, because the stash stack is
+the single piece of git state a worktree does not get its own copy of. Every
+other git command passes, every non-Bash call passes, and it writes nothing.
+
+**Install it only if you run several agents against one checkout.** On a machine
+where one session holds the repository it refuses correct commands all day, and
+the honest answer there is to leave it out. It applies no worktree-count test of
+its own on purpose: a day with no worktree present does not prove the session is
+alone, and a guard that goes quiet on that evidence is worse than no guard.
+
+It holds no exception list. A wide but honest commit uses
+`--pathspec-from-file`, so one rule covers every commit: the commit names what
+it carries.
+
+Skip it and you keep the habit, and a habit does not survive the case that
+motivated the guard — a session that staged its two files BY NAME still lost
+them, because another session committed between its `git add` and its
+`git commit`.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -218,13 +256,15 @@ RUN_ISSUES_LIB=../skills/lib python3 test_run_issues_evidence_gate.py
 which runs from this directory with no environment set. So does
 `origin-row-guard.py`, as `test_origin_row_guard.py`; it needs no environment
 either, and it reports five skips, which is the Bash gap named above and not a
-failure.
+failure. `run-issues-foreground-gate.py` ships
+`test_run_issues_foreground_gate.py`, 27 behavioural cases with no environment
+set. `git-shared-state-guard.py` ships `test_git_shared_state_guard.py`, 68
+cases; it builds a real git repository with a linked worktree in a temporary
+directory, so it needs `git` on the path and takes a few seconds.
 
-The other two ship no test, because neither has one in the tree it came from.
-Each carries a drill in its docstring instead: pipe a JSON payload on stdin and
-read the exit code. The four payloads at the top of
-`run-issues-foreground-gate.py` take a second to run and cover both directions,
-two that must refuse and two that must pass.
+Only `coderules-gate.py` ships no test, because it has none in the tree it came
+from. It carries a drill in its docstring instead: pipe a JSON payload on stdin
+and read the exit code.
 
 That drill proves the script. It says nothing about the registration, which is
 the half that fails silently. For that, start a session and make an edit or a

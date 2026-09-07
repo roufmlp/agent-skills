@@ -11,9 +11,13 @@ session was started with. The map names a model per role for one run:
     /run-issues 512 513 models: implementer=opus gates=fable
     /parallel-hunt <scope> models: finder=fable fixer=opus
 
-One grammar for both (ruling 20). The twelve agent files stay `model: inherit`
+One grammar for both (ruling 20). The agent files stay `model: inherit`
 (ruling 6), so a spawn by hand behaves as it always did; the map reaches a run
 only through the ledger the launch line writes.
+
+Ticket 33 of the pilot-delivery map, ruling 2 (2026-09-07): the two
+`/harden-issues` roles join the map as `attacker` and `seam` inside `gates`, so
+the map now names FOURTEEN roles. Ticket 39 ruling 6 deferred them here by name.
 """
 
 import importlib.util
@@ -59,7 +63,8 @@ TIER = {name: index for index, name in enumerate(MODELS)}
 
 INHERIT = "inherit"
 
-# Ruling 5: one key per agent type, without its prefix.
+# Ruling 5: one key per agent type, without its prefix. Twelve at ticket 39;
+# fourteen since ticket 33 ruling 2 added the two hardening roles.
 ROLES = {
     "implementer": "run-issues-implementer",
     "escalated": "run-issues-implementer-escalated",
@@ -72,6 +77,13 @@ ROLES = {
     "claim-gate": "parallel-hunt-claim-gate",
     "fix-gate": "parallel-hunt-fix-gate",
     "fix-gate-critical": "parallel-hunt-fix-gate-critical",
+    # Ticket 33 of the pilot-delivery map, ruling 2, ruled by the human 2026-09-07.
+    # Ticket 39 ruling 6 left these two out and named this ticket as where they
+    # would join. Until they did, `model-map-gate.py` passed every harden spawn
+    # in silence, so a strike-2 attacker ran on whatever tier the session
+    # carried and no ledger recorded which.
+    "attacker": "harden-issues-attacker",
+    "seam": "harden-issues-seam",
     "promotion": "promotion",
 }
 
@@ -79,21 +91,28 @@ ROLES = {
 # below the worker it checks.
 WORKERS = ("implementer", "escalated", "finder", "fixer")
 
-# The adversarial gates.
+# The adversarial gates. Ruling 2 of ticket 33 puts the two hardening roles
+# here rather than in a group of their own: one word, `gates`, still names every
+# role whose job is to attack somebody else's work.
 GATES = ("verify", "review", "review-critical",
-         "claim-gate", "fix-gate", "fix-gate-critical")
+         "claim-gate", "fix-gate", "fix-gate-critical", "attacker", "seam")
 
 GROUPS = {"all": tuple(ROLES), "workers": WORKERS, "gates": GATES}
 
-# Which roles each command can actually spawn. `all` names twelve and the ledger
-# header records twelve, because one grammar serves both (ruling 20). But a run
+# Which roles each command can actually spawn. `all` names all fourteen and the
+# ledger header records fourteen, because one grammar serves both (ruling 20). But a run
 # never spawns a finder and a hunt never spawns a verify gate, so a guard asking
 # "what still inherits the session tier" must count only what can run --
 # otherwise it refuses a hunt whose every spawn is named and lists six roles that
 # cannot start. Found by the 2026-09-05 review of sitting 2.
 SPAWNED_BY = {
+    # `attacker` and `seam` are here because a RUN spawns them: strike-2 mode
+    # already spawns `harden-issues-attacker` directly, and ticket 33 sitting 2
+    # adds the launch phase that spawns both. A hunt hardens nothing, so naming
+    # them there would list roles that cannot start.
     "/run-issues": ("implementer", "escalated", "verify", "review",
-                    "review-critical", "finale", "promotion"),
+                    "review-critical", "finale", "promotion",
+                    "attacker", "seam"),
     "/parallel-hunt": ("finder", "fixer", "claim-gate", "fix-gate",
                        "fix-gate-critical", "promotion"),
 }
@@ -149,7 +168,7 @@ def tier_name(model):
 
 
 def apply_map(assignments):
-    """`{role: model}` for all twelve roles, `inherit` where the map is silent.
+    """`{role: model}` for every role, `inherit` where the map is silent.
 
     Ruling 5's "more specific wins, whatever the order typed": the assignments
     are ranked by how specific their key is, and only ties are broken by the
@@ -204,7 +223,7 @@ def substitute_inherit(applied, session_model):
 
 
 def resolve(assignments, session_model):
-    """`{role: model}` for all twelve roles, every value one of `MODELS`.
+    """`{role: model}` for every role, every value one of `MODELS`.
 
     Ruling 4: resolved fully at launch, so `inherit` never reaches a ledger and
     a resume on a different session model changes the orchestrator only.
@@ -273,7 +292,7 @@ def read_default_map(path=None):
 
 
 def role_efforts(agents_dir=AGENTS_DIR):
-    """`{role: effort}` read off the twelve agent files (ruling 7).
+    """`{role: effort}` read off the agent files (ruling 7).
 
     Effort cannot ride on a spawn -- the Agent tool takes `model` and no effort
     field -- so it lives in the agent file frontmatter and the ledger only
@@ -305,9 +324,9 @@ def header_lines(resolved, efforts, session_model, typed):
     """The two ledger header lines the launch writes (rulings 4 and 7).
 
     One line each, both a single `role=value` list in the order of `ROLES`, both
-    read back by `ledger_map`. Two lines rather than a twelve-row table because
+    read back by `ledger_map`. Two lines rather than a fourteen-row table because
     every line in `run.md` is billed on every spawn, and a dozen spawns a run is
-    the low end.
+    the low end. Fourteen roles since ticket 33 ruling 2.
     """
     models = " ".join(f"{role}={resolved[role]}" for role in ROLES)
     stated = " ".join(f"{role}={efforts[role]}" for role in ROLES)
@@ -326,11 +345,16 @@ def ledger_map(text):
 
       None  no map line at all. The spawn passes on the session's model, as it
             always did (ruling 9).
-      {}    a map line that does not name all twelve roles with reachable
+      {}    a map line that does not name all fourteen roles with reachable
             models. That is a fault, and ruling 16 says a fault passes the
             spawn AND writes one line to the run journal -- which the caller
             cannot do if a damaged line is indistinguishable from no line.
-      dict  all twelve. This is the only answer the hook may refuse against.
+      dict  all fourteen. This is the only answer the hook may refuse against.
+
+    `ledger_map_partial` below answers the other question -- what a launch
+    recorded, whatever the role list was that day -- and the cost cell reads
+    that one. Do not merge them: a reader that refuses needs `{}` to mean
+    "damaged", and a reader that reports history needs it to mean "silent".
     """
     match = MAP_LINE.search(text or "")
     if not match:
@@ -341,6 +365,37 @@ def ledger_map(text):
         if key in ROLES and model in MODELS:
             found[key] = model
     return found if set(found) == set(ROLES) else {}
+
+
+def ledger_map_partial(text):
+    """Whatever the map line NAMED, role by role. `{}` when there is no line.
+
+    `ledger_map` above answers the GATE's question -- may I refuse against this
+    map -- and its `{}` means "damaged, do not judge". This answers a different
+    question: what did that launch actually record. The two split apart the
+    moment `ROLES` grew, because widening the map retroactively made every
+    earlier ledger incomplete.
+
+    Measured 2026-09-07, on the two ledgers on disk: run `batch-170a59` and run
+    `batch-207704` both carry a twelve-role line, written before ticket 33
+    ruling 2 added `attacker` and `seam`. Through `ledger_map` alone they read
+    `{}`, `worker_cell` returns `not stated`, and re-taking either cost reading
+    would overwrite a `runs.jsonl` row that names seven roles today with one
+    that names none. The rows are history; the widening must not rewrite them.
+
+    A role or model the grammar does not know is still dropped, for the reason
+    `ledger_map` drops it: a tier nothing downstream can group is worse in the
+    comparison table than an absent one.
+    """
+    match = MAP_LINE.search(text or "")
+    if not match:
+        return {}
+    found = {}
+    for word in match.group(1).split():
+        key, _, model = word.partition("=")
+        if key in ROLES and model in MODELS:
+            found[key] = model
+    return found
 
 
 def inversion_refusal(found):
@@ -533,8 +588,9 @@ def short_model(model):
 def worker_cell(models, efforts):
     """The worker map in shortest form, `role=model/effort` (ruling 9).
 
-    Shortest form is not an abbreviation for its own sake. The full twelve-role
-    map is 220 characters and would push every column after it off the page of
+    Shortest form is not an abbreviation for its own sake. The full fourteen-role
+    map is 203 characters on `opus` (measured 2026-09-07; it was twelve roles and
+    220 on the longer names of ticket 39) and would push every column off the page of
     a markdown table a person scans. It is also NOT lossy: every role is named
     by `all`, by its group, or by itself, so a role's tier can always be read
     off the cell.
@@ -555,13 +611,19 @@ def worker_cell(models, efforts):
     if len(distinct) == 1 and len(pairs) == len(ROLES):
         return f"all={render(next(iter(distinct)))}"
 
-    # Name a group where every one of its roles agrees and the group is not a
-    # single role; name the rest individually. `finale` and `promotion` are in
-    # no group by ticket 39 sitting 1's ruling, so they always name themselves.
+    # Name a group where every one of its roles is in the map AND they agree;
+    # name the rest individually. `finale` and `promotion` are in no group by
+    # ticket 39 sitting 1's ruling, so they always name themselves.
+    #
+    # **Every one, not merely the ones present.** A ledger written before ticket
+    # 33 ruling 2 names six of the eight gates, and rendering that as
+    # `gates=opus` would state a tier for `attacker` and `seam` that the launch
+    # never recorded -- breaking the not-lossy promise above on exactly the rows
+    # `ledger_map_partial` exists to keep readable.
     named, taken = [], set()
     for group in ("workers", "gates"):
         roles = [role for role in GROUPS[group] if role in pairs]
-        if len(roles) < 2:
+        if len(roles) < 2 or len(roles) != len(GROUPS[group]):
             continue
         values = {pairs[role] for role in roles}
         if len(values) == 1:

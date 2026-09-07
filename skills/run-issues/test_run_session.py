@@ -80,10 +80,6 @@ class LedgerForBatch(unittest.TestCase):
         self.assertIsNone(tool.ledger_for_batch("batch-b5e96d", worktrees=[str(tree)]))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SlugForWorktree(unittest.TestCase):
     """A worktree path IS its project directory name, once punctuated out.
 
@@ -540,3 +536,7 @@ class Rendering(unittest.TestCase):
     def test_nothing_at_all_says_so_rather_than_printing_an_empty_table(self):
         self.assertIn("no subagent", tool.render_spawns([]).lower())
         self.assertIn("no subagent", tool.render_roles([]).lower())
+
+
+if __name__ == "__main__":
+    unittest.main()

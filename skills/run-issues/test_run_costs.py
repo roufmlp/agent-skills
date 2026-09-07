@@ -218,6 +218,24 @@ class ItWritesARecordNotAMarkdownRow(unittest.TestCase):
         self.assertEqual("claude-opus-5/high", record["orchestrator_model"])
         self.assertTrue(record["worker_models"].startswith("all=opus"))
 
+    def test_a_ledger_written_before_a_role_joined_still_names_its_workers(self):
+        """Ticket 33 ruling 2 widened the map from twelve roles to fourteen, so
+        every ledger already on disk names twelve. Read through the strict
+        `ledger_map` those read `{}` and this cell falls to `not stated`, which
+        would overwrite run `batch-170a59`'s and run `batch-207704`'s existing
+        `runs.jsonl` rows with a worse answer the next time either reading is
+        re-taken. The cost cell reports history, so it reads the partial map.
+        """
+        twelve = [r for r in tool.model_map.ROLES if r not in ("attacker", "seam")]
+        ledger = ("Session model at launch: claude-opus-5\n"
+                  "Model map at launch: `" + " ".join(
+                      f"{role}=opus" for role in twelve) + "`\n")
+        cell = tool.build_record(batch="b", kind="run",
+                                 ledger_text=ledger)["worker_models"]
+        self.assertNotEqual(tool.model_map.NOT_STATED, cell)
+        self.assertIn("workers=opus", cell)
+        self.assertNotIn("attacker", cell)
+
     def test_a_hunt_record_carries_kind_hunt(self):
         """Ruling 11: hunts share the files."""
         self.assertEqual("hunt", tool.build_record(batch="b", kind="hunt")["kind"])
@@ -283,10 +301,6 @@ class TheCacheReading(unittest.TestCase):
         record = tool.build_record("b", "run", version="2.1.261",
                                    version_reader=lambda: "2.1.261")
         self.assertIsNone(record.get("cache"))
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TheInsideRunCountsAreNowMeasured(unittest.TestCase):
@@ -492,3 +506,7 @@ class TheTrialVerdictRidesOnTheLine(unittest.TestCase):
                                    journal_text=LANDED_FAULT * 2)
         self.assertEqual(2, record["trial"]["mismatches"])
         json.dumps(record)
+
+
+if __name__ == "__main__":
+    unittest.main()

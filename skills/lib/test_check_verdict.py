@@ -329,10 +329,6 @@ class Main(unittest.TestCase):
         self.assertEqual(main(["--file", path, "--section", "## Review gate"]), 1)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 # A gate section can also be STALE rather than absent: the file carries last
 # attempt's verdict under the same heading, and this attempt's gate died before
 # writing. Measured over one project's issue files on 2026-08-20: 194 files
@@ -393,3 +389,7 @@ class StaleSection(unittest.TestCase):
 
     def test_a_file_with_no_attempt_record_is_unaffected(self):
         self.assertTrue(decide(ISSUE_BOTH_GATES, "## Verify gate").allowed)
+
+
+if __name__ == "__main__":
+    unittest.main()

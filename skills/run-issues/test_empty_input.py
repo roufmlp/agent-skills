@@ -98,3 +98,24 @@ def test_it_defaults_to_stderr():
 def test_empty_refusal_builds_the_string_without_printing():
     text = empty_input.empty_refusal("run.md", "status row")
     assert text.startswith("REFUSED empty-input:")
+
+
+if __name__ == "__main__":
+    # These are pytest checks, and no `python3` on this machine imports pytest.
+    # The ritual runs every suite as `python3 <file>`, so the block finds pytest
+    # through `uv` when the import fails, and REFUSES when neither road exists.
+    # Exiting 0 here without running them is the silence this block closes.
+    import subprocess
+    import sys as _sys
+    try:
+        import pytest
+    except ImportError:
+        try:
+            raise SystemExit(subprocess.call(
+                ["uv", "run", "--with", "pytest", "pytest", "-q", __file__]))
+        except FileNotFoundError:
+            print("REFUSED silent-suite: this file holds pytest checks and this "
+                  "machine has neither an importable pytest nor `uv` to fetch "
+                  "one.\n  Nothing ran. This is not a pass.", file=_sys.stderr)
+            raise SystemExit(2)
+    raise SystemExit(pytest.main([__file__, "-q"]))

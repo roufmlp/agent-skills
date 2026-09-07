@@ -249,6 +249,16 @@ than three: open, done, closed another way, unreadable. A repo with no `mileston
 nothing to read back — say so once and continue. Where the file exists and the script does
 not, say so and continue.
 
+**Then run the ranker, in the same repos:** `node scripts/what-is-owed.mjs --next 15`.
+It prints the fifteen open and unblocked issues to take next, ranked by the weights in
+that repo's `.scratch/ranking.md`, one line each with rank, id, score, the signals that
+scored and the title, then every issue held by an open blocker with the blocker named.
+Paste those lines verbatim into their own short block after section 1b,
+headed "Next fifteen". **That block stands IN PLACE OF the `unsorted` list**, which is no longer
+printed anywhere in the brief; its count stays on the counts line. Where the script
+prints `No .scratch/ranking.md`, paste that one line instead. A fault line the ranker
+prints above the list is pasted with it, never dropped.
+
 **Fourth, sweep the run workspaces.** In each repo whose checkout carries a
 run-workspace sweeper of its own, run it from the main checkout. A sweeper lists
 every `run-workspace <batch id>` row the project's test database holds, joins each
@@ -360,9 +370,14 @@ cannot carry: every issue that ran OVER its estimate, with what it carried.
 **Read the briefing's `attribution:` line before you quote it.** It says how many
 per-issue spawns `estimate_accuracy.py` could attribute. Where it REFUSES with
 `unattributed-steps`, say so and give the figures anyway when it still graded every
-issue — but never quote a median without saying what it was computed over. A known
-cause of that refusal is the `force-serial-gates` sentinel sitting as the first line
-of a re-spawned gate's prompt, which leaves the step with no readable issue.
+issue — but never quote a median without saying what it was computed over.
+
+**A retired cause must never be read into a later refusal.** One known cause of
+`unattributed-steps` was a sentinel line a re-spawned gate carried as the first
+line of its prompt, which left that step with no readable issue; deleting the
+sentinel retired the cause. A briefing from any run after such a repair shows the
+refusal for some OTHER reason, and reading the old one into it sends the reader
+looking in the wrong place.
 
 **The one-look page is `.scratch/workflow-audit/run-costs.md`** (ruling 13): the
 per-run table, the per-issue table and the longest steps by kind. It is GENERATED
@@ -553,10 +568,10 @@ written as a zero.
 
 **The owed read-back gets a section only when something is wrong.** Anything
 overdue — an open issue stamped with a milestone whose date has passed — joins the
-flag line above the top line, one line per issue. An unknown `Owed:` value, a stale
-map ticket, or an `unsorted` list that has grown since yesterday takes a short
-block after section 1b. A clean read-back writes nothing beyond the top-line
-clause. Ticket 18 measured that this brief must get shorter, so a permanent section
+flag line above the top line, one line per issue. An unknown `Owed:` value or a stale
+map ticket takes a short block after section 1b. The `unsorted` list is never printed;
+the "Next fifteen" block from the ranker stands where it stood (ticket 33 ruling 19). A
+clean read-back writes nothing else beyond the top-line clause. Ticket 18 measured that this brief must get shorter, so a permanent section
 for a mechanism that is usually quiet would cost more than it returns.
 
 **Above even that line: any signal the build could not read.** One line each, and each

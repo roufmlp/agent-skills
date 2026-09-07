@@ -223,3 +223,24 @@ def test_refusing_an_issue_says_that_files_minted_before_the_key_are_not_faults(
     printed = capsys.readouterr().out.lower()
     assert "just minted" in printed
     assert "before ticket 37 landed" in printed
+
+
+if __name__ == "__main__":
+    # These are pytest checks, and no `python3` on this machine imports pytest.
+    # The ritual runs every suite as `python3 <file>`, so the block finds pytest
+    # through `uv` when the import fails, and REFUSES when neither road exists.
+    # Exiting 0 here without running them is the silence this block closes.
+    import subprocess
+    import sys as _sys
+    try:
+        import pytest
+    except ImportError:
+        try:
+            raise SystemExit(subprocess.call(
+                ["uv", "run", "--with", "pytest", "pytest", "-q", __file__]))
+        except FileNotFoundError:
+            print("REFUSED silent-suite: this file holds pytest checks and this "
+                  "machine has neither an importable pytest nor `uv` to fetch "
+                  "one.\n  Nothing ran. This is not a pass.", file=_sys.stderr)
+            raise SystemExit(2)
+    raise SystemExit(pytest.main([__file__, "-q"]))

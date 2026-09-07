@@ -890,10 +890,6 @@ class TheUnmarkedRuleFollowsWhatIsGraded(unittest.TestCase):
         self.assertIn("data-line", str(caught.exception))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 # --------------------------------------------------------------------------
 # Issue 555. A band is drawn where the block states one, and nowhere else.
 # --------------------------------------------------------------------------
@@ -1148,3 +1144,7 @@ class AChipTheBlockDoesNotNameIsRefused(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("no-chip:", reason)
         self.assertIn("516", reason)
+
+
+if __name__ == "__main__":
+    unittest.main()

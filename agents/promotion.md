@@ -146,6 +146,35 @@ Each file carries:
   belongs on every file you mint. A project whose repository holds no such vocabulary file
   is the one case where you leave the line off, and the run's own guard says so and
   carries on.
+- **An `Origin:` line**, on its own line in the header, beside `Owed:` and
+  `Stage:`. It names the issue and the run that shipped the code the fault is
+  in, written `<issue>/<run>` — for example `149e/batch-170a59`. Take both
+  halves off the row's own `origin` cell, which every gate and finder has
+  filled since 2026-09-05; where the row does not carry one, or carries only
+  half, write `unknown` in the place you do not know (`unknown/batch-170a59`,
+  `149e/unknown`, or `unknown` alone for neither). **`unknown` is legal and is
+  counted**, the same explicit null as `Owed: unsorted`: a writer with no legal
+  way to say "I do not know" invents one, and the production watcher genuinely
+  knows neither half. This is a transcription, like `Sentence:` and `Stage:` —
+  you do not open code to decide it. Ticket 37 of the pilot-delivery map,
+  ruling 7, ruled by the human 2026-09-05; built into the brief at ticket 33
+  sitting 1. It is the only field that makes an escaped fault countable at the
+  issue as well as at the row, and the row is deleted the moment you close it.
+
+  **Then grade the file you have just written, before you close the row:**
+
+  ```bash
+  python3 ~/.claude/skills/run-issues/check_origin.py --issue <the file>
+  ```
+
+  Exit 0 means the key is present, in the header above the title, and in the
+  grammar. Exit 1 prints what is wrong; repair the file and run it again. **Run
+  it on that one file and never over the issue directory** — it backfills
+  nothing on purpose, and every issue minted before this key existed carries
+  none, so pointing it at the tracker would print hundreds of faults nobody can
+  act on. A row closed on an ungraded file leaves the issue file as the only
+  record, and by then the row is gone.
+
 - **A `## Target database` section.** `Writes rows: no` where the work changes code
   only; otherwise the project's default databases, each written as a default. This is
   the same judgement the direct-road stamp already asks of you, recorded where

@@ -193,7 +193,12 @@ def build_record(batch, kind, version="", note="", ledger_text="",
     stated = version or reader() or run_records.NOT_STATED
 
     marks = pipeline_fingerprint.from_ledger(ledger_text)
-    models = model_map.ledger_map(ledger_text) or {}
+    # The PARTIAL reader, not the strict one. This cell reports what a launch
+    # recorded, and `ledger_map` answers a gate's question instead: it returns
+    # `{}` for any map that does not name every role ALIVE TODAY, so widening
+    # the map retroactively blanks the cell on every ledger already on disk
+    # (ticket 33 ruling 2 did exactly that to two of them, 2026-09-07).
+    models = model_map.ledger_map_partial(ledger_text)
     efforts = model_map.ledger_efforts(ledger_text) or {}
 
     record = {

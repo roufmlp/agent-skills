@@ -66,5 +66,24 @@ class TheCostBlockCallsTheReader(unittest.TestCase):
         self.assertIn("aa94b3b", self.text)
 
 
+class TheRankerStandsInForTheUnsortedList(unittest.TestCase):
+    """Ticket 33 ruling 19, 2026-09-07: the brief prints the ranked fifteen in
+    place of the unsorted list. The ranker itself belongs to the reader's own repo; this is the one line
+    the skill owed it."""
+
+    def setUp(self):
+        self.text = SKILL.read_text(encoding="utf-8")
+
+    def test_the_brief_runs_the_ranker(self):
+        self.assertIn("node scripts/what-is-owed.mjs --next 15", self.text)
+
+    def test_the_ranked_block_has_its_heading(self):
+        self.assertIn('headed "Next fifteen"', self.text)
+
+    def test_the_unsorted_list_is_no_longer_a_section(self):
+        self.assertNotIn("an `unsorted` list that has grown since yesterday", self.text)
+        self.assertIn("The `unsorted` list is never printed", self.text)
+
+
 if __name__ == "__main__":
     unittest.main()

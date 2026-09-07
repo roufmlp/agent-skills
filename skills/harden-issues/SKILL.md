@@ -15,10 +15,17 @@ keyboard (see "Checks only the human can run"). Provenance and the incident reco
 live in this directory's `decisions.md`; read it when changing this skill, not
 when running it.
 
-Two entry points, same pass:
+Three entry points, same pass:
 
 - **From `/to-issues`** — runs on the drafted slices before the user quiz; the
   pass's questions join that quiz.
+- **Inside a run's launch** — a `/run-issues` launch whose scope holds a typed
+  issue with no `Hardened:` line reads `run-issues/launch-harden.md`, and that
+  file drives this pass over those issues before its first implementer spawns.
+  It settles what it can, drops what it cannot, and commits the hardened files
+  before spawn 1. Findings go to that run's own directory, not the shared one
+  (see below). Ticket 33 of the pilot-delivery map, ruling 16, ruled by the human
+  2026-09-07.
 - **Standalone, pre-batch** — runs once over **a named batch**, immediately before
   `/run-issues` takes that same batch; questions come back as one numbered list.
   `needs-harden` is what a run sets when it finds criteria that are wrong or stale,
@@ -60,12 +67,23 @@ Spawn by `subagent_type`; the pass never pastes a brief.
 | Seam pass over the set, once | `harden-issues-seam` | high |
 
 Attackers run concurrently, one per issue. The seam agent runs after them all,
-reading every issue plus the attackers' findings files.
+reading every issue plus the attackers' findings files. **It is skipped where
+only ONE issue was attacked**: gaps between issues need two, and a batch of
+fifteen holding one unstamped issue would otherwise buy a pass over fifteen
+files to find them around it. A run's launch reaches this through
+`run-issues/launch-harden.md`, which states the same condition at the point it
+spawns.
 
 Findings go to files, not through this session's context: attackers write
 `.scratch/<feature>/harden/<issue>.md`, the seam agent writes
 `.scratch/<feature>/harden/seam.md`. The pass reads counts, questions and each
 findings file's `## Checks for the human` section, never the working.
+
+**A run's findings go to `runs/<batch-id>/harden/` instead**, beside that run's
+own ledger: `.scratch/<feature>/runs/<batch-id>/harden/<issue>.md` and
+`.../harden/seam.md`. That is both callers inside a run — the launch phase and
+strike-2 mode. The attended pass keeps the shared directory. Ticket 33 of the
+pilot-delivery map, ruling 7, ruled by the human 2026-09-07.
 
 **On each attacker return, check the file exists and holds something — before
 the seam agent spawns, and before anything is stamped:**
@@ -73,6 +91,8 @@ the seam agent spawns, and before anything is stamped:**
 ```bash
 python3 ~/.claude/skills/lib/check_verdict.py --file .scratch/<feature>/harden/<issue>.md
 ```
+
+Inside a run, that path is `.scratch/<feature>/runs/<batch-id>/harden/<issue>.md`.
 
 A non-zero exit means that attacker produced nothing, whatever its final message
 said, so the issue was not hardened. Re-spawn it, or leave the issue unstamped
@@ -90,18 +110,33 @@ file, and enumeration is recall rather than chained reasoning.
 
 **Print one launch line before spawn #1, on every invocation** — the resolved
 session model, the issues in scope, and how many attackers are about to spawn.
-Never pass a `model:` value on a spawn: the Agent tool's `model` parameter beats
-agent-file frontmatter, so a spawn-time value defeats `inherit` silently and
-nothing downstream records which tier ran. The launch line is the one place a
-wrong tier is visible, and the stamp does not carry it. Not a wait, an interrupt
-window — do not ask, and do not stall for an answer.
+Not a wait, an interrupt window — do not ask, and do not stall for an answer.
 
-**Never attack an issue a run holds.** The guard keys on the run, not on the
-issue's status: skip anything whose row in any `runs/<batch-id>/run.md` in the same
-directory is past `queued`, and skip everything if any ledger's owner line names a
-live session — `find_live_ledger.py --list` prints them, and there can be two
-(ticket 38, the one-run-per-feature layout ticket). Everything, not only the issues
-a ledger names: a live run's promotion mints issue files no ledger title carries.
+**Whether a spawn carries a `model:` value depends on which caller you are, and
+there is a hook on both roads.** An attended pass passes none: the Agent tool's
+`model` parameter beats agent-file frontmatter, so a spawn-time value defeats
+`inherit` silently and nothing downstream records which tier ran. The launch
+line is the one place a wrong tier is visible, and the stamp does not carry it.
+**A pass inside a run does the opposite: carry the ledger's value for the role
+on every spawn**, `attacker` or `seam`, read off that run's `Model map at
+launch:` header line. **This pack ships no refusal for that**, so the value is a
+rule the pass holds; `hooks/README.md` says what a reader gains by writing one.
+Ticket 33, ruling 2.
+
+**Never attack an issue a live run holds.** One rule, and it reads the same for
+every caller: skip any issue whose row in any `runs/<batch-id>/run.md` in the
+same directory is past `queued` — in any run, whoever is calling.
+`find_live_ledger.py --list` prints the live ledgers, and there can be two
+(ticket 38, the one-run-per-feature layout ticket). That is the whole guard. It
+never asks which run is live, and it never asks which caller you are. Ticket 33,
+ruling 5, ruled by the human 2026-09-07; `decisions.md` holds the blanket rule it
+replaced.
+
+Two consequences, both intended. A run's launch phase sees its own rows at
+`queued` and proceeds, because an issue nothing is building yet has no second
+writer. And **Run A's launch phase runs while run B is live**, because run B's
+rows are not run A's issues.
+
 `needs-harden` and `ready-for-agent` are both in scope — `needs-harden` is what a
 run sets when it finds criteria that are wrong or stale, so those issues are
 exactly what this pass exists to serve, and a status-shaped guard would tell it to

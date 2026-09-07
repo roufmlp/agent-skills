@@ -80,12 +80,24 @@ pointing at an invariant nobody wrote down.
 
 ## Before you touch anything
 
-Read the issue file, then the code and data it concerns. **If the run ledger in
-the same directory shows a row for it past `queued`, stop and return without
-editing.** A live run holds that file; rewriting criteria under a working
-implementer causes a rejection on correct work. The issue's own `Status:` is not
-the guard — `needs-harden` is what a run sets when it finds criteria that are
-wrong or stale, so those issues are exactly the ones you are here to attack.
+Read the issue file, then the code and data it concerns. **If ANY
+`runs/<batch-id>/run.md` in the same directory shows a row for this issue past
+`queued`, stop and return without editing.** A live run holds that file;
+rewriting criteria under a working implementer causes a rejection on correct
+work. Any run, whoever spawned you — including the run you belong to, if it has
+already moved this row on. A row still at `queued` has no implementer, so a
+run's own launch phase reads its own rows and proceeds. Ticket 33 of the
+pilot-delivery map, ruling 5, ruled by the human 2026-09-07.
+
+**Strike-2 mode is the one exception, and it is stated above**: there the run
+holds the row past `queued` on purpose and has stopped, so this guard does not
+apply to you. Every other caller obeys it.
+
+The issue's own `Status:` is not the guard — `needs-harden` is what a run sets
+when it finds criteria that are wrong or stale, so those issues are exactly the
+ones you are here to attack. **Nor is a live ledger anywhere on the machine a
+reason to stop.** That was the rule until 2026-09-07 and it refused a run's own
+launch attackers; only a row past `queued` stops you now.
 
 ## The attack checklist
 
@@ -186,10 +198,15 @@ Each class has shipped a real defect through green gates.
     transcription and not a judgement. A subject and a verb, present tense,
     `59 characters or fewer`. Add no fact the file does not already carry. A file
     with no such line is legal, and you write one rather than raise a question.
-- **Into `.scratch/<feature>/harden/<issue>.md`:** your per-class report, your
-  numbered questions, and your `## Checks for the human` section. The seam agent reads
-  this file, not the orchestrator's context. Write it before you return, even if
-  you found nothing.
+- **Into your findings file:** your per-class report, your numbered questions,
+  and your `## Checks for the human` section. The seam agent reads this file, not the
+  orchestrator's context. Write it before you return, even if you found nothing.
+  **The path is `.scratch/<feature>/harden/<issue>.md` for an attended pass and
+  `.scratch/<feature>/runs/<batch-id>/harden/<issue>.md` when a run spawned you**
+  — the launch phase or strike-2 mode. Your spawn brief names the batch id when
+  there is one; where it does not, you are the attended pass. Ticket 33,
+  ruling 7: a run's findings sit beside that run's own ledger, so a re-hardened
+  issue no longer overwrites the shared directory's last file.
 
 - **Flag any criterion that asks the run to stop for a human** — "run this script
   and report the output", "confirm the value with the human", "pause and check" — in

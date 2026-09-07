@@ -5,8 +5,13 @@
 #
 # Grammar (ruling 5): `all`, `workers`, `gates`, or one key per agent type --
 # implementer, escalated, verify, review, review-critical, finale, finder,
-# fixer, claim-gate, fix-gate, fix-gate-critical, promotion. More specific wins.
-# Values: haiku, sonnet, opus, fable, inherit.
+# fixer, claim-gate, fix-gate, fix-gate-critical, promotion, attacker, seam.
+# More specific wins. Values: haiku, sonnet, opus, fable, inherit.
+#
+# `attacker` and `seam` are the two /harden-issues roles, and they sit inside
+# `gates`. Ticket 33 of the pilot-delivery map, ruling 2, ruled by the human
+# 2026-09-07; ticket 39 ruling 6 had deferred them here by name. A trial on
+# cheaper models for those two is wanted later and is not set here today.
 #
 # A gate may never sit below the worker it checks (ruling 14). The launch line
 # refuses an inverted map before it spawns anything.

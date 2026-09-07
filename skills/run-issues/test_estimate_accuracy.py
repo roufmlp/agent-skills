@@ -318,10 +318,6 @@ class Main(unittest.TestCase):
             os.remove(path)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class RolesPerIssue(unittest.TestCase):
     """Ticket 37 ruling 6's fourth count, and ruling 20's third kind fact.
 
@@ -378,3 +374,7 @@ class RolesPerIssue(unittest.TestCase):
         got = self.spans()["484"]
         self.assertEqual(got["steps"], 1)
         self.assertAlmostEqual(got["agent"], 20.0)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

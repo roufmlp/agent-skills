@@ -524,3 +524,7 @@ class NoFigureIsEverBorrowedIntoTheRecord(unittest.TestCase):
         """A run that shipped no issues and a run nobody could count are not
         the same fact, and `Per issue` divides by this."""
         self.assertIsNone(run_costs.issues_for(0, self.FakeSession(0), ["a"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

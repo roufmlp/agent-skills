@@ -328,10 +328,6 @@ class AgainstTheRealRun(unittest.TestCase):
         self.assertEqual(rows["149h"]["estimate_minutes"], 37.5)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TwoRuledHeadings(unittest.TestCase):
     """Found by measuring the corpus at the close of sitting 3, not by review.
 
@@ -394,3 +390,7 @@ Some prose that names 149c and 149e in passing.
                                                   errors="replace"))
         self.assertNotIn("Nothing yet", ruled)
         self.assertTrue(ruled.strip())
+
+
+if __name__ == "__main__":
+    unittest.main()

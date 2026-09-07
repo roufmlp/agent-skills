@@ -169,10 +169,6 @@ class TheRewriteIsAllOrNothing(unittest.TestCase):
         self.assertFalse((self.dir / "nothing.jsonl").exists(), said)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class WhatTheReplayMayWriteOntoALine(unittest.TestCase):
     """The human ruled the reach at the keyboard on 2026-09-06, after the delta
     was measured: the replay backfills the new fields AND repairs the five
@@ -504,14 +500,31 @@ class TheWholeRecord(unittest.TestCase):
 
     def test_the_eleven_backfilled_lines_are_not_among_the_seven(self):
         """The seven ARE the finale-written lines, measured rather than
-        listed: 11 of the 18 carry `backfilled: true` and those seven do
-        not."""
+        listed: 11 lines carry `backfilled: true` and those seven do not.
+
+        The eleven is a fixed net and stays an equality. The backfill was a
+        one-time import of the runs that ran before the record existed, and
+        nothing may ever add a twelfth. A finale that stamped `backfilled` on
+        a run it had just watched would hide a real run inside the imported
+        history, where no replay ever looks for it.
+
+        The line count was pinned at 18 and broke on 2026-09-07, when
+        `batch-207704`'s finale wrote the nineteenth. That was the record
+        working, not failing. A finale only appends, and
+        `run_records.append_run` refuses a second line for a batch already
+        present, so the record can only grow and can never hold a batch twice.
+        Both of those replace the count that aged.
+        """
         seen = run_records.read_runs(CORPUS)
         marked = {str(one.get("batch") or "") for one in seen.records
                   if one.get("backfilled")}
         self.assertEqual(11, len(marked))
         self.assertEqual(set(), marked & set(tool.SEVEN))
-        self.assertEqual(18, len(seen.records))
+        self.assertGreaterEqual(len(seen.records), 19)
+        ids = [str(one.get("batch") or "") for one in seen.records]
+        self.assertEqual(len(ids), len(set(ids)),
+                         "a batch id is on the record twice; a replay would "
+                         "write one run's figures onto both lines")
 
     def test_every_named_ledger_exists_and_proves_its_own_batch(self):
         """The proof a foreign ledger cannot pass. Measured 2026-09-06:
@@ -752,3 +765,7 @@ class AFileWithNoTrailingNewlineIsRewrittenOnce(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("already", said)
         self.assertEqual(first, path.stat().st_mtime_ns)
+
+
+if __name__ == "__main__":
+    unittest.main()
