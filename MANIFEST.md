@@ -155,6 +155,7 @@ than the four that govern everything else here.
 | Published | Live source |
 |-----------|-------------|
 | `hooks/run-issues-foreground-gate.py` | `~/.claude/hooks/run-issues-foreground-gate.py` |
+| `hooks/test_run_issues_foreground_gate.py` | `~/.claude/hooks/test_run_issues_foreground_gate.py` (27 behavioural cases, mutation-tested, added 2026-09-07) |
 | `hooks/run-issues-evidence-gate.py` | `~/.claude/hooks/run-issues-evidence-gate.py` |
 | `hooks/test_run_issues_evidence_gate.py` | `~/.claude/hooks/test_run_issues_evidence_gate.py` |
 | `hooks/coderules-gate.py` | `~/.claude/hooks/coderules-gate.py` |
@@ -170,18 +171,12 @@ for them.** That is the whole reason `hooks/README.md` exists: it carries the ex
 who copies the file and skips the block still loses. Publish no hook without a line in
 it.
 
-**Two of the five published hooks ship no test, because neither has one.** Re-measured
-2026-09-07, when `origin-row-guard.py` became the fifth; the line before it counted four
-hooks and eight live test files, and both figures had moved. Of the five hooks published
-here, `run-issues-evidence-gate.py`, `retired-phrases-gate.py` and `origin-row-guard.py`
-carry a test each. `run-issues-foreground-gate.py` and `coderules-gate.py` have none
-anywhere in the live tree: its fourteen `test_*.py` files cover `machine-preflight.py`,
-`worktree-snapshot-notice.py`, the `settings.json` `env` block, those three tested hooks,
-and the eight hooks withheld below. Two of them NAME `run-issues-foreground-gate.py` —
-`test_settings_env.py` checks that it is registered, and `test_model_landed_check.py`
-mentions it in a docstring — and neither imports it or drives a payload through it, so
-its behaviour is still ungraded. Every other script in this pack ships its tests beside
-it. Those two do not. That is a gap in the live tree, not a scrub decision, and it is
+**One of the five published hooks ships no test, `coderules-gate.py`, because it has none
+anywhere in the live tree.** Re-measured 2026-09-07 by the session verifying ticket 36. The
+line before it said two, and named `run-issues-foreground-gate.py` as the other; that hook
+gained `test_run_issues_foreground_gate.py` in ticket 36 sitting 1, 27 cases that drive
+payloads through it, and the test is published in the row above. `coderules-gate.py` is
+named by no test file at all. That is a gap in the live tree, not a scrub decision, and it is
 written here rather than left for a reader to discover by grepping.
 
 **`origin-row-guard.py` ships with one road switched off, and the reason is a withheld
@@ -208,6 +203,13 @@ reader, and a hook whose test cannot run is worse evidence than no test.
 All six are worth publishing and a later sync should do it, message by message. The
 skills that rely on them say so in prose instead: `run-issues/SKILL.md` names the model
 map as a rule the runner holds, and says plainly that this pack ships no refusal for it.
+
+**`run-issues-sweep-gate.py` arrived on 2026-09-07 and is withheld on the same rule, with its
+test beside it.** Its refusal message carries the `AFK` constant, "THIS NEVER WAITS FOR
+<name>", the exact shape H2 refuses in `gate-source-write-guard.py` and `model-map-gate.py`
+above. It also imports `check_register_status.py` from the skills tree by a computed path,
+which is fine under H1, so the message is the only bar. A later sync that rewrites the
+three messages to a role publishes all three together.
 
 **Two of the withheld hooks are held back for a different reason, and it is not
 one-machine state.** `run-issues-criteria-fault.py` and `run-issues-parallel-gates.py`
@@ -242,12 +244,12 @@ have, which is worse than having no hook:
 ~/.claude/hooks/test_run_issues_criteria_fault.py
 ~/.claude/hooks/run-issues-parallel-gates.py
 ~/.claude/hooks/test_run_issues_parallel_gates.py
+~/.claude/hooks/run-issues-sweep-gate.py
+~/.claude/hooks/test_run_issues_sweep_gate.py
 ~/.claude/hooks/machine-preflight.py
 ~/.claude/hooks/test_machine_preflight.py
 ~/.claude/hooks/heavy-run-version.pin
 ~/.claude/hooks/browser-budget.py
-~/.claude/hooks/worktree-register-guard.py
-~/.claude/hooks/test_worktree_register_guard.py
 ~/.claude/hooks/worktree-snapshot-notice.py
 ~/.claude/hooks/test_worktree_snapshot_notice.py
 ~/.claude/hooks/test_settings_env.py
