@@ -274,6 +274,36 @@ and the hook could not tell a search for the string from a write to the thing. A
 matches a bare identifier anywhere in a command line refuses reading ABOUT the database as
 readily as writing TO it.
 
+**That was fixed the same day, and how it was fixed is the part worth copying.** The fault
+was one conflated answer, not the matching. The hook asked "can I read this command's SQL?"
+and refused when it could not — but "could not" was covering two different lines: a database
+command whose statement is hidden in a file, which must be refused, and a command that is
+not a database command at all, which was never this hook's business. The fix asks a second
+question first — is there a road to a database in this line, meaning a client the hook can
+name or a connection URI — and where there is none it passes without ever looking at the
+SQL.
+
+**The fix that was tried first is the instructive one, because it is the one most readers
+will reach for and it is wrong.** It taught the hook which commands are searches: an
+allowlist of text tools, the command split into pipeline segments, a tokeniser that knows a
+quoted `a|b` from a shell pipe. That is a shell parser, and a parser inside a security
+control is a new bypass road — whatever it mis-reads as a search walks through. It had a
+hole within the hour: the tokeniser reads a newline as whitespace where the shell reads it
+as a new command, so a `grep` on one line and a `psql ... delete` on the next passed as a
+single harmless search. Ask what roads a command opens; never ask what a command is.
+
+**A second road opens no connection at all, and the same shape closes it.** Printing the
+connection string puts a live credential in a transcript, and a transcript outlives the
+session. Asking which commands print a secret would be a parser again; asking whether the line
+expands the variable that holds one is a substring. So `echo $PROD_SUPABASE_DB_URL` is refused
+while `grep -rn PROD_SUPABASE_DB_URL scripts/` is not, and the whole difference is the `$`.
+
+**The denylist has a gap, and the published successor should carry it in its own words.** A
+client the list does not name is a client the hook does not see — a bare `./scripts/migrate.sh`,
+a compiled binary, a tool nobody has used yet. Closing that needs the position of a word in the
+command line, which is the parser. The gap is a consequence of refusing to guess, not a fault
+in the guard, and naming it is what lets a reader judge the trade rather than inherit it.
+
 The rest of the live hooks directory stays unpublished for the original reason. Each
 of those files carries state that is true of one machine or one repo and false
 everywhere else — a disk and
