@@ -124,8 +124,19 @@ turns the commands into a shape the reader's project fills. A test that pins the
 literal commands then grades a machine nobody else has. The rule they exist for
 survives in the published prose; the pinning does not travel.
 
+**`retry_brief.py` and its drill are withheld until the sync that takes `SKILL.md`
+whole, and the reason is the pair rather than the script.** Step 7 of `SKILL.md` is
+what calls it, and the published `SKILL.md` is about 120 lines behind the live copy
+written by sessions this one did not run. Shipping the script alone gives a reader a
+file nothing in the pack invokes; shipping the step that calls it means publishing
+those other sessions' work in the same file, unread. That is one sync decision, not
+two, and it is the human's. The drill travels with the script because it imports it.
+Recorded 2026-09-13, from run `batch-d67136`.
+
 ```withheld
 ~/.claude/skills/run-issues/test_run_isolation.py
+~/.claude/skills/run-issues/retry_brief.py
+~/.claude/skills/run-issues/test_retry_brief.py
 ~/.claude/skills/parallel-hunt/test_hunt_isolation.py
 ~/.claude/skills/run-issues/panel-review-*.md
 ~/.claude/skills/run-issues/workflow-redesign-*.md
