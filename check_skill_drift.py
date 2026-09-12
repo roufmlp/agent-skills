@@ -248,9 +248,13 @@ CATALOGUE: list[Predicate] = [
     # predicate has always guarded.
     Predicate(
         "C7", "present", RUN_ISSUES,
-        "One spawn falls outside all of this, and it is the one with no agent file",
+        # The needle is the SECOND half of the carve-out sentence, not the whole
+        # of it: the 2026-09-12 sync found the sentence intact but re-wrapped
+        # across a line break, and a one-line needle spanning the wrap reported a
+        # rule as lost that was sitting there. Pick needles that survive a rewrap.
+        "finale's board render is not one of the fourteen roles",
         "The carve-out. Without it, finale.md's board spawn reads as a breach.",
-        line=1182,
+        line=1007,
     ),
     Predicate(
         "C7", "present", "skills/run-issues/finale.md",

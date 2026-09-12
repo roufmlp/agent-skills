@@ -408,6 +408,10 @@ each item's heading, because `decisions-queue.md` is generated and refuses a
 direct write. The queue is the one place `/to-prd`, `/to-issues`, `/triage` and
 this pass all queue decisions, so they reach the human in a single list rather
 than scattered across issue files.
+Before the pass finishes, run `python3 ~/.claude/skills/lib/check_queue_shard.py <that
+shard>` and stop on exit 1: a heading with no backticked `q-` id is an item the brief can
+never retire, and it comes back to the human after they have ruled. Three groups of
+queued items were repaired by hand for that fault before the check existed.
 
 Where an answer needs input nobody here has — a third party, a credential, a
 product call with no defensible default — set `needs-harden` instead, so the issue

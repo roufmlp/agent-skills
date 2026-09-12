@@ -18,6 +18,49 @@ only through the ledger the launch line writes.
 Ticket 33 of the pilot-delivery map, ruling 2 (2026-09-07): the two
 `/harden-issues` roles join the map as `attacker` and `seam` inside `gates`, so
 the map now names FOURTEEN roles. Ticket 39 ruling 6 deferred them here by name.
+
+## The launch-line grammar, moved here from SKILL.md by ticket 36 sitting 5
+
+The map is typed after the issue list, behind the word `models:`:
+
+    /run-issues 512 513 models: implementer=opus gates=fable
+
+Keys are `all`, `workers`, `gates`, or one agent type without its prefix --
+`implementer`, `escalated`, `verify`, `review`, `review-critical`, `finale`,
+`finder`, `fixer`, `claim-gate`, `fix-gate`, `fix-gate-critical`, `attacker`,
+`seam`, `promotion`. More specific wins, whatever the order typed. Values are
+`haiku`, `sonnet`, `opus`, `fable` and `inherit`. `workers` is the four roles
+that build and `gates` the eight that check; `finale` and `promotion` are
+reached by `all` or by their own key. With no `models:` word the default file
+`model-map.default` beside this script is read, and it ships at `all=inherit`,
+so a launch that types nothing behaves exactly as every run did before the map
+existed.
+
+`inherit` never reaches a ledger. Every role is resolved to a concrete name at
+launch, so a resume on a different session model changes the orchestrator only.
+The fourteen agent files stay `model: inherit`, so a spawn by hand is untouched:
+the map reaches a run through the ledger and nowhere else.
+
+An inverted map is refused before anything is spawned. No adversarial gate runs
+below the tier of the worker it checks (ruled 2026-08-15,
+`~/.claude/rulings.md:99-121`); the tier order is `haiku < sonnet < opus <
+fable` and equal is legal. A wrong reject costs one retry round; a wrong pass
+has no catcher until the merge. `implementer=opus gates=sonnet` is refused, and
+so is the hunt line `finder=fable fixer=opus` on any session below `fable`,
+because it leaves the claim gate under the finder.
+
+The effort line is recorded, never set. The Agent tool takes `model` and has no
+effort field, so effort lives in each agent file's frontmatter and the launch
+only reads it. A file it cannot read records `unmeasured`, for the same reason
+the session model does: a guessed stamp is worse than a missing one, because
+the next reader treats it as evidence.
+
+`machine-preflight.py` row 14 reads the same map at PROMPT-SUBMIT time, through
+the same parser, so a bad token, an empty `models:` word and an inverted map are
+all refused before the batch id is minted and before the QA workspace is
+seeded. The human ruled on 2026-09-05 that a map refusal must arrive in the first
+two minutes, not after the ledger and the workspace exist. This script stays as
+the second gate and as the writer of the header.
 """
 
 import importlib.util

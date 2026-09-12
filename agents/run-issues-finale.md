@@ -201,10 +201,16 @@ each costing a run slot and a hardening pass (`seam-h04`; adopted by the human
 2026-08-10).
 
 **Every command the briefing hands a human must have run once, against the state
-it will actually meet.** You are the last stage: run each yourself, read-only,
-before it ships — including commands gates wrote earlier. One marked `UNRUN`, or
-one that cannot run in the state it claims to check, does not ship. A check that
-errors in the human's hands reads as diligence and fails at the worst moment.
+it will actually meet, and carry the word `RAN` beside it.** You are the last
+stage: run each yourself, read-only, before it ships — including commands gates
+wrote earlier and marked `UNRUN`, whose mark you then change to `RAN`. One left
+`UNRUN`, or one that cannot run in the state it claims to check, does not ship. A
+check that errors in the human's hands reads as diligence and fails at the worst
+moment. Before you close, run this over the briefing, on ONE line —
+`python3 ~/.claude/skills/run-issues/check_briefing_commands.py <the briefing>`.
+It refuses on any command carrying neither word, and `--list` names every command
+it can see so you mark them in one pass. Run `batch-207704`'s briefing answers 59
+commands, none of them marked.
 
 ## The two inboxes — Decide, and Ruled
 

@@ -11,8 +11,18 @@ computation, authentication/authorisation, or secret handling**. Every rejection
 this run has produced was a defect in exactly that territory, so assume there is
 one here and go looking for it.
 
-Everything in the standard review gate applies — read the ledger row for this
-issue first and stop if it is already past your stage, then orient from
+**THE LEDGER'S HEADER CARRIES THE RUN FACTS, and no spawn prompt repeats them.**
+Register path, run directory, merge briefing, QA workspace, sign-in user, dev
+server and its host, the sign-in link command, the browser harness, the
+private-copy recipe and the rule that the full suite runs WITHOUT the canonical
+env file sourced: ten lines, all written before the first spawn of the run, and
+the header is the only place they exist. Your prompt carries the four things that
+vary for this issue and nothing else. Ticket 40 of the pilot-delivery map, the
+runner's turn growth ticket, ruling Q9, 2026-09-08.
+
+Everything in the standard review gate applies — read the ledger's HEADER and
+the ledger row for this issue first and stop if it is already past your stage,
+then orient from
 `primer.md`, the issue and the diff only; build the numbered rubric before
 judging, including every `## Must still be true` line; reject unrequired scope on
 the absent-criterion citation bar, with test files excepted; invoke /code-review;
@@ -20,7 +30,8 @@ report every finding with confidence and severity rather than filtering for
 importance; grade each criterion, with **no evidence meaning FAIL**; ground every
 claim in the diff; route out-of-scope findings to their home first and cite the
 exact appended line, quoted; any command written for a human runs once first
-against the state it will meet, or is marked `UNRUN`; append merge-read items to
+against the state it will meet and is marked `RAN`, or is marked `UNRUN`, one of
+the two words beside every command; append merge-read items to
 `merge-briefing.md`; a three-line final message; touch no code — every drill
 runs on a scratchpad copy, and each graded file's checksum is recorded at gate
 open and gate close. That
@@ -51,9 +62,10 @@ feature pass — that is an automatic rejection regardless of the rest.
 
 Write the verdict into the issue file.
 
-**THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** Every path the
-spawn prompt hands you — the ledger, the register, the issue file, the merge
-briefing — names the copy in the MAIN CHECKOUT. The run's worktree under
+**THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** Every path you are
+given — the issue file and your private copy from the spawn prompt, the register
+and the merge briefing off the ledger's header — names the copy in the MAIN
+CHECKOUT. The run's worktree under
 `.claude/worktrees/` holds a tracked twin of each, checked out at the fork point
 and stale from that moment. Both files exist, both are readable, and nothing in
 either says which one anybody else is using.

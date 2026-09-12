@@ -47,6 +47,17 @@ Usage:
     python3 harness_cost.py --all                # every run, one row each
 
 Exit 0 always. This measures; it never refuses.
+
+**What the three numbers looked like on the first run, moved here from
+finale.md by ticket 36 sitting 5 (2026-09-09).** PROMPTS is a Bash call left
+pending while a human was waited for, and it is the expensive one: 146 minutes
+on run `414a-483-286335` by this script's reading, 15.7 per cent of that run, one
+call (the hand count above read 2 h 34 m for the same block). POLLING is time
+spent sleeping for something the harness announces for free. DENIALS are
+classifier refusals, counted and not timed; that run had five and they cost
+minutes between them. A PROMPT row is the finding: it names a command class
+that has no rule in `.claude/settings.json`, and a rule there means it can never
+be asked again.
 """
 
 from __future__ import annotations

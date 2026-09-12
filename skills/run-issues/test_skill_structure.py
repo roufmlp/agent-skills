@@ -30,7 +30,14 @@ SKILLS = RUN_ISSUES.parent
 # The promotion and attacker briefs live in `agents/` beside `skills/`, so
 # `SKILLS` does not reach them. This file already names
 # `~/.claude/agents/promotion.md` once, but only as a string to search for.
-AGENTS = SKILLS.parent / "agents"
+#
+# Being outside this repo is also why they cannot be reached by climbing from
+# `SKILLS`. This checkout is one of several -- git worktrees live at
+# `.claude/worktrees/<name>/` inside the main one -- so `SKILLS.parent` is
+# `~/.claude` here and `.claude/worktrees` there. `agents/` and `hooks/` have
+# exactly one home on this machine, so that is what they are resolved against.
+CLAUDE = Path.home() / ".claude"
+AGENTS = CLAUDE / "agents"
 
 SKILL = RUN_ISSUES / "SKILL.md"
 FINALE = RUN_ISSUES / "finale.md"
@@ -511,8 +518,11 @@ class TestTheRunStampsItsOwnSettings(unittest.TestCase):
         skill = read(SKILL)
         start = skill.index("Session effort at launch:")
         window = skill[max(0, start - 600):start + 1200].lower()
-        self.assertIn("1.51m", window)
-        self.assertIn("2026-08-21", window)
+        self.assertIn("void experiment", window)
+        # Ticket 36 sitting 5 moved the measurement itself to decisions.md.
+        decisions = read(DECISIONS).lower()
+        self.assertIn("1.51m", decisions)
+        self.assertIn("2026-08-21", decisions)
 
 
 class TestTheBridgeCseChangesSurvive(unittest.TestCase):
@@ -539,8 +549,9 @@ class TestTheBridgeCseChangesSurvive(unittest.TestCase):
         start = skill.index("Criteria gate")
         window = skill[start:start + 2000]
         self.assertIn("--override", window)
-        self.assertIn("32 issue files", window)
         self.assertIn("ready-for-agent", window)
+        # Ticket 36 sitting 5 moved the base rate to the guard's own docstring.
+        self.assertIn("32 issue files", read(RUN_ISSUES / "check_issue_ready.py"))
 
     def test_the_criteria_gate_does_not_claim_to_replace_the_stamp(self):
         """The human ruled on 2026-08-21 that an explicitly named issue always runs,
@@ -566,17 +577,20 @@ class TestTheBridgeCseChangesSurvive(unittest.TestCase):
         skill = read(SKILL)
         self.assertIn("HARD LINKS", skill)
         self.assertIn("TWO-WAY DOOR", skill)
+        # Ticket 36 sitting 5 moved the two incidents to decisions.md.
+        decisions = read(DECISIONS)
         for mark in ("17:05", "vitest transform cache"):
-            self.assertIn(mark, skill)
+            self.assertIn(mark, decisions)
 
     def test_the_git_exclusion_carries_its_fix_and_not_only_its_warning(self):
         """The `.git` exclusion is deliberate and measured (87 MB against a 66 MB
         copy). What makes it safe is that the two affected cases skip and the
         script refuses by name. An editor who deletes the fix meets the reason."""
         skill = read(SKILL)
-        self.assertIn("87 MB", skill)
         self.assertIn("REFUSED no-git-repository", skill)
         self.assertIn("check-issue-citations.test.ts", skill)
+        # Ticket 36 sitting 5 moved the measurement to decisions.md.
+        self.assertIn("87 MB", read(DECISIONS))
 
     def test_the_prose_deletion_rule_keeps_all_four_conditions(self):
         """Dropping any one of them turns a narrow saving into a road for
@@ -1614,9 +1628,16 @@ class TheProseRoleCountIsTheRealOne(unittest.TestCase):
         self.skill = squash(self.raw)
 
     def keys_paragraph(self):
-        """The `models:` key list, from `Keys are` to the end of its sentence."""
-        start = self.skill.index("Keys are `all`")
-        return self.skill[start:start + 600]
+        """The `models:` key list, from `Keys are` to the end of its sentence.
+
+        Ticket 36 sitting 5 moved the grammar to `model_map.py`'s docstring: the
+        runner pastes the typed line into the script and never types a key, so
+        the list is for the person typing the launch line, and the script's
+        `--help` is where that person reads it.
+        """
+        doc = squash(read(RUN_ISSUES / "model_map.py"))
+        start = doc.index("Keys are `all`")
+        return doc[start:start + 600]
 
     def test_every_role_the_map_knows_is_named_in_the_key_list(self):
         """A key a runner cannot see is a key nobody types. `attacker` and
@@ -1928,6 +1949,243 @@ class EveryBulletThatReadsAnIssueFileNamesItsTree(unittest.TestCase):
     def test_the_stamp_bullet_names_the_tree_it_reads(self):
         bullet = self.skill.split("Hardening stamp, and the phase it triggers")[1][:2200]
         self.assertIn("run's own worktree", bullet)
+
+
+
+# --- Ticket 36 sitting 5: the details leave by destination (2026-09-09) ----
+#
+# Ruling 9 of ticket 36 (2026-09-07), on the human's own road: a rule a script
+# enforces puts its reason in that script's docstring, which the runner never
+# reads and which therefore costs a run nothing; a rule no script enforces puts
+# its reason in `decisions.md`, which exists for exactly this. Ruling 14: the
+# ceiling is set AFTER the move and never at the count of the day, because a
+# ceiling at today's count permits the file to stay as it is. The human set the
+# SKILL.md figure himself on 2026-09-09: below 1200, and 600 the target. The
+# finale's figure is the exact count the move left, so every later line added
+# to it is paid for by a line moved out; queue item q-t36-s5-1 records it.
+#
+# The reason to cut the file is that 1474 lines hide a rule, not that they cost
+# money: the token prize was measured at three tenths of one per cent of a run.
+# A detail file read during a run is billed from that turn to the end, so a
+# move saves only what nobody opens -- and nothing in a run opens a docstring.
+
+SKILL_LINE_CEILING = 1200     # exclusive: the file stays BELOW this
+FINALE_LINE_CEILING = 803     # inclusive: the count the move left, 2026-09-09
+
+HOOKS = CLAUDE / "hooks"
+LIB = SKILLS / "lib"
+
+# Stories that left SKILL.md or finale.md for the file of the script that
+# enforces the rule they explain. Asserted present in that file AND absent from
+# both loaded files. Same shape as DECISIONS_MARKS: a story joins this list only
+# once it has landed at its destination.
+SCRIPT_MARKS = {
+    HOOKS / "run-issues-foreground-gate.py": [
+        "97 minutes",
+        "158 minutes",
+    ],
+    HOOKS / "run-issues-brief-cap.py": [
+        "averaged 1,243 words",
+        "381 words",
+    ],
+    RUN_ISSUES / "check_attempt_cap.py": [
+        "`retry 00:18` is a clock",
+    ],
+    RUN_ISSUES / "check_commit_order.py": [
+        "68 and 95 minutes",
+        "09:38",
+        "26 minutes early",
+        "having matched zero rows",
+    ],
+    RUN_ISSUES / "check_harden_branch.py": [
+        "merged at 23:12",
+    ],
+    RUN_ISSUES / "check_issue_ready.py": [
+        "32 issue files",
+    ],
+    RUN_ISSUES / "check_register_status.py": [
+        "swept 112 rows",
+        "Nine of those sixteen",
+    ],
+    RUN_ISSUES / "check_diff_coverage.py": [
+        "951 files and 11,329 tests",
+    ],
+    RUN_ISSUES / "citation_pass.py": [
+        "5h50m",
+        "17,200 citations",
+        "four of six commits had no pass",
+    ],
+    RUN_ISSUES / "run_quality.py": [
+        "on runs that had charged them",
+        "bolded verdicts in 17 rows",
+    ],
+    RUN_ISSUES / "check_finale_stage.py": [
+        "the last at 15:10 on 2026-08-20",
+    ],
+    RUN_ISSUES / "check_paste_file.py": [
+        "seven paste files, committed none of them",
+        "Nine agents touched that run's two paste files",
+    ],
+    RUN_ISSUES / "run_costs.py": [
+        "1.01 hours for an 8.48-hour run",
+        "slug holds 64 sessions",
+    ],
+    RUN_ISSUES / "estimate_accuracy.py": [
+        "lost 18 of 30",
+        "spread 0.31x to 1.04x",
+    ],
+    RUN_ISSUES / "cache_probe.py": [
+        "61.7 to 1",
+    ],
+    RUN_ISSUES / "harness_cost.py": [
+        "146 minutes",
+    ],
+    LIB / "check_verdict.py": [
+        "attempt-2 gates died with their",
+    ],
+}
+
+# Stories that left SKILL.md for decisions.md in this sitting. Same contract as
+# DECISIONS_MARKS above, and kept apart from it only so a reader can see which
+# sitting moved what.
+SKILL_STORIES_MOVED = [
+    "1.51M weighted",
+    "reported this field as unobservable",
+    "02:33, 08:26",
+    "four sections were still empty placeholders",
+    "produced nothing for 81 minutes",
+    "appended three lines to a file inside a",
+    "deleted the RUN worktree's vitest transform cache",
+    "three gates deleted the run's cache on 2026-08-27",
+    "87 MB against a 66 MB copy",
+    "reverted to the pre-fix file for two minutes",
+    "both picked the scratchpad name",
+    "Issue 319's recorded default would have seeded",
+    "every route answered HTTP 500, including",
+    "Compiled successfully",
+    "stale error naming a line that no longer existed",
+    "Exit 6 was added 2026-09-02",
+    "died after 48 lines and read clean",
+    "About 30 to 40 minutes across the two",
+    "four bullets lower",
+    "cut at `3d5fe7bf`",
+    "106 citations, 83 holding",
+    "169 broken citations",
+    "nine cost 1.44M",
+    "30 to 60 seconds per worktree",
+    "leaving it off cost six hours",
+    "CLI 2.1.257",
+    "failed a third time in the",
+]
+
+# Stories that left finale.md for decisions.md. Present there, absent from the
+# finale.
+FINALE_STORIES_MOVED = [
+    "had run since 02:27",
+    "created a supplier on QA",
+    "`check (rank between 1 and 3)`",
+    "Both 202 checksums were correct at gate close",
+    "had ruled twice on issue 276",
+    "Three of seventeen issues minted on 2026-08-09 were stale",
+    "296-276-297",
+    "roughly 35,000 tokens in and 3,000 out",
+]
+
+# The rule sentence each move of this sitting LEAVES BEHIND in SKILL.md, in
+# the SKILL_MARKS shape: asserted present, so a move that took the rule with
+# the story goes red here.
+SITTING_FIVE_ANCHORS = [
+    "**The field is enforced, not remembered.**",
+    "**Do NOT stamp transitions with the time.**",
+    "**The register is swept at every issue's commit too",
+    "**Run `npm run build` at every commit step, not only at the finale.**",
+    "**A build result is never read from log text.",
+    "**Build in a copy, never in the tree a dev server is serving.**",
+    "**Pin to the commit just made, never to branch head.**",
+    "**A zero from that check is a fact about the FILE, not about the instrument.**",
+    "Never split an issue yourself",
+    "**A drill that writes proves its copy is not hard-linked, before it writes.**",
+    "Delete nothing under `node_modules` from inside a copy.",
+    "**Each gate drills in its OWN private whole-tree copy",
+    "**Concurrent gates share a tree but not a pen.**",
+]
+
+
+class TheDetailsLeftByDestination(unittest.TestCase):
+    """Ticket 36 sitting 5, rulings 9 and 14."""
+
+    def test_the_skill_is_below_its_ceiling(self):
+        lines = len(read(SKILL).splitlines())
+        self.assertLess(
+            lines, SKILL_LINE_CEILING,
+            f"SKILL.md is {lines} lines; the ceiling is {SKILL_LINE_CEILING}, "
+            "exclusive. Move a story out by ruling 9 before adding a line.",
+        )
+
+    def test_the_finale_is_within_its_ceiling(self):
+        lines = len(read(FINALE).splitlines())
+        self.assertLessEqual(
+            lines, FINALE_LINE_CEILING,
+            f"finale.md is {lines} lines; the ceiling is {FINALE_LINE_CEILING}. "
+            "Move a story out by ruling 9 before adding a line.",
+        )
+
+    def test_decisions_takes_no_ceiling(self):
+        """Ruling 14's own reason: nothing in a run reads it, so its size
+        costs nothing. Pinned so nobody adds one in the name of symmetry."""
+        self.assertNotIn("DECISIONS_LINE_CEILING", globals())
+
+    def test_every_moved_story_is_in_its_scripts_own_file(self):
+        for path, marks in SCRIPT_MARKS.items():
+            self.assertTrue(path.is_file(), f"{path} does not exist")
+            text = squash(read(path))
+            for mark in marks:
+                with self.subTest(script=path.name, mark=mark):
+                    self.assertIn(squash(mark), text)
+
+    def test_no_script_story_is_still_resident_in_a_loaded_file(self):
+        skill = squash(read(SKILL))
+        finale = squash(read(FINALE))
+        for path, marks in SCRIPT_MARKS.items():
+            for mark in marks:
+                with self.subTest(script=path.name, mark=mark):
+                    self.assertNotIn(squash(mark), skill,
+                                     "the story is still loaded by SKILL.md")
+                    self.assertNotIn(squash(mark), finale,
+                                     "the story is still loaded by finale.md")
+
+    def test_every_skill_story_landed_in_decisions_and_left_the_skill(self):
+        decisions = squash(read(DECISIONS))
+        skill = squash(read(SKILL))
+        for mark in SKILL_STORIES_MOVED:
+            with self.subTest(mark=mark):
+                self.assertIn(squash(mark), decisions)
+                self.assertNotIn(squash(mark), skill)
+
+    def test_every_finale_story_landed_in_decisions_and_left_the_finale(self):
+        decisions = squash(read(DECISIONS))
+        finale = squash(read(FINALE))
+        for mark in FINALE_STORIES_MOVED:
+            with self.subTest(mark=mark):
+                self.assertIn(squash(mark), decisions)
+                self.assertNotIn(squash(mark), finale)
+
+    def test_every_anchor_of_this_sitting_is_still_in_the_skill(self):
+        skill = squash(read(SKILL))
+        for mark in SITTING_FIVE_ANCHORS:
+            with self.subTest(mark=mark):
+                self.assertIn(squash(mark), skill,
+                              "a sitting-5 move took its rule anchor with it")
+
+    def test_the_lists_are_not_empty_and_do_not_overlap(self):
+        self.assertTrue(SCRIPT_MARKS)
+        self.assertTrue(SKILL_STORIES_MOVED)
+        self.assertTrue(FINALE_STORIES_MOVED)
+        stories = set(SKILL_STORIES_MOVED) | set(FINALE_STORIES_MOVED)
+        for marks in SCRIPT_MARKS.values():
+            stories |= set(marks)
+        anchors = set(SKILL_MARKS) | set(SITTING_FIVE_ANCHORS)
+        self.assertEqual(stories & anchors, set())
 
 
 if __name__ == "__main__":

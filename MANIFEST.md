@@ -48,9 +48,16 @@ Listed in the order the loop runs.
 | `skills/run-issues/run_timings.py` | `~/.claude/skills/run-issues/run_timings.py` |
 | `skills/run-issues/check_run_rail.py` | `~/.claude/skills/run-issues/check_run_rail.py` (refuses a rail block a renderer could not transcribe) |
 | `skills/run-issues/draw_run_rail.py` | `~/.claude/skills/run-issues/draw_run_rail.py` (draws the rail as SVG from that block; the only road to it) |
+| `skills/run-issues/check_briefing_commands.py` | `~/.claude/skills/run-issues/check_briefing_commands.py` (refuses a merge briefing whose commands carry no run evidence beside them) |
+| `skills/run-issues/citation_pass.py` | `~/.claude/skills/run-issues/citation_pass.py` (the one reader of the finale's citation deltas) |
+| `skills/run-issues/correction_brief.py` | `~/.claude/skills/run-issues/correction_brief.py` (composes a correction implementer's spawn prompt; loads `hooks/run-issues-brief-cap.py` for the exemption marker) |
+| `skills/run-issues/correction_close.py` | `~/.claude/skills/run-issues/correction_close.py` (authorises a correction round's close on named evidence, never on files having been touched) |
+| `skills/run-issues/report_brief_cap.py` | `~/.claude/skills/run-issues/report_brief_cap.py` (reads the brief-cap hook's diary into the finale's measure step) |
+| `skills/run-issues/report_claim_commands.py` | `~/.claude/skills/run-issues/report_claim_commands.py` (one claim script for the commands a briefing states) |
+| `skills/run-issues/stall_watch.py` | `~/.claude/skills/run-issues/stall_watch.py` (watches a run's ledger from its own process, because a cron fires only when the REPL is idle) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (32 files, 1,379 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (38 files, 1,585 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -71,6 +78,12 @@ Listed in the order the loop runs.
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
 | `skills/lib/run_python_suites.py` | `~/.claude/skills/lib/run_python_suites.py` (runs every `test_*.py` under `~/.claude/skills` and `~/.claude/hooks` from its own directory, and refuses a suite that executed fewer checks than it defines) |
 | `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (54 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
+| `skills/lib/check_claude_home.py` | `~/.claude/skills/lib/check_claude_home.py` (refuses a python file that resolves `~/.claude` by climbing parents from `__file__`, which a git worktree breaks) |
+| `skills/lib/test_check_claude_home.py` | `~/.claude/skills/lib/test_check_claude_home.py` |
+| `skills/lib/check_issue_links.py` | `~/.claude/skills/lib/check_issue_links.py` (refuses a `[[link]]` in an issue file that names no issue) |
+| `skills/lib/test_check_issue_links.py` | `~/.claude/skills/lib/test_check_issue_links.py` |
+| `skills/lib/check_queue_shard.py` | `~/.claude/skills/lib/check_queue_shard.py` (refuses a queue item the daily brief can never retire, because its heading carries no backticked `q-` id) |
+| `skills/lib/test_check_queue_shard.py` | `~/.claude/skills/lib/test_check_queue_shard.py` |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -168,6 +181,10 @@ than the four that govern everything else here.
 | `hooks/test_retired_phrases_gate.py` | `~/.claude/hooks/test_retired_phrases_gate.py` |
 | `hooks/git-shared-state-guard.py` | `~/.claude/hooks/git-shared-state-guard.py` (refuses the git commands that reach across sessions sharing one checkout) |
 | `hooks/test_git_shared_state_guard.py` | `~/.claude/hooks/test_git_shared_state_guard.py` (68 behavioural cases against a real git fixture, mutation-tested, added 2026-09-08) |
+| `hooks/run-issues-brief-cap.py` | `~/.claude/hooks/run-issues-brief-cap.py` (refuses a first-attempt implementer brief longer than the part that varies) |
+| `hooks/test_run_issues_brief_cap.py` | `~/.claude/hooks/test_run_issues_brief_cap.py` |
+| `hooks/run-issues-typecheck-gate.py` | `~/.claude/hooks/run-issues-typecheck-gate.py` (refuses a gate spawn while the run's own tree does not typecheck) |
+| `hooks/test_run_issues_typecheck_gate.py` | `~/.claude/hooks/test_run_issues_typecheck_gate.py` |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**
@@ -242,6 +259,21 @@ see, and rewriting it to a role is authoring rather than scrubbing. And their te
 read a real project checkout by absolute path, so they cannot ship under H1 and would
 fail for every reader; a hook whose test cannot run is worse evidence than no test.
 
+**`pilot-database-guard.py` arrived on 2026-09-12 and is withheld, with its test.** It
+refuses a Bash command that writes to one named customer-facing database, and the project
+ref is in the refusal message, in the docstring and in the matching itself. H2 refuses a
+message naming a repo, and rule 2 refuses a client-identifying name anywhere in this pack.
+There is a general hook inside it — refuse an unreadable write at a production database,
+name the safe one, and let reads past — and a later sync could publish that, reading both
+refs from the environment. Rewriting it that way is authoring rather than scrubbing.
+
+**Its matching is worth a reader's attention even though the file is withheld**, because
+the same shape will appear in whatever replaces it. It refused a `grep` during this very
+sync: the command carried the project ref as part of a search pattern, no SQL was involved,
+and the hook could not tell a search for the string from a write to the thing. A guard that
+matches a bare identifier anywhere in a command line refuses reading ABOUT the database as
+readily as writing TO it.
+
 The rest of the live hooks directory stays unpublished for the original reason. Each
 of those files carries state that is true of one machine or one repo and false
 everywhere else — a disk and
@@ -268,6 +300,8 @@ have, which is worse than having no hook:
 ~/.claude/hooks/test_run_issues_parallel_gates.py
 ~/.claude/hooks/run-issues-sweep-gate.py
 ~/.claude/hooks/test_run_issues_sweep_gate.py
+~/.claude/hooks/pilot-database-guard.py
+~/.claude/hooks/test_pilot_database_guard.py
 ~/.claude/hooks/machine-preflight.py
 ~/.claude/hooks/test_machine_preflight.py
 ~/.claude/hooks/heavy-run-version.pin

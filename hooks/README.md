@@ -10,7 +10,9 @@ So the install is two steps, and the second one is the step that matters.
 mkdir -p ~/.claude/hooks
 cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/coderules-gate.py hooks/retired-phrases-gate.py \
-   hooks/origin-row-guard.py hooks/git-shared-state-guard.py ~/.claude/hooks/
+   hooks/origin-row-guard.py hooks/git-shared-state-guard.py \
+   hooks/run-issues-brief-cap.py hooks/run-issues-typecheck-gate.py \
+   ~/.claude/hooks/
 ```
 
 Anywhere on disk works. Whatever you pick goes in the block below as an absolute
@@ -37,6 +39,14 @@ its `PreToolUse` array rather than replacing the array.
           {
             "type": "command",
             "command": "python3 /ABSOLUTE/PATH/TO/run-issues-evidence-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/run-issues-brief-cap.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/run-issues-typecheck-gate.py"
           }
         ]
       },
@@ -81,7 +91,7 @@ its `PreToolUse` array rather than replacing the array.
 }
 ```
 
-All six are `PreToolUse` hooks, so each runs before the tool call it matches
+All eight are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -89,6 +99,45 @@ and returns.
 
 Put the block in `~/.claude/settings.json` to cover every project, or in a
 repository's `.claude/settings.json` to cover one.
+
+## run-issues-brief-cap.py, on `Agent|Task`
+
+It matches one `subagent_type`, `run-issues-implementer`, and refuses one shape:
+a FIRST-ATTEMPT brief longer than 400 words. Every other spawn on the machine
+passes untouched at any length, and so does every retry (an `attempt N` marker
+with N above 1), every correction round, and the escalated third implementer,
+which is a different type name.
+
+**What it assumes about your run, and what happens if that is not true.** The cap
+is affordable only because the facts a brief used to restate live somewhere the
+implementer already reads — this pack puts them in the run ledger's header, and
+`agents/run-issues-implementer.md` tells the implementer to read that header
+first. Install this hook without that arrangement and it will refuse briefs that
+genuinely needed their length. Raise `CAP_WORDS` in the file, or leave the hook
+out, rather than shortening a brief that carries something the implementer cannot
+get anywhere else.
+
+It writes one JSON line per implementer spawn it sees, exempt ones included, to a
+file in the machine's temporary directory. `skills/run-issues/report_brief_cap.py`
+is the only reader of that file, and the finale runs it. Nothing else is written
+anywhere.
+
+## run-issues-typecheck-gate.py, on `Agent|Task`
+
+It matches three `subagent_type` names — the verify gate and both review gates —
+and refuses one shape: a gate spawn whose tree exits non-zero on the project's
+own `typecheck` script. The refusal names the first failing file and line.
+
+**It costs nothing for anyone it does not match**: no git call, no typecheck, no
+disk. It acts only when the spawn's working directory is inside a tree a live run
+owns, which it resolves through `skills/run-issues/find_live_ledger.py` — so that
+file must be present at `../skills/run-issues/` relative to the hook, or the hook
+fails open and says so on stderr.
+
+A tree whose `package.json` declares no `typecheck` script passes. So does a tree
+whose typecheck cannot be run, a hunt's gates, and every payload it cannot read.
+It caches a pass against the tree's git fingerprint in the machine's temporary
+directory, so an unchanged tree is typechecked once per run, not once per gate.
 
 ## run-issues-foreground-gate.py, on `Agent|Task`
 

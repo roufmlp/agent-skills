@@ -324,6 +324,119 @@ class ReportPaths(unittest.TestCase):
         self.assertEqual([p.kind for p in problems], ["uncovered"])
 
 
+class AReportWrittenInAnotherTree(unittest.TestCase):
+    """The verify gate runs the suite in its own private copy, so the report it
+    writes carries the COPY's absolute paths and the diff carries the tree's.
+
+    Ticket 40 of the pilot-delivery map, the runner's turn growth ticket, ruling
+    Q4 as revised in round 3, 2026-09-08. The report was measured complete and
+    correct; the only thing that refused it was the root the paths were keyed on.
+    """
+
+    def build(self):
+        """A tree, a copy of it elsewhere, and a report keyed on the copy."""
+        root = tree({"src/a.ts": "x\n"})
+        copy = tree({"src/a.ts": "x\n"})
+        (root / "coverage").mkdir(exist_ok=True)
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul(str(copy / "src/a.ts"), {1: 1}), encoding="utf-8"
+        )
+        age(root / "src/a.ts", 600)
+        return root, copy
+
+    def test_without_the_option_the_copys_report_reads_as_absent(self):
+        """The refusal this option exists to lift. Drive it, so the option is
+        never confused for a change that grades nothing differently."""
+        root, _ = self.build()
+        problems, _ = run(root, diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)))
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertIn("absent from the report", problems[0].lines[0])
+
+    def test_the_copys_report_grades_once_its_root_is_named(self):
+        root, copy = self.build()
+        problems, facts = guard.audit(
+            root,
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+            root / "coverage/coverage-final.json",
+            100.0,
+            report_root=copy,
+        )
+        self.assertEqual(problems, [])
+        self.assertEqual(facts["covered_lines"], 1)
+
+    def test_an_unexecuted_line_in_the_copys_report_still_refuses(self):
+        """Re-keying must not turn a miss into a pass."""
+        root = tree({"src/a.ts": "x\n"})
+        copy = tree({"src/a.ts": "x\n"})
+        (root / "coverage").mkdir(exist_ok=True)
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul(str(copy / "src/a.ts"), {1: 0}), encoding="utf-8"
+        )
+        age(root / "src/a.ts", 600)
+        problems, _ = guard.audit(
+            root,
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+            root / "coverage/coverage-final.json",
+            100.0,
+            report_root=copy,
+        )
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertIn("src/a.ts:1", problems[0].lines[0])
+
+    def test_staleness_still_reads_the_trees_own_mtimes(self):
+        """The whole reason road B was refused. The copy's mtimes say nothing
+        about whether the tree changed after the report was written."""
+        root, copy = self.build()
+        report = root / "coverage/coverage-final.json"
+        os.utime(root / "src/a.ts", (time.time() + 600, time.time() + 600))
+        problems, _ = guard.audit(
+            root,
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+            report,
+            100.0,
+            report_root=copy,
+        )
+        self.assertEqual([p.kind for p in problems], ["stale-report"])
+
+    def test_a_report_root_that_matches_nothing_changes_no_verdict(self):
+        """Naming the wrong copy must refuse, never pass by accident."""
+        root, copy = self.build()
+        problems, _ = guard.audit(
+            root,
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+            root / "coverage/coverage-final.json",
+            100.0,
+            report_root=pathlib.Path("/nowhere/at/all"),
+        )
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+
+    def test_the_tree_is_still_read_when_no_root_is_named(self):
+        """The default is unchanged, so every existing caller reads the same."""
+        root = tree({"src/a.ts": "x\n"})
+        (root / "coverage").mkdir(exist_ok=True)
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul(str(root / "src/a.ts"), {1: 1}), encoding="utf-8"
+        )
+        age(root / "src/a.ts", 600)
+        problems, facts = guard.audit(
+            root,
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+            root / "coverage/coverage-final.json",
+            100.0,
+            report_root=None,
+        )
+        self.assertEqual(problems, [])
+        self.assertEqual(facts["covered_lines"], 1)
+
+    def test_a_standalone_script_is_still_read_out_of_the_tree(self):
+        """`ungradeable_scripts` asks the TREE who imports a script. Handing it
+        the copy's root would make every script ungradeable in a copy."""
+        root, copy = self.build()
+        self.assertEqual(
+            guard.ungradeable_scripts(root, {"src/a.ts": {1}}, {}), {}
+        )
+
+
 class NothingToMeasure(unittest.TestCase):
     def test_a_test_only_diff_passes_and_says_so(self):
         root = tree({})
@@ -411,6 +524,32 @@ class ExitCodes(unittest.TestCase):
         )
         self.assertEqual(code, 2)
         self.assertIn("no-diff", text)
+
+
+    def test_report_root_reaches_the_audit_from_the_command_line(self):
+        """The runner passes the verify gate's copy path, so the option has to
+        work through `main` and not only through `audit`."""
+        root = tree({"src/a.ts": "x\n"})
+        copy = tree({"src/a.ts": "x\n"})
+        (root / "coverage").mkdir(exist_ok=True)
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul(str(copy / "src/a.ts"), {1: 1}), encoding="utf-8"
+        )
+        age(root / "src/a.ts", 600)
+        path = root / "d.diff"
+        path.write_text(
+            diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)), encoding="utf-8"
+        )
+        argv = [
+            "--repo", str(root),
+            "--diff-file", str(path),
+            "--coverage", str(root / "coverage/coverage-final.json"),
+        ]
+        refused, _ = self.call(argv)
+        self.assertEqual(refused, 1)
+        code, text_out = self.call(argv + ["--report-root", str(copy)])
+        self.assertEqual(code, 0)
+        self.assertIn("OK", text_out)
 
 
 class EveryRefusalHasARemedy(unittest.TestCase):

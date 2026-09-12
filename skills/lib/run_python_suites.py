@@ -30,7 +30,7 @@ nobody executed. The class has been met three times:
 
 Every one of those files was written by someone who knew the rule. The ritual
 is performed by hand, one `python3 <file>` at a time, and a missing block is
-invisible at the moment it matters. the human's three-class test in
+invisible at the moment it matters. The human's three-class test in
 `~/.claude/CLAUDE.md` sorts this into the first class: it can refuse, so it is
 built rather than remembered.
 
@@ -210,23 +210,62 @@ def grade(path, defined, has_entry, returncode, stdout, stderr):
     return Verdict(path, True, defined=defined, executed=executed)
 
 
+@dataclass
+class Walk:
+    """What a walk found, and which subtrees it deliberately did not enter."""
+    paths: list
+    skipped: list
+
+
+def is_checkout(path):
+    """Whether `path` is the root of its own git checkout.
+
+    A worktree carries a `.git` FILE holding a `gitdir:` pointer; a clone
+    carries a `.git` DIRECTORY. Either way the tree below it is another
+    checkout's, so the test is the entry's presence and never its kind.
+    """
+    return os.path.exists(os.path.join(path, ".git"))
+
+
 def discover(roots):
-    """Every `test_*.py` under `roots`, ordered, cached copies left out.
+    """Every `test_*.py` under `roots`, ordered, cached copies and nested
+    checkouts left out.
 
     A root that does not exist raises rather than contributing nothing. A walk
     over a mistyped path returns an empty list and would otherwise read as a
     tree with no faults in it.
+
+    A subdirectory that is its own checkout is not part of the tree it sits in.
+    This harness puts git worktrees at `.claude/worktrees/<name>/` INSIDE the
+    main checkout, so an unpruned walk of `~/.claude/skills` runs a second copy
+    of every suite off whatever branch each worktree is holding, and reports
+    that branch's faults as this tree's. Measured 2026-09-11: a walk of 70
+    files became 121, and reported 5 refusals. All five were worktree copies,
+    and all five passed in the tree the walk had been pointed at.
+
+    The root itself is never pruned. Pointing this walker AT a worktree is how
+    a branch grades itself, and that is the only reading of "grade this tree"
+    that survives a tree living in more than one place at once.
     """
-    found = []
+    found, skipped = [], []
     for root in roots:
         if not os.path.isdir(root):
             raise FileNotFoundError(f"no such directory to walk: {root}")
         for base, dirs, files in os.walk(root):
-            dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+            keep = []
+            for name in sorted(dirs):
+                if name == "__pycache__":
+                    continue
+                path = os.path.join(base, name)
+                if is_checkout(path):
+                    skipped.append(path)
+                else:
+                    keep.append(name)
+            dirs[:] = keep
             for name in sorted(files):
                 if name.startswith("test_") and name.endswith(".py"):
                     found.append(os.path.join(base, name))
-    return sorted(found)
+    return Walk(sorted(found), sorted(skipped))
 
 
 def run_one(path, timeout=600):
@@ -291,14 +330,21 @@ def main(argv=None):
     roots = args.roots or list(DEFAULT_ROOTS)
 
     try:
-        paths = discover(roots)
+        walk = discover(roots)
     except FileNotFoundError as err:
         print(f"run_python_suites: {err}", file=sys.stderr)
         return 2
+    paths = walk.paths
+    aside = ""
+    if walk.skipped:
+        aside = ("  Left alone, each its own checkout and so not part of this "
+                 "tree: " + ", ".join(walk.skipped) + "\n"
+                 "  Point this walker at one of those to grade it.\n")
 
     if not paths:
         print(f"REFUSED empty-input: {', '.join(roots)} yields no `test_*.py` "
               f"file this walker could find.\n"
+              f"{aside}"
               f"  This is NOT a pass. A walk that ran nothing and a walk that "
               f"found no fault look alike, and reporting the second when the "
               f"first happened is the class this script exists to close.",
@@ -322,6 +368,10 @@ def main(argv=None):
 
     print(f"{len(paths)} file(s) walked, {defined_total} check(s) defined, "
           f"{executed_total} executed. Every file ran what it defines.")
+    print(f"  Walked: {', '.join(roots)}")
+    if walk.skipped:
+        print(f"  Left alone, each its own checkout: "
+              f"{', '.join(walk.skipped)}")
     return 0
 
 

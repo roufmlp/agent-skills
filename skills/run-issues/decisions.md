@@ -1154,7 +1154,7 @@ hand-written timestamps an hour ahead of the clock.
 **What uncapped criteria resets cost.** 7 attempts and 14 gate runs where the
 skill promises three.
 
-**The ruling that had no issue number.** the human ruled question 3 of issue 213 on
+**The ruling that had no issue number.** The human ruled question 3 of issue 213 on
 2026-08-02 by splitting a road out of scope; nine hours later no issue existed,
 and the only trace of the split was one phrase inside 213's own file. A verify
 gate happened to notice, and it was minted as 234. Nothing was watching for it,
@@ -1176,7 +1176,7 @@ refuted it from `0011_workspaces_rls.sql:115-126`.
 **No agent file pins a model.** `harden-issues-attacker` was the last, and it
 moved to `inherit` on 2026-08-02, so the tier is chosen at launch.
 
-**What worktree readiness costs, and the green it closes.** the human adopted it on
+**What worktree readiness costs, and the green it closes.** The human adopted it on
 2026-08-07 and asked what it costs in tokens: it saves them. The failure it
 closes was measured — a fresh worktree of this repo ran `npm run typecheck` to
 exit 0 with `node_modules` absent, because `tsc` resolved off a global install
@@ -1525,7 +1525,7 @@ what a usage window sees at once; fifteen is a batch that meets a limit mid-wave
 and resumes into a half-hardened set. Nothing is dropped to fit the cap, because a
 cap that drops work is a cap that quietly narrows a batch the human typed. It is a
 recipe read at spawn time and nothing refuses it: a hook gets built the first time
-a run is measured over the cap, which is his own rule that a reminder failing once
+a run is measured over the cap, which is their own rule that a reminder failing once
 is not answered with a second reminder.
 
 **Why exactly three drop classes (rulings 4 and 11).** Every reversible fork
@@ -1725,3 +1725,396 @@ would have satisfied the search while the bullet itself sat back below the phase
 trigger — green on exactly the regression the class exists to catch. It anchors on
 the bullet's opening words now, the way its sibling already anchored on
 `Then mint the batch id`.
+
+## Three hooks bind the runner — ticket 40 sitting 1, 2026-09-08
+
+Ticket 40 of the pilot-delivery map, the runner's turn growth ticket. One line per
+hook, each with the ruling that bought it.
+
+- **Ruling Q8, `~/.claude/hooks/run-issues-typecheck-gate.py`.** A gate spawn is
+  refused while the run's own tree fails `npm run typecheck`, and the refusal names
+  the first failing file and line. It closes the case where an implementer recorded
+  the typecheck as clean, it exited 1, both gates graded the branch anyway, and the
+  issue took a strike and a second attempt. The build never catches this class,
+  because the bundler typechecks the app graph alone. Measured on this machine: 17
+  seconds cold, 2.8 seconds warm. The verdict is cached per tree and per tree
+  contents, so the second gate of a pair pays nothing.
+- **Ruling Q3, `~/.claude/hooks/gate-source-write-guard.py`.** The runner joins the
+  refused writers under `src/` of a live run's tree. A runner edit ships a line
+  neither gate read, and it was measured at 1.29 edits per issue on one run. The
+  fix goes to a correction implementer. One road stays open: an `Edit` that removes
+  whole lines and adds none, which is the delete-only prose road the skill already
+  names. That exemption is a default taken on 2026-09-08, not a ruling.
+- **Ruling Q9, `~/.claude/hooks/run-issues-brief-cap.py`.** A first-attempt
+  implementer brief over 400 words does not spawn. A retry and a correction round
+  are exempt at any length. Measured on one fifteen-issue run: its fifteen
+  first-attempt briefs averaged 1,243 words, and the part the ruling permits ran to
+  310. The run facts every brief restated now live in ten lines of the ledger
+  header, and every role a round spawns is sent to that header by its own agent
+  file. Before this sitting none of them was: both implementers were told to read
+  the ledger's status table and Carry-forward, which excludes the header.
+
+  **The number moved from 300 to 400 the same day, and the reason is worth more
+  than the number.** The cap's measured gain on one fifteen-issue run is 3.0
+  minutes of writing and 0.6 per cent of the run's weighted tokens. Neither buys a
+  refusal. What earns it is that a brief grew from 606 words to about 1,500 across
+  that one run with nothing to stop it. At 400 the cap refuses nothing that run
+  wrote, because the widest permitted part measured 381 words, and it refuses the
+  next doubling. The human revised it in session on 2026-09-08 on that measurement.
+- **Ruling Q4, ticket 40, 2026-09-08. The verify gate writes the coverage report;
+  the runner runs only the check.** The gate runs the whole suite with coverage
+  inside the private copy it already makes, names the report and its root in its
+  final message, and the runner passes that root to
+  `check_diff_coverage.py --report-root`. The check gained that option because
+  `index_by_relative` keys a report's paths on the `--repo` root, so a report
+  written in a copy read as though every changed file were absent from it. Road B,
+  pointing `--repo` at the copy, was refused: it reads the copy's mtimes for the
+  stale-report test, and the tree's are the ones that matter. Q4's own reason is
+  independence — the proof that a diff's changed lines run is written by something
+  that did not build the diff, and a gate's copy is not the implementer's.
+
+  **The brief for this sitting said the gate already ran the whole suite. It did
+  not, and no agent file said it did.** Measured before any edit: the verify gate's
+  file named a private copy for mutation drills only, and the implementer is the one
+  role told to run the full suite. So the gate GAINS a suite run rather than gaining
+  two flags. Measured in a private copy of this repo on 2026-09-08: 951 files and
+  11,329 tests, 63 seconds clean and 83 with coverage. The runner's foreground loses
+  83 seconds an issue; the gate's window, which already holds minutes, gains the
+  same. **A gate that returns no report line leaves the runner with no report**, so
+  the skill keeps the old road in one line: run the suite in your own tree and drop
+  `--report-root`.
+- **Ruling 16, ticket 40, 2026-09-08. The brief cap keeps a record.** Nothing said
+  when `run-issues-brief-cap.py` fired, so no evidence existed for how often the
+  runner was refused or what it then cut a brief to, and any later move of the
+  number would have been an opinion. The hook appends one JSON line per implementer
+  spawn it judges to a file in the machine's temporary directory, and
+  `report_brief_cap.py` reads it in the finale's measure step. The temporary
+  directory is scrub rule H6 of `~/code/agent-skills/MANIFEST.md`; the run journal
+  was the other road and could not ship in a published copy. **The price of that
+  road is that a missing record must read as `NO DATA` and never as no refusals**,
+  which the reader prints in those words. A pass is recorded as well as a refusal,
+  and an exemption by name: that is a default, not a ruling, because what the runner
+  removed is visible only in the shorter brief it re-issues.
+
+- **Ruling Q7, ticket 40, 2026-09-08, built 2026-09-09. The correction round's two
+  handovers become one script each.** `correction_brief.py` composes the spawn prompt
+  and `correction_close.py` authorises the close. Measured on run `batch-207704`'s
+  four rounds: the two handovers cost 1.3 to 7.6 minutes before the spawn and 3.1 to
+  3.8 after it, over 86 of the runner's own turns; each script runs in 0.03 seconds.
+  **The brief does NOT read the owed items out of the verdicts, and the ticket's own
+  sitting brief was wrong to say it could.** A verdict is free prose: neither gate
+  brief in `~/.claude/agents/` sets a list shape, and neither uses the word "owed".
+  The runner names the items, which is judgement it was doing anyway; the script
+  refuses a prompt that would not work. Its one refusal is the guard worth having --
+  it asks `run-issues-brief-cap.py`'s OWN `is_correction` whether the composed prompt
+  earns the correction exemption, because the four real correction briefs measured 878
+  to 1,082 words and a marker outside the opening window would cap every one of them.
+- **The runner refuses a dead citation pass. Adopted by the human 2026-09-08, built
+  2026-09-09 as `citation_pass.py`.** A file with no `=== CITATION PASS COMPLETE ===`
+  line is treated the way a red test is treated. Run `batch-207704`'s last pass died
+  after 48 lines inside its own preamble and read clean to everything that looked at
+  it. **The terminator must be the LAST non-blank line**, because a pass that printed
+  it and then went on was killed after it. One module, three readers: the correction
+  close imports it, and `SKILL.md` names it at the runner's commit step and in the
+  finale's collection. A non-zero `exit=` on the terminator is NAMED and not refused --
+  that pass ran, so it is a register row rather than a re-run.
+- **TIGHTEN, ruled by the human in the daily-brief walk of 2026-09-08, item 2, built
+  2026-09-09.** `fixed` and `verified` may no longer stand on a bug-file citation
+  alone; `open` keeps it, and so do the other four terminal words. **It refuses
+  nothing that is on disk.** Re-measured across every register shard on 2026-09-09:
+  37 citation-only rows, every one of them `open`. The sitting was scoped to repair
+  the rows the rule would start refusing, on a reading of "29 of 45 in-scope rows"
+  that predates the ruling narrowing it to two statuses. There were none to repair.
+  The measurement that made a citation legal is corrected in `sweep_faults`'s
+  docstring rather than deleted: it is narrowed, not withdrawn.
+- **A merge briefing carrying an unmarked handed-over command is REFUSED. Ruled by
+  the human in the daily-brief walk of 2026-09-08, built 2026-09-09 as
+  `check_briefing_commands.py`, ticket 40 of the pilot-delivery map, sitting 4.** The
+  finale had proposed "a gate runs any command it writes", which is a reminder; their own
+  three-class test says a reminder will not work, they were told so before they ruled, and he
+  ruled adopt on the mechanical form. **A gate may always write `UNRUN` and pay nothing**,
+  so the worst case is honest rather than expensive. The incident: eight commands in run
+  `batch-207704`'s merge briefing do not do what their text says, every one written by a
+  gate that never ran it. **The definition of a handed-over command is the whole
+  difficulty and it is measured, not guessed.** That briefing holds 1,332 inline code
+  spans and 24 distinct commands; a check firing on every span would refuse it for naming
+  `storableRow`, and one firing on every fenced block would refuse it for quoting a cost
+  table. A command is a span, or a line inside a fence, whose head is a runner from the
+  script's own `RUNNERS` set AND which carries an argument, or whose head is an
+  executable script path rooted under `scripts/`, `./`, `~/` or `/`. Driven over the real
+  briefing: **59 commands named, all 59 unmarked.** It names seven of the eight faults the
+  finale found by hand; the eighth is twelve suite figures quoted with NO command, and no
+  check reading what is written can see an absence.
+- **The four gate briefs in `~/.claude/agents/` carry the `RAN` half now, and the check
+  and the edits landed in one reviewed diff.** Built 2026-09-09, ticket 40 sitting 4. All
+  four already carried the `UNRUN` half; a command that WAS run carried no mark at all, so
+  nothing could tell "ran, unmarked" from "never considered". `run-issues-finale.md` also
+  names the check and its `--list` road, because the finale is the last stage and the one
+  role that must turn every `UNRUN` into a `RAN` or refuse to ship it. The check could not
+  land before the marks: it refuses every briefing on its first run otherwise, which is
+  why sitting 3 did not start it.
+
+## Sitting 5 of ticket 36 — every reason left the two loaded files (2026-09-09)
+
+Ruling 9 of ticket 36, on the human's own road: a rule a script enforces puts its
+reason in that script's docstring, a rule no script enforces puts its reason
+here, and `test_skill_structure.py` gains a line ceiling that refuses a commit
+growing `SKILL.md` or `finale.md` back. Ruling 14 set the ceiling after the move.
+The human set the `SKILL.md` figure on 2026-09-09: below 1200, with 600 as the target
+he would be happy with. His reason is run tokens, not tidiness: `SKILL.md` is
+read on every runner turn, and nothing a run does reads this file or a docstring.
+The stories below are what left `SKILL.md`; the ones that left `finale.md` follow
+under their own heading. Every rule they illustrated stayed where it was, and the
+test asserts both halves.
+
+**The void effort experiment.** The 2026-08-21 run of 395, 394, 396, 397 and 395b
+was the first trial of `medium` effort. `orchestrator_cost.py` read it at 1.51M
+weighted tokens per issue on 2026-08-23, above the threshold that would have ended
+the effort question, and the reading had to be thrown away, because neither
+`run.md` nor `run-journal.md` contained the word "effort" anywhere. That is why the
+ledger header carries `Session effort at launch:`. And the harness fixture's first
+pre-flight, on 2026-08-30, reported this field as unobservable and said it would be
+left blank or guessed; the value was readable off the process's own command line
+all along, which is why the skill gives the `ps` command rather than the rule.
+
+**Hand-written clocks.** They drifted by 68 and 95 minutes on past runs, and run
+`batch-88624c` wrote three times it had not read — 02:33, 08:26 and 08:25 — and
+corrected each one on checking. The human ruled on 2026-08-31, after a sweep found that
+no script read them, that transitions carry no time.
+
+**The empty briefing sections.** On the 209-215 run four sections were still empty
+placeholders when the finale opened the file, and one of them was the section that
+should have carried the WhatsApp deploy step — the single action in that batch that
+changed what a customer reads. A reader starting at the top met a stale test count
+before reaching the correction 100 lines down.
+
+**The private copy that hung.** On the 327 run a gate given a path and no method
+invented its own — `tar` over all 790 MB including `node_modules` — produced
+nothing for 81 minutes and was killed with no verdict. The rsync recipe measured
+0.8 seconds and 66 MB, and module resolution through the symlink was proved by
+running a test file inside the copy. Nobody re-ran `tar` against a control, so the
+slow-`tar` diagnosis is untested; what is established is that the replacement is
+fast. `cp -al` for a build measured 14 seconds on the `402-251d11` tree, found by
+that run's attempt-3 implementer.
+
+**The hard-link write.** On run `bridge-cse`, 2026-08-24 at 17:05, the runner
+appended three lines to a file inside a `cp -al` copy to settle a split between two
+gates. The write went straight into the run worktree, and the attempt-2 brief had
+to be rebuilt around it. B5, the inode check, is the human's 2026-08-27 answer.
+
+**The two-way door.** Issue 338's verify gate ran `rm -rf node_modules/.vite`
+inside its private copy on the same run and deleted the RUN worktree's vitest
+transform cache. No tracked file moved, and nothing warned. Then three gates
+deleted the run's cache on 2026-08-27 despite the warning; the human had already
+refused a stronger warning on cost, and a reminder that three briefed agents
+ignored is not a control, so on 2026-08-29 `vitest.config.ts` moved the cache to
+`./.vitest-cache` in each tree's own root instead. A repo that has not made that
+change keeps the older rule alone.
+
+**The `.git` exclusion.** `.git` is 87 MB against a 66 MB copy, so carrying it
+would more than double the copy to serve one script. On run `bridge-cse` both
+issue 408's gates and issue 409's gates independently spent time diagnosing the
+same unexplained red, and 409's filed it as `vg409-01`. Fixed at the source on
+2026-08-24: the two git-driving cases skip without `.git`, and the checker exits 3
+with `REFUSED no-git-repository`.
+
+**The mutant that nearly committed.** On 186 the tree sat reverted to the pre-fix
+file for two minutes mid-gate, one gate's backup captured the mutant, and only a
+staging-time checksum stood between the run and committing the defect it had just
+fixed. That is why the runner re-checks every graded file's checksum before it
+commits.
+
+**Two gates, one scratch directory.** The 209-215 run lost work twice to this in
+one day: 210's gates both picked the scratchpad name `drill`, and one gate's
+`rm -rf` destroyed the other's copy mid-run; 211's gates then collided in the run's
+own tree, where one gate briefly read the other's live mutant. Checksums at gate
+open and close cannot see the second case.
+
+**The seeded second workspace.** Issue 319's recorded default would have seeded a
+second profile-holding QA workspace while issue 317's fresh
+`tests/schema/grain-pin.live.test.ts` asserted exactly one existed; the runner
+caught it by chance. Queue item T24R1-5 narrowed "shared state", which nobody
+could apply, to rows in a shared database, which is mechanical.
+
+**The module the compiler emptied.** On run `402-251d11` an implementer added
+`export const MATCH_LINE_CAP = 200;` to a `"use server"` file, where Next allows
+only async function exports. The module then exported nothing and every route
+answered HTTP 500, including `/login` — on a tree where `npm test` reported 649
+files and 7219 tests green, with `tsc --noEmit` and `eslint` both clean. Two gates
+caught it by driving the app; nothing mechanical did. The finale's own build on
+that run compiled in 4.9 seconds.
+
+**The build that said "Compiled successfully" and exited 1.** On run `bridge-cse` a
+build printed that line and then exited 1 at "Collecting page data". The runner
+grepped the log, concluded a gate was wrong, and overruled it. The gate was right,
+and it cost issue 409 an attempt built to a wrong spec plus a criteria reset. B4 is
+the exit-code echo.
+
+**The build under a live server.** On the same run the runner ran `rm -rf .next &&
+npm run build` minutes before spawning two gates: every route then answered HTTP
+500 on sound code, and the browser console held a stale error naming a line that no
+longer existed. A gate that trusted the console would have rejected an issue for a
+bug already fixed.
+
+**Exit 6 of the citation checker.** Exit 6 was added 2026-09-02 with issue 503.
+Positional paths were given and the pass graded none of them, so there was no
+summary line to read. Two roads reach it: `--touches` passed together with paths,
+and a path the unpinned pass cannot read. Both answered exit 0 on a run that had
+graded nothing until then, which is why it is a sixth code and not a second meaning
+on one of the five.
+
+**Two correction rounds that closed on their own say-so.** The 395-397 run closed
+claiming every item verified with a third of `rg394-02` not landed, and
+`batch-207704`'s last citation pass died after 48 lines and read clean. That is why
+`correction_close.py` refuses on named evidence and on the terminator.
+
+**The prose-deletion saving.** Run `bridge-cse`, 2026-08-24, paid for two rounds
+that should have been deletions. Issue 409's attempt-3 rejection enumerated four
+comment deletions, and issue 338's attempt-2 rejection named two prose sites. Both
+gates passed the behaviour in both cases. Each bought a fresh implementer, and in
+both the journal records that the runner verified the result by grep rather than
+by reading it. About 30 to 40 minutes across the two.
+
+**The concurrency gate's position.** It sat four bullets lower until 2026-09-07,
+and the fold made that position wrong: the hardening phase and the batch id both
+came first, so a refused launch had already attacked and rewritten the issue files
+a peer session was hardening, and had left a live ledger holding them. Mock drive D
+measured it; the section on the fold above holds the drive.
+
+**The worktree that did not hold the file.** Drive `batch-800f60` was cut at
+`3d5fe7bf` while issue 914 landed on main at `b81bf6a4`: the worktree did not hold
+that file at all, an attacker was handed a path that did not exist, and it edited
+the main checkout instead — and said so, which is the only reason it was caught.
+
+**The checker that was called blind.** On run `481-482-2d0f77` the pre-flight got
+`0 citations in 1 file(s)` on both issue files at 18:16 and the journal concluded
+the checker was blind. The finale ran the same checker on the same two files and
+got 106 citations, 83 holding. Nothing about the checker had changed; the
+implementers had appended their records in between. Adopted by the human 2026-08-30.
+The 2026-08-29 audit that put the pre-flight check in at all: 28 of the 49
+`ready-for-agent` files carried 169 broken citations that day, and nothing
+re-checked any of them between the stamp and the spawn.
+
+**The era before the model map.** The rule was "never pass a `model:` value on a
+spawn for any role that has an agent file", and it was right while all twelve loop
+briefs said `model: inherit` and nothing could name a model per role — a
+spawn-time value could then only defeat the file by accident. Ticket 39 ended
+that and its ruling 10 reversed the rule. The board render's pin moved from
+`fable` to `opus` on 2026-09-06, closing `q-t39-s2-1`, measured on run
+`batch-b5e96d` at 0.30M weighted tokens against that run's 149.70M. The bullet
+cited `finale.md:147-166` and `haiku` until 2026-09-05; line 147 was about
+migration `0086`, and line numbers are not cited there any more.
+
+**What the five runs to 2026-08-20 measured about the orchestrator.** Four issues
+cost it 0.96M weighted tokens per issue, nine cost 1.44M to 1.67M, and thirteen
+cost 2.45M. Nothing else in the audit moved a number this far, which is why the
+launch reads the last week's table.
+
+**The worktree readiness check.** It costs one shell command, a few lines of output
+and 30 to 60 seconds per worktree, and it saves more than that the first time it
+stops an agent diagnosing a false green caused by a missing environment file.
+
+**The dev server left off the allowlist.** The dev server is named in the floor
+because leaving it off cost six hours: the bullet it replaced ran correctly and
+still lost them, because a runner dry-ran every class the old text named and read
+an illustrative list as a complete one.
+
+**The `--add-dir` launch.** CLI 2.1.257 added a one-time permission prompt in auto
+mode before the first file read outside the working directory. Every worker in a
+run reads outside its worktree as a matter of course, so an unattended one meets
+that prompt and the run halts where nobody is watching. The human ruled the three
+directories on 2026-09-06, overturning the default of changing nothing.
+
+**The round header's third failure.** The rule that a brief names the place and
+not only the act was adopted on 2026-08-09, restated as a check on 2026-08-14, and
+failed a third time in the `dc132b` run of 2026-08-16; the class-(a) slim above
+holds the three faults.
+
+### What left `finale.md` in the same sitting
+
+**The finale that drove no seam live.** From the `cab74e` finale, 2026-08-18: the
+cold-cache build deleted `.next` under a server that had run since 02:27, every
+route answered HTTP 500 afterwards, `preview_stop` was TAKEN TO BE refused by the
+permission classifier in an unattended run, and starting a server by hand is
+forbidden by the round header. So `finale-judgment` fell back to reading composed
+source at branch head plus five seam test files, and nothing in the briefing
+announced the gap. The claim about the classifier was wrong: the `batch-45c8b1`
+finale called `preview_stop` on Claude Code 2.1.255, unattended, and it was
+permitted.
+
+**The probe that wrote.** From run `481-482-2d0f77`: one probe passed
+`{name: "x"}` to `addSupplierAction` to see whether it dispatched, and created a
+supplier on QA. Every other probe in the same sweep used a failing argument and
+wrote nothing. The finale then tried to delete the row and the permission
+classifier refused the service-role delete, correctly, so it became a numbered
+action on the human.
+
+**The measured ceiling that had to be lifted.** From the 301-307 finale: issue 304a
+wrote `check (rank between 1 and 3)` because no tier in the customer's workbook held more
+than three brands; issue 307 let a member add a fourth, so migration `0086` had to
+lift the ceiling, and the runner's spawn brief told 307's implementer "this issue
+adds no migration" for the same reason. Both of 304a's gates passed it correctly,
+because its own criteria never mentioned the case. `0086`'s header is the model: it
+names which sentence in `0085` was evidence and which was inference.
+
+**The checksums that expired.** Both 202 checksums were correct at gate close and
+false three hours later, and running them read as the exact alarm the gate wrote
+them to raise.
+
+**The question the human had already closed.** The human had ruled twice on issue 276 while that
+run was in flight, and the run came within one `Decide` item of handing them back a
+question they had closed three hours earlier.
+
+**The rows their own issue had fixed.** Three of seventeen issues minted on
+2026-08-09 were stale this way, each costing a run slot and a hardening pass.
+
+**The stale threshold.** This file and `parallel-hunt/SKILL.md` both carried
+"operator at any severity" for a day after the human set a `medium` floor on
+`operator` (T15-2, 2026-08-09); the 296-276-297 run's brief repeated the stale
+figure and promotion had to overrule its own brief.
+
+**The board render's size.** The 2026-08-06 figure that chose Haiku cites a 283 KB
+input; measured 2026-09-01, the render reads `merge-briefing.md` at 125 KB plus the
+old board at 12.5 KB, roughly 35,000 tokens in and 3,000 out. Measured again on run
+`batch-b5e96d`, 2026-09-06, it cost 0.30M weighted tokens in 0.08 h against that
+run's 149.70M. The old sentence justifying Haiku read "there is no judgement in
+the render"; a panel carrying derived counts broke that premise, and the
+transcription rule restored it.
+
+**The briefing nobody could read.** On run `batch-88624c` three of the six things
+The human reads after a run sat past line 1700 of a 1963-line file and they found none
+of them; the second time that happened it cost four cost measurements they had
+commissioned the day before. That file grew from 1830 lines to 1963 in a single
+day, which is why the one-screen block names headings and never line numbers.
+Measured across five real briefings on 2026-09-03, `## What shipped` was headed
+`## What shipped, per issue` on `batch-45c8b1` with sixteen ids in one prose
+sentence, `### 161 —` sub-headings on `batch-375cbf`, bold lines on
+`batch-88624c`. On 2026-09-04 the tracker held 585 issue files and
+none carried a `Sentence:` line. Over the five drawn runs only `batch-45c8b1`
+wrote its Decide items as questions, and five of those six headings ran 61 to 89
+characters against a card that holds 60; the card set and the chip set were
+disjoint every time, nine cards plus seven chips for that run's sixteen.
+
+## Why the launch mode is `bypassPermissions` and not `dontAsk`
+
+Measured 2026-09-12, when the launch line grew a permission mode. The CLI at
+2.1.265 offers six modes, not the four a session usually names: `acceptEdits`,
+`auto`, `bypassPermissions`, `manual`, `dontAsk` and `plan`. `dontAsk` reads like
+the safe middle - it raises no modal, so it cannot stall a run - and it is the
+wrong answer.
+
+Two probes settled it. Under `dontAsk` a tracked shape, `echo`, ran with no
+denial. The gate drill shape, `cd` into a scratchpad copy then `export PATH` then
+`sed` then `npx`, was refused outright: "Permission to use Bash has been denied
+because Claude Code is running in don't ask mode." So `dontAsk` denies anything a
+tracked rule does not already cover, silently and instantly.
+
+That trades a stall for a worse fault. The floor work of the same day measured
+1009 of 1011 Bash calls across run `batch-200d42`'s eighteen gate transcripts
+carrying at least one segment no tracked rule covers. Under `dontAsk` that night
+loses no hours, and issue 441's verify gate returns a verdict having run none of
+the tests it was denied. A wrong pass ships behaviour nobody drove, and the
+finale is the first thing after it that looks.
+
+`bypassPermissions` refuses nothing except what a PreToolUse hook refuses, and
+the hooks were measured the same day to still fire and still block in that mode.

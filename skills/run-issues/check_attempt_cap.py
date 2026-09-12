@@ -22,6 +22,11 @@ prints the counts it refused on.
 
 Usage:
     check_attempt_cap.py --ledger <run.md> --issue 348
+
+The older `implement …` / `retry N` stamps cannot be counted, because
+`retry 00:18` is a clock and `retry 10.2` is a duration in minutes, so a row
+still carrying them is refused until it is restamped with `attempt N`. Moved
+here from SKILL.md by ticket 36 sitting 5 (2026-09-09).
 """
 
 import argparse

@@ -346,6 +346,75 @@ def test_a_citation_is_a_legal_way_to_say_why():
     assert sweep(text, "batch-207704") == []
 
 
+def test_fixed_with_only_a_citation_is_refused():
+    """TIGHTEN, ruled by the human in the daily-brief walk of 2026-09-08, item 2.
+    A row claiming the work is done states the reason where the claim is, so a
+    reader deciding whether to promote it never has to open a second file."""
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "fixed", "436/batch-207704",
+        "fixed — `.scratch/example-feature/bugs/rg436-01.md`")
+    found = sweep(text, "batch-207704")
+    assert len(found) == 1
+    assert "rg436-01" == found[0].row_id
+
+
+def test_verified_with_only_a_citation_is_refused():
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "verified", "436/batch-207704",
+        "verified · `bugs/rg436-01.md`")
+    assert len(sweep(text, "batch-207704")) == 1
+
+
+def test_open_with_only_a_citation_stays_legal():
+    """The ruled width. The human tightened `fixed` and `verified` ONLY, and left
+    `open` with a bug-file citation legal. Measured across every register shard
+    on 2026-09-09: 37 citation-only rows, every one of them `open`, so this
+    tightening refuses nothing that is on disk today."""
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "open", "436/batch-207704",
+        "open — `.scratch/example-feature/bugs/rg436-01.md`")
+    assert sweep(text, "batch-207704") == []
+
+
+def test_the_other_four_terminal_words_keep_their_citation():
+    """`TERMINAL` holds six words. The ruling named two. Recording a decision at
+    the width it was stated is the human's own rule, so the other four are untouched
+    and this pins that rather than leaving it to be inferred."""
+    for status in ("refused", "retracted", "promoted", "closed"):
+        text = ORIGIN_HEADER + orow(
+            "rg436-01", status, "436/batch-207704",
+            f"{status} — `bugs/rg436-01.md`")
+        assert sweep(text, "batch-207704") == [], status
+
+
+def test_fixed_with_prose_beside_the_citation_is_legal():
+    """The rule is about a note that says nothing but a path. A sentence and a
+    citation is the shape it asks for, not a shape it refuses."""
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "fixed", "436/batch-207704",
+        "fixed at `a1b2c3d`, the null guard landed — `bugs/rg436-01.md`")
+    assert sweep(text, "batch-207704") == []
+
+
+def test_the_refused_terminal_citation_still_counts_as_a_citation():
+    """`told` reports the rate, and a refusal must not move a row into another
+    bucket: the count is how the next reader judges whether the rule was worth
+    it."""
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "fixed", "436/batch-207704",
+        "fixed — `bugs/rg436-01.md`")
+    assert told(text, "batch-207704")["citation"] == 1
+
+
+def test_the_refusal_names_what_the_row_owes():
+    text = ORIGIN_HEADER + orow(
+        "rg436-01", "fixed", "436/batch-207704",
+        "fixed — `bugs/rg436-01.md`")
+    said = sweep(text, "batch-207704")[0].reason
+    assert "fixed" in said
+    assert "commit" in said or "reason" in said
+
+
 def test_a_terminal_row_saying_nothing_is_refused():
     """A row claiming closure owes the commit or the reason ruling 12 names."""
     text = ORIGIN_HEADER + orow("rg500-02", "verified", "500/batch-207704", "")

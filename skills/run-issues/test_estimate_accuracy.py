@@ -118,7 +118,7 @@ class IssueOfPrompt(unittest.TestCase):
         )
 
     def test_the_bold_span_may_carry_the_title_as_well_as_the_id(self):
-        """Run `batch-88624c`, 2026-08-31: the shape 18 of 30 spawns were lost to.
+        r"""Run `batch-88624c`, 2026-08-31: the shape 18 of 30 spawns were lost to.
 
         Every brief in that run wrote `issue **NNN — title**`. The bold span is
         not `**NNN**`, and `issue\s+` cannot cross the two asterisks, so the old

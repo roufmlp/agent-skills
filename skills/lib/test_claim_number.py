@@ -289,16 +289,21 @@ class TestEveryMinterNamesTheClaimScript(unittest.TestCase):
     that writes a new issue file or a new migration, and the text is where the
     rule reaches an agent, so the text is what these read."""
 
-    CLAUDE = HERE.parent.parent
+    SKILLS = HERE.parent
+    # `agents/`, `hooks/` and `settings.json` are NOT in this git repo. They live
+    # under `~/.claude` and nowhere else, so a climb from `__file__` finds them
+    # only from the main checkout and lands on nothing from a worktree. The two
+    # trees are separate facts and are resolved separately.
+    CLAUDE = Path.home() / ".claude"
     MINTERS = {
-        "to-issues": CLAUDE / "skills" / "to-issues" / "SKILL.md",
+        "to-issues": SKILLS / "to-issues" / "SKILL.md",
         "promotion brief": CLAUDE / "agents" / "promotion.md",
-        "run-issues finale": CLAUDE / "skills" / "run-issues" / "finale.md",
-        "parallel-hunt": CLAUDE / "skills" / "parallel-hunt" / "SKILL.md",
-        "daily-brief": CLAUDE / "skills" / "daily-brief" / "SKILL.md",
+        "run-issues finale": SKILLS / "run-issues" / "finale.md",
+        "parallel-hunt": SKILLS / "parallel-hunt" / "SKILL.md",
+        "daily-brief": SKILLS / "daily-brief" / "SKILL.md",
         "implementer": CLAUDE / "agents" / "run-issues-implementer.md",
         "escalated implementer": CLAUDE / "agents" / "run-issues-implementer-escalated.md",
-        "harden-issues": CLAUDE / "skills" / "harden-issues" / "SKILL.md",
+        "harden-issues": SKILLS / "harden-issues" / "SKILL.md",
     }
 
     # A minter whose file this pack does not carry is skipped, never failed.

@@ -20,8 +20,18 @@ rejected the simplest approach on an unverified impossibility claim — "the
 platform cannot do X" — and everything after it inherited that turn. Verify any
 such claim yourself before accepting it: run the query, check the doc, try it.
 
-Everything else works as the standard implementer: read the ledger's status table
-first and stop if this issue is already past implementation; orient from
+**THE LEDGER'S HEADER CARRIES THE RUN FACTS, and no spawn prompt repeats them.**
+Register path, run directory, merge briefing, QA workspace, sign-in user, dev
+server and its host, the sign-in link command, the browser harness, the
+private-copy recipe and the rule that the full suite runs WITHOUT the canonical
+env file sourced: ten lines, all written before the first spawn of the run, and
+the header is the only place they exist. Your prompt carries the four things that
+vary for this issue and nothing else. Ticket 40 of the pilot-delivery map, the
+runner's turn growth ticket, ruling Q9, 2026-09-08.
+
+Everything else works as the standard implementer: read the ledger's HEADER and
+its status table first and stop if this issue is already past implementation;
+orient from
 Carry-forward and `primer.md` rather than exploring; never read `run-journal.md`;
 work test-first, via the `tdd` skill if the setup registers one and without it
 otherwise; run typecheck and the issue's own tests, not the full

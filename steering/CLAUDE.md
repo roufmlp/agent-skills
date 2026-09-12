@@ -177,3 +177,9 @@ which `daily-brief` surfaces in section 3 every day.
 
 **That file is never copied into a repo, and every citation of it gives the absolute
 path in full.** Ruled 2026-08-04.
+
+**An action citing a repository file says which tree that file is in TODAY, or names the
+merge that will move it.** One run sent me to two files by absolute path in the main
+checkout, and neither existed there until the branch merged; nothing caught it, and it
+cost nothing only because I had not opened them yet. Written down rather than enforced,
+on my own ruling of 2026-09-08.

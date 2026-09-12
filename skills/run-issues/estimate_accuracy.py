@@ -44,6 +44,19 @@ Exit 0 when it graded at least one issue and attributed every per-issue spawn.
 Exit 2 when it could not read its inputs, matched nothing, or left a spawn
 unattributed. A pass over nothing is not a pass, and neither is a table built
 from part of the run.
+
+**Two measurements moved here from finale.md by ticket 36 sitting 5
+(2026-09-09).** On run `batch-88624c` the old reader lost 18 of 30 spawns to a
+regex that could not read `issue **201 — title**`; it graded seven issues from
+a third of the run, reported estimates running long when they ran short, and
+printed no warning. An unattributed spawn is now named in the output and exits
+2. On run `414a-483-286335` the script's own reading, which supersedes the
+hand-join figures at the top of this docstring, was: the median issue took 0.40
+of its estimate, spread 0.31x to 1.04x, and a batch scoped at 26.5 hours of
+issue time occupied 13.8;
+99f reads 1.04x on that run only because a permission prompt sat for 146
+minutes inside it, which is why the ratio is read beside `harness_cost.py` and
+never alone.
 """
 
 from __future__ import annotations

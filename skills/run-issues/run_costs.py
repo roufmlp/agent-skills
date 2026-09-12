@@ -53,6 +53,17 @@ times, and no other transcript in the repository's slug names it at all.
 **An unverified transcript appends NO row.** The old code appended one anyway,
 with `not read` in the cells it could not fill, and the cells it filled wrongly
 looked exactly like the cells it filled rightly.
+
+**Why the transcript must NAME the run, moved here from finale.md by ticket 36
+sitting 5 (2026-09-09).** Run `batch-88624c` ran this from the MAIN checkout on
+2026-08-31, whose slug holds 64 sessions of unrelated work; the old rule took
+the newest and reported 1.01 hours for an 8.48-hour run, with a longest step the
+run never ran, and appended it as though it were measured. Why this exists at
+all, measured 2026-08-30: `orchestrator_cost.py` already ran at launch and read
+the LAST WEEK, so a run stated what other runs cost and never its own;
+`run_timings.py`, built on 2026-08-26 when a fourteen-hour run could not say
+which step ate the clock, was named in no skill file and had only ever been run
+by hand.
 """
 
 import argparse

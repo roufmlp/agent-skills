@@ -21,6 +21,15 @@ a retried turn writes the row twice.
 What it will not do: convert tokens into money, or call a low first-turn number a saving.
 A cache read costs a tenth of a write in the weighting this pipeline uses, and whether
 that is worth anything depends on a price this script does not know.
+
+**What the finale reads off it, moved here from finale.md by ticket 36 sitting 5
+(2026-09-09).** The number is the read-to-write ratio: 61.7 to 1 on run
+`414a-483-286335`, 634M read against 10.28M written. A cache read costs about a
+tenth of a write, so that ratio IS the token bill. It has no target and it is
+not a score; it is a watchdog. If it ever collapses toward 1, the run's input
+cost has gone up roughly tenfold and nothing else in the pipeline would say so.
+The original research question is settled: a fresh subagent reads a cache it
+did not write, on 43 of 54 agents, which is 0.2% of fleet reads.
 """
 
 from __future__ import annotations

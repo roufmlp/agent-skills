@@ -53,6 +53,24 @@ Usage:
 
 Exit 0 when every row holds, 1 on any refusal, 2 when git or the ledger could
 not be read.
+
+**The measurements behind the rule, moved here from SKILL.md by ticket 36
+sitting 5 (2026-09-09).** SKILL.md's sentence "ledger actuals derive from commit
+times" was broken twice after it was written, by 68 and 95 minutes: the 399-403
+run stamped issue 399's commit at 09:38 against a git author date of 08:03, and
+every per-issue duration in a run's records inherits that error. Comparing the
+ledger stamp against git is necessary and not sufficient, because the runner
+writes one from the other; on `batch-34455f` that comparison passed 413b and
+413 while this check refuses 413b (26 minutes early), 413 (115 minutes) and
+422 (1 minute, which nobody noticed), and passes the other six. Its `ok` on
+nine rows and its `ok` on nothing are different sentences: on run
+`414a-483-286335` it printed `ok` having matched zero rows, because its reader
+demanded an em-dash after the issue id and that ledger wrote the id in its own
+column. It now reads the id by column and exits 2 on no row (added 2026-08-30,
+closing `rn414a-01`). The human adopted the finale run on 2026-08-25 as candidate
+rule b of that run's briefing, and the per-commit run on 2026-08-29, closing the
+F5 question on ticket 33: a sentence nothing checks at write time is the
+remember class.
 """
 
 import argparse

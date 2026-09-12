@@ -65,6 +65,16 @@ Exit 0 when every file is tracked and hands the reader a runnable query, 1 on
 any content refusal, 2 when a path could not be read or the tracking question
 could not be asked, 3 when git does not know a file. 3 outranks 1: a reader
 handed both faults repairs the tracking one first.
+
+**The two runs behind the two refusals, moved here from finale.md by ticket 36
+sitting 5 (2026-09-09).** Exit 3 was added 2026-09-02 on the human's ruling, from
+`batch-45c8b1`'s F1: that run wrote seven paste files, committed none of them,
+and seven gates ran this script over them and all seven exited 0, because until
+then it graded content alone. The commented-out confirmation query: pasted as
+written, such a query returns no rows, no error and no output, which reads
+exactly like a clean result, and on `0095` the dangerous outcome was the one
+only the row COUNT catches. Nine agents touched that run's two paste files and
+nobody ran the query.
 """
 
 import os

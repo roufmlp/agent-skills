@@ -318,9 +318,50 @@ class Discover(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             mod.discover([os.path.join(self.root, "nowhere")])
 
+    def test_a_nested_checkout_is_not_part_of_the_tree_it_sits_in(self):
+        # A git worktree lives at `.claude/worktrees/<name>/` INSIDE the main
+        # checkout, so a plain walk of the main tree descends into it and runs
+        # a second copy of every suite. Those copies are another branch's
+        # files. Grading them here reports on work nobody asked about.
+        self.write("a/test_one.py")
+        self.write(".claude/worktrees/wt/.git", "gitdir: /elsewhere\n")
+        self.write(".claude/worktrees/wt/a/test_one.py")
+        self.assertEqual(["a/test_one.py"], self.found())
+
+    def test_a_nested_checkout_is_found_by_its_git_entry_not_by_its_name(self):
+        # `.claude/worktrees` is where this harness happens to put them. The
+        # rule is "a subdirectory that is its own checkout", so a clone
+        # vendored anywhere else is left alone for the same reason.
+        self.write("a/test_one.py")
+        self.write("vendor/other/.git", "gitdir: /elsewhere\n")
+        self.write("vendor/other/test_two.py")
+        self.assertEqual(["a/test_one.py"], self.found())
+
+    def test_a_git_directory_marks_a_checkout_as_surely_as_a_git_file(self):
+        # A worktree carries a `.git` FILE and a clone carries a `.git`
+        # DIRECTORY. Both are checkouts and neither belongs to this tree.
+        self.write("a/test_one.py")
+        os.makedirs(os.path.join(self.root, "clone", ".git"))
+        self.write("clone/test_two.py")
+        self.assertEqual(["a/test_one.py"], self.found())
+
+    def test_the_root_itself_may_be_a_checkout(self):
+        # Pointing the walker AT a worktree is how a branch grades itself.
+        # Pruning must skip nested checkouts and never the tree it was given.
+        self.write(".git", "gitdir: /elsewhere\n")
+        self.write("a/test_one.py")
+        self.assertEqual(["a/test_one.py"], self.found())
+
+    def test_a_tree_holding_only_a_nested_checkout_walks_empty(self):
+        # It must not borrow the nested checkout's files to look non-empty.
+        # An empty walk is refused upstream, which is the honest answer.
+        self.write(".claude/worktrees/wt/.git", "gitdir: /elsewhere\n")
+        self.write(".claude/worktrees/wt/test_one.py")
+        self.assertEqual([], self.found())
+
     def found(self):
         return sorted(os.path.relpath(p, self.root)
-                      for p in mod.discover([self.root]))
+                      for p in mod.discover([self.root]).paths)
 
 
 class EndToEnd(unittest.TestCase):
@@ -389,6 +430,48 @@ class EndToEnd(unittest.TestCase):
         self.write("test_good.py", self.GOOD)
         _, printed = self.run_main()
         self.assertIn("1 file", printed)
+
+    def test_the_pass_line_names_the_tree_it_walked(self):
+        # The default roots are absolute paths naming the LIVE trees, so a walk
+        # started from a branch grades main. That is honest, and it is also the
+        # silence this script exists to refuse unless the report says which
+        # tree it read.
+        self.write("test_good.py", self.GOOD)
+        _, printed = self.run_main()
+        self.assertIn(self.root, printed)
+
+    def test_a_skipped_checkout_is_named_rather_than_passed_over_in_silence(self):
+        # Otherwise a tree whose suites all live in a nested checkout walks
+        # empty with no clue why.
+        self.write("test_good.py", self.GOOD)
+        os.makedirs(os.path.join(self.root, "wt"))
+        with open(os.path.join(self.root, "wt", ".git"), "w") as handle:
+            handle.write("gitdir: /elsewhere\n")
+        with open(os.path.join(self.root, "wt", "test_other.py"), "w") as handle:
+            handle.write(self.GOOD)
+        code, printed = self.run_main()
+        self.assertEqual(0, code, printed)
+        self.assertIn("wt", printed)
+        self.assertIn("checkout", printed.lower())
+
+    def test_a_walk_entering_no_checkout_says_nothing_about_checkouts(self):
+        # The line is a fact about this walk, not a standing notice.
+        self.write("test_good.py", self.GOOD)
+        _, printed = self.run_main()
+        self.assertNotIn("checkout", printed.lower())
+
+    def test_the_empty_refusal_names_the_checkouts_it_declined_to_borrow(self):
+        # A tree holding nothing but a worktree is refused as empty. Without
+        # the reason that refusal reads as "your suites vanished".
+        os.makedirs(os.path.join(self.root, "wt"))
+        with open(os.path.join(self.root, "wt", ".git"), "w") as handle:
+            handle.write("gitdir: /elsewhere\n")
+        with open(os.path.join(self.root, "wt", "test_other.py"), "w") as handle:
+            handle.write(self.GOOD)
+        code, printed = self.run_main()
+        self.assertEqual(2, code)
+        self.assertIn("REFUSED", printed)
+        self.assertIn("wt", printed)
 
     def test_each_file_runs_in_its_own_directory(self):
         # The suites import sibling modules by relative path, so a run started

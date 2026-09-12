@@ -94,6 +94,16 @@ Exit codes: 0 graded and passed, 1 graded and refused, 2 could not grade.
 
     python3 check_diff_coverage.py --repo . --diff-range main..HEAD \\
         --coverage coverage/coverage-final.json
+
+**Measured in a private copy on 2026-09-08, ticket 40 ruling Q4, moved here from
+SKILL.md by ticket 36 sitting 5:** 951 files and 11,329 tests, 63 seconds clean
+and 83 with coverage. Ordering the suite before the verify spawn would add its
+whole runtime to every issue's critical path, which is why the verify gate
+writes the report inside its own copy and the runner runs this check alone at
+the commit step: the gate's window grows by 83 seconds and the runner's
+foreground loses the same. The standalone-script exclusion was added 2026-08-30,
+closing `rn483-01`; the `untested` half is unchanged, so a diff adding a script
+and no test is still refused.
 """
 
 from __future__ import annotations
@@ -409,14 +419,22 @@ def read_coverage(path: pathlib.Path) -> dict[str, dict[int, int]]:
     return hits
 
 
-def index_by_relative(hits, repo: pathlib.Path) -> dict[str, dict[int, int]]:
+def index_by_relative(
+    hits, repo: pathlib.Path, report_root: pathlib.Path | None = None
+) -> dict[str, dict[int, int]]:
     """Re-key a report on repo-relative paths, so diff paths can find it.
 
     Reports carry absolute paths, repo-relative paths, or `./` prefixed ones
-    depending on the reporter. Matching on the tail after the repo root covers
-    all three without guessing at any of them.
+    depending on the reporter. Matching on the tail after the root covers all
+    three without guessing at any of them.
+
+    `report_root` is the root the REPORT's own paths were written under, where
+    that is not the repository being graded. The verify gate runs the suite in a
+    private copy of the tree, so its report keys every file on the copy's
+    absolute path while the diff names the tree's. The tail after the root is
+    the same string in both, which is the whole of the re-keying.
     """
-    root = str(repo.resolve())
+    root = str((report_root or repo).resolve())
     out: dict[str, dict[int, int]] = {}
     for path, lines in hits.items():
         key = path
@@ -453,8 +471,15 @@ def audit(
     diff_text: str,
     coverage_path: pathlib.Path,
     threshold: float,
+    report_root: pathlib.Path | None = None,
 ) -> tuple[list[Problem], dict]:
-    """Grade one diff. Returns (problems, facts) so the caller can render both."""
+    """Grade one diff. Returns (problems, facts) so the caller can render both.
+
+    `report_root` re-keys the report's paths and NOTHING else. Staleness reads
+    the tree's own mtimes, and `ungradeable_scripts` asks the tree who imports a
+    script: both are questions about the code being graded, not about wherever
+    the suite happened to run.
+    """
     changed = parse_diff(diff_text)
     facts = {
         "source_files": sorted(changed.source),
@@ -510,7 +535,7 @@ def audit(
             facts,
         )
 
-    by_relative = index_by_relative(hits, repo)
+    by_relative = index_by_relative(hits, repo, report_root)
     skipped = ungradeable_scripts(repo, changed.source, by_relative)
     facts["ungraded"] = {
         path: (len(changed.source[path]), why) for path, why in skipped.items()
@@ -652,6 +677,13 @@ def main(argv=None) -> int:
         help="lcov or istanbul JSON report. Absent is a refusal, never a pass.",
     )
     parser.add_argument(
+        "--report-root",
+        default=None,
+        help="Root the REPORT's paths were written under, when the suite ran "
+             "somewhere else -- the verify gate's private copy. Re-keys the "
+             "report only; staleness still reads --repo.",
+    )
+    parser.add_argument(
         "--threshold",
         type=float,
         default=100.0,
@@ -675,7 +707,11 @@ def main(argv=None) -> int:
         return 2
 
     problems, facts = audit(
-        repo, diff_text, pathlib.Path(args.coverage), args.threshold
+        repo,
+        diff_text,
+        pathlib.Path(args.coverage),
+        args.threshold,
+        pathlib.Path(args.report_root) if args.report_root else None,
     )
     output = render(problems, facts)
     if not problems:

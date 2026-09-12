@@ -68,6 +68,20 @@ payload per run by hand and check the exit code:
       "run_in_background":true}}' | python3 run-issues-foreground-gate.py   # 0
 
 Exit codes: 0 pass, 2 refuse (stderr is fed back to the model).
+
+**Two measurements that stood in run-issues/SKILL.md until ticket 36 sitting 5
+moved them here (2026-09-09).** The 2026-08-17 audit of run `cab74e` blamed
+eight 17-to-23 minute stalls, 158 minutes, on background spawns: the runner
+asleep past finished work until the resume cron woke it. The 2026-08-18
+re-measure joined every spawn to its subagent transcript and refuted that: a
+task notification woke the runner within seconds of every completion, and the
+eight gaps were the workers' own runtimes. Foreground spawning recovers none of
+them; what it buys is not betting the run on notification delivery holding
+across harness versions. The verify-gate exception was ruled on 2026-09-04
+after run `batch-b5e96d` spawned zero of fifteen gate pairs together at a
+measured cost of 97 minutes. Before that day this hook required `false`
+everywhere, which left "both gates in one message" as the only concurrent
+shape, and on CLI 2.1.255 the runner never once produced it.
 """
 
 import json

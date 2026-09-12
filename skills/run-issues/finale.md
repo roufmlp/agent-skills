@@ -5,9 +5,6 @@ the ledger after the last issue. That write is the trigger, and `SKILL.md` holds
 it. Nothing here is resident in `SKILL.md`, because a run pays for that file on
 every turn and pays for this one once.
 
-The text below stood in `SKILL.md` until 2026-08-16 and moved here unchanged
-(workflow-audit row 7).
-
 ## Finale — fully automatic
 
 After the last issue, in order, tracked in the ledger as
@@ -23,12 +20,9 @@ python3 ~/.claude/skills/run-issues/check_finale_stage.py --ledger <run.md> --to
 ```
 
 It permits the next stage in the chain and a repeat of the current one, and refuses a
-jump, a reversal and a ledger with no state. **This exists because the finale wrote
-`awaiting-merge` with promotion and the board still unrun in three consecutive runs** —
-`dc132b`, `cab74e` and `fd4fa2`, the last at 15:10 on 2026-08-20, where the runner put the
-state back by hand. Promotion is what turns register rows into issue files, so a resume
-that skips it loses them. The human approved the refusal on 2026-08-21. Promotion is safe to re-enter — it deletes each row as it
-resolves it — and the board render is safe to repeat:
+jump, a reversal and a ledger with no state; its docstring holds the three runs that
+earned it. Promotion is safe to re-enter — it deletes each row as it resolves it — and
+the board render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
    cache** (delete `.next` / `dist` first — a warm cache agrees with whatever it
@@ -42,22 +36,11 @@ resolves it — and the board render is safe to repeat:
    hands the next one a working server.** After the build finishes, `preview_start`
    the dev server and confirm one route answers 200. Record that confirmation in
    the ledger beside `finale-mechanical`, so the judgment step reads whether it has
-   a live harness rather than assuming one. `preview_start` on a stopped server is
-   already permitted, so this needs no new permission. (Adopted by the human 2026-08-18
-   as R3, from the `cab74e` finale: the step deleted `.next` under a server that
-   had run since 02:27, every route answered HTTP 500 afterwards, `preview_stop` was
-   TAKEN TO BE refused by the permission classifier in an unattended run, and starting
-   a server by hand is forbidden by the round header. **So `finale-judgment` drove no
-   cross-issue seam live in that run**, and fell back to reading composed source at
-   branch head plus five seam test files. The failure is silent: the briefing still
-   appears, and nothing in it announces the gap unless the finale volunteers it.)
-
-   **CORRECTED 2026-09-02: `preview_stop` is NOT refused.** The `batch-45c8b1` finale
-   called it on Claude Code 2.1.255, unattended, and the classifier permitted it. That
-   is the only reason that finale recovered its own dev server instead of handing the human
-   a numbered action. R3 itself stands unchanged; only the claim about the classifier
-   was wrong. Do not plan around a refusal that does not happen — call `preview_stop`
-   when the server needs restarting, and record what the call actually answered.
+   a live harness rather than assuming one. `preview_stop` is permitted in an
+   unattended run (measured 2026-09-02 on `batch-45c8b1`): call it when the server
+   needs restarting, and record what the call answered. Where the judgment step
+   had no live harness, the briefing says so; the gap is silent otherwise. (R3,
+   adopted by the human 2026-08-18; `decisions.md` holds the finale it happened to.)
 
    Preview deploy is **skipped in this repo** by standing decision — see the repo
    CLAUDE.md. Say so in the briefing; never work around it; never re-litigate it.
@@ -66,17 +49,12 @@ resolves it — and the board render is safe to repeat:
    that CANNOT write.** Read the action's first validation branch and pass
    something that reaches it. The refusal sentence proves dispatch exactly as well
    as a success does, and it leaves no row behind. Never pass an argument that
-   would succeed. (Adopted by the human 2026-08-30 in the daily brief, from run
-   `481-482-2d0f77`: one probe passed `{name: "x"}` to `addSupplierAction` to see
-   whether it dispatched, and created a supplier on QA. Every other probe in the
-   same sweep used a failing argument and wrote nothing. The finale then tried to
-   delete the row and **the permission classifier refused the service-role
-   delete, correctly**, so an agent that makes this mistake cannot tidy up after
-   itself — it becomes a numbered action on the human.)
+   would succeed: the classifier refuses the service-role delete that would tidy
+   up, correctly, so the row becomes a numbered action on the human. (Adopted by the human
+   2026-08-30; `decisions.md` holds the probe that wrote.)
 
-   **Two guards run here, and a refusal from either stops the finale.** Both were
-   adopted by the human on 2026-08-25, from candidate rules a and b of run
-   `batch-34455f`'s merge briefing.
+   **Two guards run here, and a refusal from either stops the finale** (the human,
+   2026-08-25).
 
    ```
    python3 ~/.claude/skills/run-issues/check_commit_order.py --ledger <run.md> --repo .
@@ -104,56 +82,38 @@ resolves it — and the board render is safe to repeat:
    measures nothing. It is the same fault rule 9 had, which `check_commit_order.py`
    replaced for the same reason.
 
-   **A backgrounded Bash step leaves NO duration in the transcript**
-   (`run_timings.py:40-46`), so before this wrapper only agent steps were timed and
-   the mechanical half of a finale could not be measured at all. If the wrapper
-   cannot stamp, it says `NOT stamped` and the command still runs; it can never be
-   the reason a step fails.
+   **If the wrapper cannot stamp, it says `NOT stamped` and the command still
+   runs**; it can never be the reason a step fails. Its docstring holds why.
 
    **`check_commit_order.py` prints two numbers and you read both**: how many
    status rows it READ, and how many of those carried a correction round. Its
    `ok` on nine rows and its `ok` on nothing are different sentences, and it
-   exits 2 rather than passing when it can read no row at all. Added 2026-08-30
-   after `rn414a-01`: on run `414a-483-286335` it printed `ok` having matched
-   zero rows, because its reader demanded an em-dash after the issue id and that
-   ledger wrote the id in its own column. It now reads the id by column.
-
-   `check_commit_order.py` REPLACES rule 9's commit-time comparison in `SKILL.md`.
-   That one compared the ledger's stamp against git, and the runner writes one
-   from the other, so it agreed by construction. This compares the git author
-   date against the correction round the row says the commit carries, which are
-   two sources that cannot drift into agreement. On `batch-34455f` it refuses
-   413b (26 minutes early), 413 (115 minutes) and 422 (1 minute, which nobody
-   noticed), and passes the other six.
+   exits 2 rather than passing when it can read no row at all. It REPLACES rule
+   9's commit-time comparison in `SKILL.md`, which agreed by construction; this
+   compares the git author date against the correction round the row says the
+   commit carries. Its docstring holds the rows it refuses.
 
    **`check_paste_file.py` refuses a paste file git does not know, on exit 3.**
-   Added 2026-09-02 on the human's ruling, from this run's F1: `batch-45c8b1` wrote
-   seven paste files, committed none of them, and seven gates ran this script
-   over them and all seven exited 0, because until then it graded content alone.
    An untracked paste file is not in the branch, so the merge cannot carry it and
-   the deploy goes out with the migration unapplied and nothing left to paste.
-   **Exit 3 is not exit 1 and wants a different repair**: `git add` and a commit,
-   not a comment marker. It outranks a content refusal, because repairing a
-   comment in a file nobody can pull repairs nothing. **Exit 2 here means the
-   question could not be asked** — no working tree, or no git — and is not a
-   verdict on the file. Tracked means the index holds it: a file added but not
-   yet committed passes, deliberately, because the finale writes and commits
-   paste files in the same round.
+   the deploy goes out with the migration unapplied. **Exit 3 is not exit 1 and
+   wants a different repair**: `git add` and a commit, not a comment marker. It
+   outranks a content refusal. **Exit 2 here means the question could not be
+   asked** — no working tree, or no git — and is not a verdict on the file.
+   Tracked means the index holds it: a file added but not yet committed passes,
+   deliberately, because the finale writes and commits paste files in the same
+   round.
 
-   `check_paste_file.py` also refuses a pilot paste file whose confirmation query
-   is commented out. Pasted as written, such a query returns no rows, no error and
-   no output, which reads exactly like a clean result — and on `0095` the
-   dangerous outcome is the one only the row COUNT catches. Nine agents touched
-   that run's two paste files and nobody ran the query. **A refusal here is
-   repaired by deleting the comment marker AND running the query against QA
-   before the briefing ships it.** The script cannot tell whether anybody ran it;
-   it can only tell that the reader was handed something runnable.
+   It also refuses a pilot paste file whose confirmation query is commented out:
+   pasted as written, such a query returns no rows, no error and no output, which
+   reads exactly like a clean result. **A refusal here is repaired by deleting the
+   comment marker AND running the query against QA before the briefing ships
+   it.** The script cannot tell whether anybody ran it; its docstring holds the
+   two runs behind both refusals.
 2. **Judgment.** Spawn `run-issues-finale`. Its verdicts plus `merge-briefing.md`
    become the merge briefing.
 
    **The one-screen block that opens the briefing is written at step 4, not here.**
-   It carries the wall clock, and the wall clock does not exist until the measurement
-   runs. Writing it early means writing it with a hole in it.
+   It carries the wall clock, which does not exist until the measurement runs.
 
    **Every command the briefing hands a human runs once first, against the state
    it will actually meet.** A pre-migration check runs before the migration, on
@@ -167,32 +127,22 @@ resolves it — and the board render is safe to repeat:
    a business rule.** A number read off today's input is a fact about one import,
    not a rule about the business, so the header names it as measured and the
    issue lists it in `## Must still be true` as an assumption a later issue may
-   lift. (Adopted by the human 2026-08-10, from the 301-307 finale: issue 304a wrote
-   `check (rank between 1 and 3)` because no tier in the customer's workbook held more
-   than three brands; issue 307 let a member add a fourth, so migration `0086`
-   had to lift the ceiling, and the runner's spawn brief told 307's implementer
-   "this issue adds no migration" for the same reason. Both of 304a's gates
-   passed it correctly, because its own criteria never mentioned the case. Cost:
-   one unplanned migration and one wrong brief. `0086`'s header is the model — it
-   names which sentence in `0085` was evidence and which was inference.)
+   lift. (Adopted by the human 2026-08-10; `decisions.md` holds the migration that
+   had to lift a measured ceiling and the model header that came of it.)
 
    **A published checksum expires the moment the file moves.** A correction
    round re-stamps every checksum a gate published for a file it touched, and
    the finale re-runs any that remain before the briefing closes. Anchor diff
    commands to `main...HEAD`, never the working tree — a worktree diff prints
    nothing once the work is committed, and an empty print cannot distinguish
-   "fine" from "the fix was reverted and committed". Both 202 checksums were
-   correct at gate close and false three hours later, and running them read as
-   the exact alarm the gate wrote them to raise (decisions.md).
+   "fine" from "the fix was reverted and committed" (decisions.md).
 
    **Main moved while you worked. Read it before you write a question.** The run
    branches from a worktree cut hours or days earlier, so the human's rulings since the
    cut are invisible to every agent in the pipeline. The finale diffs the merge base
    against main's current tip and reads every commit touching an issue in scope.
-   Anything they already answered leaves the briefing, and the briefing says they
-   answered it. Adopted 2026-08-10: they ruled twice on issue 276 while that run was in
-   flight, and the run came within one `Decide` item of handing them back a question they
-   had closed three hours earlier.
+   Anything he already answered leaves the briefing, and the briefing says he
+   answered it. (Adopted 2026-08-10; `decisions.md` holds the near miss.)
 
    **Sweep the register for rows their own issue already fixed.** A review gate files
    a row, the issue's correction round fixes it inside the commit the gate was
@@ -200,10 +150,8 @@ resolves it — and the board render is safe to repeat:
    neither the bug file nor the diff, mints an issue for work that has shipped. The
    finale already holds the commits, so it does the re-reading: any row whose issue
    committed after the row was filed is checked against that commit and marked
-   `verified` where the fix landed, which routes it to promotion's `fixed` exit.
-   Three of seventeen issues minted on 2026-08-09 were stale this way, each costing a
-   run slot and a hardening pass (register row `seam-h04`; remedy chosen by the human,
-   2026-08-10).
+   `verified` where the fix landed, which routes it to promotion's `fixed` exit
+   (register row `seam-h04`; remedy chosen by the human, 2026-08-10).
 
    **Then read the sweep back over the whole run, and a non-zero exit stops the finale
    BEFORE promotion** (ticket 36, ruling 12). Every row this run owns must be one
@@ -219,10 +167,9 @@ resolves it — and the board render is safe to repeat:
    Repair what it names and run it again. It is not a halt and it never waits for
    the human: exit 1 lists every offending row and the repair is the runner's, now.
 
-   If the finale fails on a usage limit, leave the ledger at
-   `finale-judgment`, write the halt block, and revive after reset — never
-   downgrade it to save the wait, and never declare the run complete with the
-   judgment half unrun.
+   If the finale fails on a usage limit, leave the ledger at `finale-judgment`,
+   write the halt block, and revive after reset — never downgrade it to save the
+   wait, and never declare the run complete with the judgment half unrun.
 3. **Promotion — the last phase that resolves findings, and the only door into
    `issues/`.** Spawn one
    `promotion` agent **carrying `model:` set to the `promotion=` value on the
@@ -247,11 +194,8 @@ resolves it — and the board render is safe to repeat:
 
    **The thresholds live in `~/.claude/agents/promotion.md` and nowhere else.** Both
    skills spawn the one agent, so a run brief that restates a threshold restates a
-   figure it cannot keep current. This file and `parallel-hunt/SKILL.md` both carried
-   "operator at any severity" for a day after the human set a `medium` floor on `operator`
-   (T15-2, 2026-08-09); the 296-276-297 run's brief repeated the stale figure and
-   promotion had to overrule its own brief. Name the exits here; read the numbers
-   there.
+   figure it cannot keep current; `decisions.md` holds the day both files carried a
+   stale one. Name the exits here; read the numbers there.
 
    **`fixed` is reported as a count and never as a refusal** (T15-3, ruled
    2026-08-06). A run that fixes work must not report that work under a word the
@@ -292,21 +236,16 @@ resolves it — and the board render is safe to repeat:
    a figure, edit the one JSON line and say why in the commit message.
 
    **A second line for a batch id already present is REFUSED** (ruling 4, closing
-   ticket 36's fault 9). Run `review-375cbf` appended two rows for itself on
-   2026-09-01, four minutes and 0.9M weighted tokens apart, and nothing noticed. The
-   refusal is printed and the finale carries on; it never halts a run.
+   ticket 36's fault 9). The refusal is printed and the finale carries on; it never
+   halts a run.
 
    **Compare a line against the previous line of the same KIND** (ruling 12), never
    the line above it. A hunt writes into the same file with `--kind hunt`.
 
    **It now writes ruling 6's four inside-run counts, and a second file beside the
-   first.** Sitting 3 of ticket 37, 2026-09-06, repaired the reader ruling 28 named:
-   `check_commit_order.status_rows` accepted any table row on a ledger page whose
-   first cell held an issue id, so `batch-170a59` graded 12 rows for six issues --
-   right totals over a doubled denominator. It is now bounded to the table whose
-   header declares `issue`. **Do not type a figure into any of them**; every one is
-   measured, and a typed count is the fault that put `claude-opus-5` in a version
-   cell.
+   first** (ticket 37 sitting 3). **Do not type a figure into any of them**; every
+   one is measured, and a typed count is the fault that put `claude-opus-5` in a
+   version cell.
 
    **`.scratch/workflow-audit/issues.jsonl` gets one line per issue** (ruling 17):
    the estimate midpoint, span, agent minutes, attempts, correction rounds, strikes,
@@ -314,37 +253,25 @@ resolves it — and the board render is safe to repeat:
    for a batch already present is refused, for ruling 4's reason. A refusal there
    costs the per-issue population of ONE run and halts nothing.
 
-   **A null is not a zero, and the difference is the whole discipline.** A run with
-   no strikes is a fact; a run whose strikes were never read is not, and they must
-   never read alike. Anything the script could not measure reads `not measured` on
-   the page.
+   **A null is not a zero.** A run with no strikes is a fact; a run whose strikes were
+   never read is not, and they must never read alike. Anything the script could not
+   measure reads `not measured` on the page.
 
    **Do NOT pass `--version`.** The script measures it with `claude --version`
-   (ticket 37, ruling 10). This step used to ask you to type it, and on 2026-08-30 an
-   agent typed the MODEL: `claude-opus-5` is in the live table's version column to
-   this day. A value that is not a version is now refused outright, so typing one
-   costs the run its whole cost record rather than one wrong cell. The flag survives
-   for a hand reading of an old run, and nothing else.
+   (ticket 37, ruling 10); a value that is not a version is refused outright, so
+   typing one costs the run its whole cost record rather than one wrong cell.
 
    **`--batch` is this run's batch id, `batch-88624c` and the like.** It is the only
-   argument the reading needs. The id names the ledger, the ledger's `Worktree:` line
-   names a path, and the path IS the transcript directory, so nothing depends on what
-   the worktree is called and `--issues` is counted off the spawns rather than typed.
-
-   **That is why `--run` is no longer the road** (ticket 39 of the pilot-delivery map,
-   every-worker-inherits-the-session-model, ruling 12). `--run` matched the run's name
-   against the PROJECT DIRECTORY name, which holds only while a worktree is named after
-   the run inside it. Twice it was not: the 2026-09-02 and 2026-09-05 rows of
-   `run-costs.md` each say the worktree was reused and its name does not match the
-   branch, so `--transcript` had to be passed by hand. Run `batch-b5e96d` ran in a
-   worktree called `run-issues-414a-99f-286335`. `--run` still works, for a run whose
-   ledger is gone.
-
-   Either way the transcript must NAME the run or nothing is read and no row is
-   appended. Run `batch-88624c` ran this from the MAIN checkout on 2026-08-31, whose
-   slug holds 64 sessions of unrelated work; the old rule took the newest and reported
-   1.01 hours for an 8.48-hour run, with a longest step the run never ran, and appended
-   it as though it were measured.
+   argument the reading needs: the id names the ledger, the ledger's `Worktree:` line
+   names a path, and the path IS the transcript directory, so `--issues` is counted
+   off the spawns rather than typed. **`--run` is no longer the road** (ticket 39,
+   ruling 12): it matched the run's name against the PROJECT DIRECTORY name, which
+   holds only while a worktree is named after the run inside it, and twice the
+   worktree was reused and its name does not match the branch. `--run` still works
+   for a run whose ledger is gone. Either way the transcript must NAME the run or
+   nothing is read and no row is appended; where it read nothing, pass
+   `--transcript <the run's main .jsonl>` by hand. The docstring holds the run
+   that read a foreign transcript.
 
    **Every token figure it prints carries its own model, and none of them is added
    across models** (ruling 11, and the human's ruling of 2026-09-06). The `Weighted`,
@@ -354,73 +281,60 @@ resolves it — and the board render is safe to repeat:
    off. **To read a model trial, compare the SAME ROLE across runs** — that is like
    against like and needs no multiplier at all. For money, read `/usage` by hand.
 
-   **Then run these three and paste them too**, in the same section:
+   **Then the claim report** (the human, 2026-09-12). **It REFUSES NOTHING and exits 0 whatever it finds**, so it can never stop a finale:
+
+   ```
+   python3 ~/.claude/skills/run-issues/report_claim_commands.py --repo . --range $(git merge-base main HEAD)..HEAD --batch <batch-id> --ledger <run.md>
+   ```
+
+   It writes `claim-commands.md` beside the ledger, naming every added comment or test name claiming code outside its own file. **Paste its count into the briefing.**
+
+   **Then run these four and paste them too**, in the same section:
 
    ```
    python3 ~/.claude/skills/run-issues/harness_cost.py --batch <batch-id>
    python3 ~/.claude/skills/run-issues/cache_probe.py --days 2
    python3 ~/.claude/skills/run-issues/estimate_accuracy.py \
        --ledger <run.md> --transcript <the run's main .jsonl>
+   python3 ~/.claude/skills/run-issues/report_brief_cap.py --tree <the run's tree>
    ```
 
+   **`report_brief_cap.py` says what the 400-word implementer brief cap did**: how
+   often it refused the runner, and what the runner then cut each brief to. Ticket 40,
+   ruling 16, 2026-09-08 — the cap's number moves on this evidence and on nothing else.
+   **`NO DATA` is not `no refusals`.** Its record sits in a temporary directory, by the
+   published-hook scrub rule, so it can be swept away mid-run; paste the words it prints
+   and never translate them into a zero.
+
    **`estimate_accuracy.py` ends with an `attribution:` line. Read it.** It says how
-   many per-issue spawns the transcript held and how many were booked to an issue, and
-   the two must match. On run `batch-88624c` the old reader lost 18 of 30 to a regex
-   that could not read `issue **201 — title**`; it graded seven issues from a third of
-   the run, reported estimates running long when they ran short, and printed no warning.
-   An unattributed spawn is now named in the output and exits 2.
+   many per-issue spawns the transcript held and how many were booked to an issue,
+   and the two must match; an unattributed spawn is named and exits 2. It joins the
+   ledger's `Est` column to what each issue actually occupied. **Read the ratio
+   beside `harness_cost.py` and never alone**: a permission prompt inside an issue
+   reads as the issue running long.
 
-   `estimate_accuracy.py` joins the ledger's `Est` column to what each issue
-   actually occupied. It exists because nothing did: `run_timings.py` says where
-   the clock went per STEP and cannot say whether that was more or less than
-   expected. On run `414a-483-286335` the median issue took **0.40** of its
-   estimate, spread 0.31x to 1.04x, and a batch scoped at 26.5 hours of issue
-   time occupied 13.8. **Read the ratio beside `harness_cost.py` and never
-   alone** — 99f reads 1.04x on that run only because a permission prompt sat
-   for 146 minutes inside it.
+   **`cache_probe.py`'s number is the read-to-write ratio, and it is a watchdog, not
+   a score.** If it ever collapses toward 1, the run's input cost has gone up roughly
+   tenfold and nothing else in this pipeline would say so.
 
-   `cache_probe.py` was the last measurement in this directory wired to nothing.
-   The number to read is the **read-to-write ratio**: 61.7 to 1 on run
-   `414a-483-286335`, 634M read against 10.28M written. A cache read costs about
-   a tenth of a write, so that ratio IS the token bill. It has no target and it
-   is not a score — it is a watchdog. **If it ever collapses toward 1, the run's
-   input cost has gone up roughly tenfold and nothing else in this pipeline
-   would say so.** Its original research question is settled and needs no
-   re-asking: yes, a fresh subagent reads a cache it did not write, on 43 of 54
-   agents, which is 0.2% of fleet reads.
+   **`harness_cost.py` splits what the run lost to the HARNESS rather than to work,
+   into three numbers that must never be added up.** PROMPTS is a Bash call left
+   pending while a human was waited for, and it is the expensive one. POLLING is
+   time spent sleeping for something the harness announces for free. DENIALS are
+   classifier refusals, counted and not timed. **A PROMPT row is the finding.** It
+   names a command class that has no rule in `.claude/settings.json`, and a rule
+   there means it can never be asked again. The four docstrings hold the first
+   readings.
 
-   It splits what the run lost to the HARNESS rather than to work, into three
-   numbers that must never be added up. PROMPTS is a Bash call left pending
-   while a human was waited for, and it is the expensive one — 146 minutes on
-   run `414a-483-286335`, 15.7 per cent of that run, one call. POLLING is time
-   spent sleeping for something the harness announces for free. DENIALS are
-   classifier refusals, counted and not timed, because the agent rewords and
-   moves on in seconds; that run had five and they cost minutes between them.
-
-   **A PROMPT row is the finding.** It names a command class that has no rule in
-   `.claude/settings.json`, and a rule there means it can never be asked again.
-   the human asked for this measurement on 2026-08-30 because until then the only
-   way to see a lost night was for somebody to go and count afterwards.
-
-   **The `--note` is the only part that needs a person, and it is the part that makes
-   the table worth keeping.** Name what changed since the previous row — a skill edit, a
-   new hook, a Claude Code version, a different effort tier. A row that says nothing
-   changed is still a row; a row with no note is a number nobody can use.
-
-   **What it costs the run: nothing measurable.** Two Python scripts read transcripts
-   already on disk. No agent is spawned, no database is read, and the only write is one
-   appended line.
+   **The `--note` is the only part that needs a person.** Name what changed since
+   the previous row — a skill edit, a new hook, a Claude Code version, a different
+   effort tier. A row that says nothing changed is still a row; a row with no
+   note is a number nobody can use.
 
    **It can never halt a run.** Every failure inside it is caught and printed as text,
    and it exits 0 even when it can read nothing at all. A cell reading `not read` is a
    missing figure, not a fault: record it and carry on. Do not retry it, do not
    investigate it, and never write a HALT BLOCK for it.
-
-   Why this exists, measured on 2026-08-30: `orchestrator_cost.py` already ran at launch
-   and read the LAST WEEK, so a run stated what other runs cost and never its own.
-   `run_timings.py`, built on 2026-08-26 when a fourteen-hour run could not say which step
-   ate the clock, was named in no skill file at all and had only ever been run by hand.
-   Both readings existed and neither was wired to anything.
 
    **`run_costs.py` also prints two tables ticket 39 sitting 3 added, and they are the
    ones a model trial is read from** (ruling 15). `What each role ran on, per role and
@@ -460,21 +374,15 @@ resolves it — and the board render is safe to repeat:
    `batch-b5e96d` reads `not measured` for exactly that reason, measured 2026-09-06.
 
    **The per-issue figures PARSE PROSE, and the limit is stated rather than hidden.**
-   Only `attempt N` and `criteria reset` are markers; a gate's verdict and a strike are
-   sentences in the Notes cell. Measured 2026-09-06 over the sixteen ledgers in
-   `.scratch/example-feature` that hold a status table, 143 rows: it grades 141 and
-   prints `unread` on 2, both of which genuinely state no verdict. Reaching that took
-   seven dialects two review passes found, in twelve ledgers the first reading had
-   never opened. **A row it cannot read prints `unread` and
-   never a pass**, so a hole is visible rather than silent. `test_run_quality.py`
-   carries the whole corpus as a regression net.
+   Only `attempt N`, `gates N:` and `criteria reset` are markers; older ledgers hold
+   a gate's verdict and a strike as sentences in the Notes cell. **A row it cannot
+   read prints `unread` and never a pass**, so a hole is visible rather than silent;
+   `test_run_quality.py` carries the whole corpus as a regression net.
 
    **The strike column is derived and says so.** `SKILL.md` step 5's prose-deletion
    road and a runner-error annulment both cancel a strike in prose and write no
    marker, so the reader counts rounds rejected since the last criteria reset, marks
    any row whose own words disagree with a `*`, and prints both rather than choosing.
-   On run `batch-b5e96d` fourteen of fifteen rows agree with their own prose and issue
-   530 is the one that does not.
 
    **It can never halt the finale.** Every road exits 0 and prints what it could not
    read, the same rule the cost readings above carry.
@@ -484,10 +392,8 @@ resolves it — and the board render is safe to repeat:
    every figure in it exists. The rail block below it follows, and the board renders
    only after both are written and `check_run_rail.py` has passed.
 
-   Six things are read after a run. On run `batch-88624c` three of them sat past line
-   1700 of a 1963-line file and the human found none of them; the second time that happened
-   it cost four cost measurements they had commissioned the day before. The block puts all
-   six above line 40.
+   Six things are read after a run, and the block puts all six above line 40;
+   `decisions.md` holds the briefing where three of them sat past line 1700.
 
    ```
    ## The run in one screen
@@ -514,13 +420,11 @@ resolves it — and the board render is safe to repeat:
 
    **It adds no new measurement.** Every value comes from a section the briefing
    already writes, and each row names the HEADING that holds the detail rather than a
-   line number, because that file grew from 1830 lines to 1963 in a single day. A
-   finale that has to compute something to fill this block is the wrong build, and
-   that cost would land on every run.
+   line number, because line numbers move daily. A finale that has to compute
+   something to fill this block is the wrong build.
 
    **Every comparable figure is a table row, the two cost ones included.** The board
-   panel copies this table and `check_run_picture.py` compares the two, and it can
-   only compare what the table holds.
+   panel copies this table and `check_run_picture.py` can only compare what it holds.
 
    **A run that shipped nothing writes an honest block, never a short one.** Zero is a
    row reading 0 and a sentence saying nothing shipped. A blank panel reads as a render
@@ -532,12 +436,10 @@ resolves it — and the board render is safe to repeat:
    the human merges.
 
    **The `Shipped:` line is a required field of this block, and `check_run_rail.py`
-   below exits 2 without it.** It is the only place the shipped list is read from.
-   Measured across five real briefings on 2026-09-03, `## What shipped` is not stable in
-   name or in shape: `batch-45c8b1` headed it `## What shipped, per issue` and listed
-   sixteen inside one prose sentence, `batch-375cbf` used `### 161 —` sub-headings,
-   `batch-88624c` bold lines. One line of comma-separated ids is what a reader can read.
-   A run that shipped nothing writes `Shipped:      none`.
+   below exits 2 without it.** It is the only place the shipped list is read from,
+   because `## What shipped` is not stable in name or in shape across real briefings.
+   One line of comma-separated ids is what a reader can read. A run that shipped
+   nothing writes `Shipped:      none`.
 
    **Then write `## The run on the rail` directly below the whole of that block**, after
    its last line and before every other `## ` heading. Never between the one-screen
@@ -588,9 +490,8 @@ resolves it — and the board render is safe to repeat:
      `catalogue | harness` and 503 read `floor | fix`. Never derive one from the other.
    - **Sentence** is the issue file's `Sentence:` line where it has one, copied. Where it
      has none, compress the title into a sentence with a subject and a verb. The fallback
-     is the normal case until issue 551's field has been on files for several runs: on
-     2026-09-04 the project it was written for held 585 issue files and none carried the
-     line. `59 characters or fewer`; the check refuses at 60.
+     is the normal case until issue 551's field has been on files for several runs.
+     `59 characters or fewer`; the check refuses at 60.
    - **Lit** is the stages the board draws with a bordered name: every stage holding at
      least one shipped card. A band chip lights nothing, so on `batch-45c8b1` `catalogue`
      was unlit while 485 shipped there. The finale states the set; the renderer never
@@ -629,13 +530,10 @@ resolves it — and the board render is safe to repeat:
      question's own: a question about the product takes its stage, a question about the
      harness takes `floor`.
    - **The `Question` cell is a compression you write, never a `## Decide` heading
-     copied.** Measured 2026-09-05 over the five runs the picture draws: only one writes
-     its Decide items as questions at all, and five of those six headings run 61 to 89
-     characters against a card that holds 60. The other four runs write statements, noun
-     phrases, bold paragraphs or bare bullets. So write the short question here,
-     `59 characters or fewer`, and leave the fork's own item under `## Decide` exactly as
-     it stands — that is the version `/daily-brief` reads, and the card adds no fact it
-     does not carry.
+     copied.** Real Decide headings run past the card's width and are seldom
+     questions at all. Write the short question here, `59 characters or fewer`, and
+     leave the fork's own item under `## Decide` exactly as it stands — that is the
+     version `/daily-brief` reads, and the card adds no fact it does not carry.
    - **A fork key is unique across the whole briefing.** Number them `F1`, `F2` and
      onward in one sequence, in the order you write them, whatever section holds each
      fork. Every one of the five drawn runs carries TWO `## Decide` headings and each
@@ -644,10 +542,9 @@ resolves it — and the board render is safe to repeat:
    - **The register is drawn nowhere, and that is deliberate.** Every register row ends
      as one of four things — promoted, which is now a dashed row; fixed, which is already
      inside a shipped card; refused; or dropped below the operator floor, which is a
-     refusal — and a fifth road never reaches promotion at all. None of the five gets a
-     card. The only register fact anywhere on the board is the one-screen table's
-     `Register rows left` row and its `Register:` line, and drawing rows a second time
-     would put one fact in two places.
+     refusal — and a fifth road never reaches promotion at all. None of the five
+     gets a card: the only register fact on the board is the one-screen table's
+     `Register rows left` row and its `Register:` line.
    - **The one-screen counts do not move.** `Forks to decide`, `Issues minted` and
      `Register rows left` are what `/daily-brief` reads. These two tables sit below them
      and change none of them. `Forks to decide` still counts forks WRITTEN, never forks
@@ -690,11 +587,10 @@ resolves it — and the board render is safe to repeat:
      invent one names three issues across three stages as easily as two across two. What
      refuses invention is the paragraph above, plus the membership rule below.
    - **A band REPLACES the cards for its members.** Its issues are drawn once, as chips
-     inside the band, and never also as cards on their own stages. Measured over all five
-     drawn runs: the card set and the chip set are disjoint every time and their union is
-     the run's shipped count — nine cards plus seven chips for `batch-45c8b1`'s sixteen.
-     That raises the cost of a wrong row rather than lowering it, because an issue
-     swallowed by a band that should not hold it vanishes from its own stage entirely.
+     inside the band, and never also as cards on their own stages: the card set and the
+     chip set are disjoint and their union is the run's shipped count. That raises the
+     cost of a wrong row, because an issue swallowed by a band that should not hold it
+     vanishes from its own stage entirely.
    - **Every issue a band names has a row elsewhere in the block**, in the shipped table
      or in `### Minted and left open`. Both halves are wanted: a band may carry an issue
      the run named in its headline and left open, drawn as a dashed chip. An issue in two
@@ -754,31 +650,23 @@ resolves it — and the board render is safe to repeat:
    context is at its most expensive by run end, and the old board's bytes never enter
    the runner.
    Naming the model is not optional and "cheap" is not a model: an unnamed spawn
-   inherits whatever the session runs, and this step converts one markdown file into
-   HTML on the largest input in the pipeline (283 KB, measured
-   2026-08-06). `merge-briefing.md` stays the source of truth,
-   and `/daily-brief` reads that file, never the board.
+   inherits whatever the session runs, which since ticket 39 can be Fable, and this
+   step converts one markdown file into HTML on the largest input in the pipeline.
+   `merge-briefing.md` stays the source of truth, and `/daily-brief` reads that file,
+   never the board.
 
-   **The pin is `opus`: the top reasoning tier below the most expensive one, and it
-   does not go lower.** The saving is not what decides it: on one measured run the render cost 0.30M
-   weighted tokens against the run's 149.70M. The tier order in this pack ranks review
-   authority, never price, and this render is the last thing that touches the artefact
-   the human opens first.
+   **This is the one spawn the model map does not reach, and the two do not
+   conflict.** Every loop role takes its model from the ledger's `Model map at
+   launch:` line and `~/.claude/hooks/model-map-gate.py` refuses a spawn carrying
+   anything else. The board renderer has no agent file and no map row, so the gate
+   passes it untouched and this paragraph is what governs it. (Scoped by the human on
+   2026-08-22; rewritten 2026-09-05 when ticket 39 ruling 10 reversed the older rule.)
 
-   **This is the one spawn the model map does not reach, and the two do not conflict.**
-   `SKILL.md`'s rule was "never pass a `model:` value" until 2026-09-05, when the model
-   map reversed it: every one of the twelve loop roles now takes its model from the
-   ledger's `Model map at launch:` line. The board renderer is not one of the twelve.
-   It has no agent file and no map row, so this paragraph is what governs it. (Scoped
-   by the human on 2026-08-22, answering C7 of the skills audit; rewritten 2026-09-05
-   when the rule it cited was reversed.)
-
-   **The panel goes at the top, headed "The run in one screen".** the human named this
-   surface themselves: the board is the only artefact a run produces that renders, and it
-   is the one they open after every run. It carries the counts as figures, one table of
-   issues by state, one table of the register and cost numbers, and a drawn chain where
-   the run has a blocked chain. Where it has none, no chain is drawn. Zero shipped reads
-   as a red figure and a sentence saying nothing shipped, never as a blank panel.
+   **The panel goes at the top, headed "The run in one screen".** It carries the counts
+   as figures, one table of issues by state, one table of the register and cost
+   numbers, and a drawn chain where the run has a blocked chain. Where it has none, no
+   chain is drawn. Zero shipped reads as a red figure and a sentence saying nothing
+   shipped, never as a blank panel.
 
    **Above the panel goes the rail, drawn from `## The run on the rail` by a script.**
    It is the picture the human opens first: eight columns left to right, one card per
@@ -798,11 +686,9 @@ resolves it — and the board render is safe to repeat:
    ```
 
    (The wrapper is ticket 37 ruling 19 and stamps this step's clock into
-   `steps.jsonl`. It prints nothing of its own on the success road and passes the
-   script's stdout and exit code straight through, so paste what it prints exactly as
-   before. **The board render's own SUBAGENT is not wrapped and needs no wrapping**:
-   it is an Agent spawn, so its clock is already in the transcript, and ruling 21
-   joins the two halves.)
+   `steps.jsonl`; it passes the script's stdout and exit code straight through,
+   so paste what it prints exactly. The board render's own SUBAGENT is not wrapped: it is an Agent spawn, so its
+   clock is already in the transcript.)
 
    It prints four blocks, each with a comment saying where it goes: ten CSS tokens for
    `:root`, the same ten for the `@media (prefers-color-scheme: dark)` block, the
@@ -810,23 +696,14 @@ resolves it — and the board render is safe to repeat:
    directly above the `## The run in one screen` panel, and that div is a direct child of
    `<body>`.
 
-   **The rail takes the WINDOW's width and the prose keeps its reading column.** The CSS
-   block does that by itself: it lifts the 720-pixel column off `body` and puts a
-   680-pixel one on each of body's other children, which is the same width the prose had
-   before. So `.rail-bleed` must be a child of `body` and never of a wrapper, or it
-   inherits the column and the widening is lost. The rail draws at its natural 1040
-   units, centred where the window has room and scrolling inside its own container where
-   it does not; on a window 1080 pixels or wider nothing scrolls at all. The human ruled
-   scroll rather than shrink on 2026-09-04, after being shown that scaling the rail to
-   fit draws the card text at 6.5 CSS pixels, and widened it to the window on 2026-09-05.
+   **The rail takes the WINDOW's width and the prose keeps its reading column**, and
+   the CSS does it alone: `.rail-bleed` must be a child of `body`, never of a wrapper.
 
    **Why a script and not your own SVG**, ruled by the human on 2026-09-04: the shape is
-   computed geometry carrying two assertions, and a card whose sentence will not fit
-   stops the finale here with the issue named, rather than reaching the human as clipped
-   text. Prose cannot assert. `check_run_picture.py` below measures the drawn lines and
-   refuses a board that came from anywhere else. Exit 1 from the script means a sentence
-   is too long: shorten it in the rail block, re-run step 4's guard, and draw again. The
-   render is safe to repeat.
+   computed geometry carrying two assertions, and prose cannot assert.
+   `check_run_picture.py` below refuses a board that came from anywhere else. Exit 1
+   from the script means a sentence is too long: shorten it in the rail block, re-run
+   step 4's guard, and draw again. The render is safe to repeat.
 
    **The rail transcribes too. It never works out a stage, a kind or a lit column.**
    Every card's stage, kind and sentence is copied from the row step 4 wrote, and the
@@ -878,45 +755,23 @@ resolves it — and the board render is safe to repeat:
    Where the repository has no `docs/agents/run-picture-stages.md` it says so, skips the
    stage-key rule and grades the rest, which is that file's own rule 4.
 
-   **Why Fable, and why the model line had to be settled here.** The old sentence
-   justifying Haiku read "there is no judgement in the render". A panel carrying
-   derived counts and a conditional diagram breaks that premise, so the licence would
-   have expired the moment the panel shipped. The rule above restores it: with the
-   transcription rule in force the render has no judgement in it again, and the guard
-   refuses a board that finds some.
-
    **The pin is `opus`, ruled by the human on 2026-09-06.** It was `haiku`, then `fable`
-   when the board grew a run panel. Their words: Fable is not needed for that simple job.
-
-   Three facts settle it, and only one of them is about price.
-
-   **Cost is not the constraint.** The 2026-08-06 figure that chose Haiku cites a 283 KB
-   input; measured 2026-09-01, the render reads `merge-briefing.md` at 125 KB plus the
-   old board at 12.5 KB, roughly 35,000 tokens in and 3,000 out. Measured again on run
-   `batch-b5e96d`, 2026-09-06, the render cost 0.30M weighted tokens in 0.08 h against
-   that run's 149.70M — two tenths of one per cent. One redo costs more than any model
-   saving here, which is why the pin is not dropped below Opus.
-
-   **Effort cannot be named on an Agent spawn.** The tool takes a model and no effort
-   argument, and this spawn has no agent file to carry frontmatter — the human refused
-   minting one on 2026-08-22. So `opus medium` is unbuildable and effort inherits the
-   session: the same run measured this render at effort `high`, which was the session's.
-   Anyone asking for a model at an effort here is asking for half of what they said.
-
-   **The tier order ranks review authority, not price.** Ruling 14 of ticket 39 fixed
-   `haiku < sonnet < opus < fable` so that no adversarial gate sits below the worker it
-   checks. Read as a price list it made this pin name the most expensive model for the
-   cheapest job in the pipeline, which is the contradiction `q-t39-s2-1` raised on
-   2026-09-05 and this ruling closes. The order is unchanged; the pin moved.
-
-   **Why not lower than Opus.** The evidence for Fable on this class of work is
-   `.scratch/workflow-audit/citation-recheck-fable.md`, taken 2026-08-16: read a source,
-   report it faithfully, invent nothing. Of 107 citations it returned 95 correct, 2 off
-   by a line number, and 6 mismatches of which 4 were drift that happened after the
-   source was written. Two substantive errors in 107. **State both limits wherever this
-   is cited: it measured a checking task producing a report rather than an HTML render,
-   and it is one reading rather than a trend.** Without the transcription rule and the
-   guard the render is arithmetic, which no tier below Opus has been measured on here.
+   when the board grew a run panel. Three facts settle it. **Cost is not the
+   constraint**: the render is two tenths of one per cent of a run, and one redo
+   costs more than any model saving here, which is why the pin is not dropped below
+   Opus. **Effort cannot be named on an Agent spawn**: the tool takes a model and no
+   effort argument, and this spawn has no agent file to carry frontmatter, so effort
+   inherits the session. **The tier order ranks review authority, not price**:
+   ruling 14 of ticket 39 fixed `haiku < sonnet < opus < fable` so that no
+   adversarial gate sits below the worker it checks, and read as a price list it
+   made this pin name the most expensive model for the cheapest job, which
+   `q-t39-s2-1` raised and this ruling closes. **Why not lower than Opus**: the
+   evidence for a cheap tier on this class of work is
+   `.scratch/workflow-audit/citation-recheck-fable.md`, and **state both limits
+   wherever it is cited: it measured a checking task producing a report rather than
+   an HTML render, and it is one reading rather than a trend.** Without the
+   transcription rule and the guard the render is arithmetic, which no tier below
+   Opus has been measured on here. `decisions.md` holds the measurements.
 
 6. **Recommend follow-ups; start none.** One exception is mandatory:
    - **The post-deploy smoke walk**, owned by `/daily-brief`. The run ends at

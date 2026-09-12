@@ -27,17 +27,22 @@ import run_records
 
 
 def git_repo(branch: str) -> pathlib.Path:
-    """A throwaway repository with one commit on `branch`."""
+    """A throwaway repository with one commit on `branch`, and no other branch.
+
+    `git init -b` names the branch before the first commit, so the fixture holds
+    whatever `init.defaultBranch` this machine sets. Checking out a new branch
+    after the commit did not: on a machine that defaults to `main`, asking for
+    `main` asked git to create a branch it had already made, and git exited 128.
+    """
     root = pathlib.Path(tempfile.mkdtemp())
     run = lambda *args: subprocess.run(
         ["git", "-C", str(root), *args], capture_output=True, check=True)
-    run("init", "-q")
+    run("init", "-q", "-b", branch)
     run("config", "user.email", "t@example.com")
     run("config", "user.name", "t")
     (root / "a.txt").write_text("a")
     run("add", "a.txt")
     run("commit", "-qm", "first")
-    run("checkout", "-q", "-b", branch)
     return root
 
 

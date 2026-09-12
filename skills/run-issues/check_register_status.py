@@ -39,7 +39,7 @@ the decisions queue as `q-h-130` item 2, and it differs from
 `check_run_picture.py`, which stops at the first on purpose.
 
 THE SECOND RULE: THE REGISTER SWEEP. Ticket 36, rulings 6 and 12, ruled by
-the human on 2026-09-07.
+The human on 2026-09-07.
 
 Ruling 6 puts it in THIS file rather than in a new script, because this one
 already walks the register and grades rows, and a second walker would be the
@@ -81,6 +81,16 @@ Usage:
 
 Exit 0 clean, 1 one or more offences, 2 the file could not be read. A third
 meaning is never put on a code a caller reads.
+
+**The measurement behind the per-commit sweep, moved here from SKILL.md by
+ticket 36 sitting 5 (2026-09-09).** The finale of run `416-419-421-d167e0` swept
+112 rows and moved 16 to `verified`. Nine of those sixteen were flagged by
+nobody and still read `open`, so promotion would have minted nine issue files
+for work that had already shipped inside the commit the gate was reading. Three
+of the seventeen issues minted on 2026-08-09 carried the same defect, so the
+finale sweep alone had not fixed it, and run `99b-99e-6e11ba` caught two more
+the same way. The human adopted the per-commit sweep on 2026-08-27 as F6, because it
+moves work earlier rather than adding it.
 """
 
 import argparse
@@ -225,9 +235,16 @@ def rows(text):
 # with a reason line; these are the words that mean the first two.
 TERMINAL = ("fixed", "verified", "refused", "retracted", "promoted", "closed")
 
+# The two terminal words that may not stand on a citation alone. The human ruled the
+# TIGHTEN in the daily-brief walk of 2026-09-08, item 2, at exactly this width:
+# `fixed` and `verified`, leaving `open` with a bug-file citation legal. The
+# other four terminal words are untouched, and recording a decision at the width
+# it was stated is their own rule.
+CLAIMS_DONE = ("fixed", "verified")
+
 # An inline-code span. A note whose whole body is one of these has cited a bug
-# file and nothing else -- legal under ruling 13, and counted rather than
-# refused so the rate stays visible.
+# file and nothing else -- legal under ruling 13 for every status but the two in
+# `CLAIMS_DONE`, and counted rather than refused so the rate stays visible.
 _CODE = re.compile(r"`[^`]*`")
 
 
@@ -318,6 +335,17 @@ def sweep_faults(text, tokens):
     `batch-207704`'s 45 in-scope rows read that way, and that run's promotion
     resolved all 53. Refusing them would have stopped a clean finale.
 
+    **THAT PARAGRAPH NO LONGER HOLDS FOR TWO STATUSES.** The human ruled the TIGHTEN
+    in the daily-brief walk of 2026-09-08, item 2, after stating no preference on
+    2026-09-06 and again on 2026-09-07: `fixed` and `verified` may not stand on a
+    citation alone. `open` is untouched, and so are the other four terminal
+    words. The measurement above is what kept the citation legal and it is not
+    withdrawn -- it is narrowed, because the rows it counted were `open` rows.
+    Re-measured across every register shard on 2026-09-09: 37 citation-only rows,
+    every one of them `open`. This tightening therefore refuses NOTHING that is
+    on disk today, and the row repair the sitting was scoped to carry alongside
+    it had nothing to repair.
+
     ZERO rows in scope is legal and is not a refusal. An issue whose gates
     filed nothing sweeps nothing, and a check that refused that would stop
     every clean commit. `main`'s empty-input guard still covers the wrong file.
@@ -346,6 +374,15 @@ def sweep_fault(row, how):
     if not row.status:
         return Fault(row.row_id, "the status cell is empty, so the sweep never "
                      "decided this row", row.line, row.origin is not None)
+    if how == "citation" and row.status in CLAIMS_DONE:
+        return Fault(
+            row.row_id,
+            f"the status reads {row.status!r} and owner-notes cites a file and "
+            "says nothing else. A row claiming the work is done states its own "
+            "commit or reason, so a reader deciding whether to promote it never "
+            "opens a second file first (the human, 2026-09-08). A citation beside a "
+            "sentence is fine; a citation alone is not",
+            row.line, row.origin is not None)
     if how in ("empty", "bare"):
         where = "is empty" if how == "empty" else "repeats the status word"
         return Fault(

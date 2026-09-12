@@ -30,6 +30,13 @@ interruption and rewriting the state it is already on is the correct move.
 This does NOT check that a step did its work. It checks the order. A step that ran and
 produced nothing is a different fault with a different catcher, and building one guard
 for two faults would make both harder to read.
+
+**Why it exists, moved here from finale.md by ticket 36 sitting 5
+(2026-09-09).** The finale wrote `awaiting-merge` with promotion and the board
+still unrun in three consecutive runs -- `dc132b`, `cab74e` and `fd4fa2`, the
+last at 15:10 on 2026-08-20, where the runner put the state back by hand.
+Promotion is what turns register rows into issue files, so a resume that skips
+it loses them. The human approved the refusal on 2026-08-21.
 """
 
 from __future__ import annotations

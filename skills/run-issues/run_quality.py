@@ -61,6 +61,16 @@ sitting and before any run, so no run occurs in the gap and any interim home
 would never hold a row. The mark therefore goes into the merge briefing alone,
 and the ANSWER lives in `trial_verdict` -- one function, which ticket 37 calls
 to fill its per-run field. One reader, so the two can never drift.
+
+**The seven dialects, moved here from SKILL.md by ticket 36 sitting 5
+(2026-09-09).** Ticket 39 sitting 4 read the verdicts out of prose across
+sixteen ledgers and found seven, every one of them read as silence until two
+review passes caught them: bolded verdicts in 17 rows, `gates both pass`,
+`v: pass · r: reject`, `rejected by BOTH gates`, `one correction round`,
+`correction 18:48->18:54`, `correction open 04:06`. Two ledgers reported
+`0 strike(s)` on runs that had charged them. A regex cannot be widened out of
+that; only the writer can end it, which is why SKILL.md step 1's
+`gates N: verify=... review=...` token exists and takes two verdict words only.
 """
 
 from __future__ import annotations
