@@ -78,6 +78,8 @@ Listed in the order the loop runs.
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
 | `skills/lib/run_python_suites.py` | `~/.claude/skills/lib/run_python_suites.py` (runs every `test_*.py` under `~/.claude/skills` and `~/.claude/hooks` from its own directory, and refuses a suite that executed fewer checks than it defines) |
 | `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (54 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
+| `skills/lib/next_batch.py` | `~/.claude/skills/lib/next_batch.py` (orders the next batch of issues so every blocker lands first, and refuses an order it cannot honour) |
+| `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (22 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/check_claude_home.py` | `~/.claude/skills/lib/check_claude_home.py` (refuses a python file that resolves `~/.claude` by climbing parents from `__file__`, which a git worktree breaks) |
 | `skills/lib/test_check_claude_home.py` | `~/.claude/skills/lib/test_check_claude_home.py` |
 | `skills/lib/check_issue_links.py` | `~/.claude/skills/lib/check_issue_links.py` (refuses a `[[link]]` in an issue file that names no issue) |
