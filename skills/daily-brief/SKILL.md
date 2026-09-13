@@ -171,19 +171,42 @@ Where the SHA matches:
    repo's convention is; never rebase someone else's history.
 2. Rewrite every `Status: done — on branch <branch>, unmerged` in that run's
    issues to `done`. Nothing else in the chain ever clears that suffix.
-3. Deploy, by the repo's own documented deploy step. **If the repo documents
+3. Remove the worktrees and branches this merge just finished:
+
+   ```
+   python3 ~/.claude/skills/lib/clean_worktrees.py --repo <the repo's main checkout>
+   python3 ~/.claude/skills/lib/clean_worktrees.py --repo <the repo's main checkout> --apply
+   ```
+
+   Read the report, then apply. **A refusal is an answer.** The script keeps
+   every tree it cannot prove is finished — dirty, unmerged, detached, or held by
+   a live session — and none of those is a reason to reach for `--force` or `-D`.
+   Put its KEEP lines into tomorrow's brief; a tree that survives its own merge
+   holds something nobody has looked at.
+4. Deploy, by the repo's own documented deploy step. **If the repo documents
    none, merge and stop** — say so in the brief rather than inventing one.
-4. Drive the read-only post-deploy smoke walk on the deployed site: every list
+5. Drive the read-only post-deploy smoke walk on the deployed site: every list
    page with its filters and search, every detail page, the send and receive
    surfaces as far as read-only allows. Read-only means no permission risk, so
    there is no reason to skip it.
-5. Report all of it into tomorrow's brief, including anything the walk found.
+6. Report all of it into tomorrow's brief, including anything the walk found.
 
-**The walk is bound to the merge, not to this path.** If the human merged a run
-branch themselves — a PR taken mid-session, a manual merge — the next brief session
-runs steps 2, 4 and 5 for that merge anyway: rewrite the statuses, walk the
-deployed site, report. Where the repo reserves merge and deploy to the human, the
-`merge` answer degrades to exactly that — record the merge, run the walk.
+**Step 3 sits here because the merge is what makes it true.** The only test the
+cleanup applies is whether a branch is an ancestor of main, and step 1 is the
+moment that becomes so. A run's own finale cannot do it: the run ends at
+`awaiting-merge`, with its branch unmerged and its worktree the tree it is
+standing in. Two repos carried this as prose in their own `CLAUDE.md` instead,
+and on 2026-09-13 one of them held 10 worktrees and 38 merged branches nobody
+had deleted, while about 40 more had been cleared out of the other by hand hours
+earlier. The reminder was tried in two repos and obeyed in neither.
+
+**The walk and the cleanup are bound to the merge, not to this path.** If the
+human merged a run branch themselves — a PR taken mid-session, a manual merge —
+the next brief session runs steps 2, 3, 5 and 6 for that merge anyway: rewrite
+the statuses, clean up, walk the deployed site, report. That path is how the
+trees accumulated in the first place, so it is the one that most needs step 3.
+Where the repo reserves merge and deploy to the human, the `merge` answer
+degrades to exactly that — record the merge, clean up, run the walk.
 
 A bounce reason instead of `merge` goes into the merge briefing as their words, and
 the branch stays unmerged.

@@ -35,7 +35,7 @@ class Text(unittest.TestCase):
     def test_a_shard_whose_headings_all_carry_ids_passes(self):
         self.assertEqual(check_text(NAMED), [])
 
-    def test_the_orderflow_shape_is_refused_and_names_the_line(self):
+    def test_the_bare_shape_is_refused_and_names_the_line(self):
         refusals = check_text("# shard\n\n" + BARE, "s.md")
         self.assertEqual(len(refusals), 1)
         self.assertTrue(refusals[0].startswith("s.md:3:"), refusals[0])

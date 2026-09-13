@@ -86,6 +86,8 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_issue_links.py` | `~/.claude/skills/lib/test_check_issue_links.py` |
 | `skills/lib/check_queue_shard.py` | `~/.claude/skills/lib/check_queue_shard.py` (refuses a queue item the daily brief can never retire, because its heading carries no backticked `q-` id) |
 | `skills/lib/test_check_queue_shard.py` | `~/.claude/skills/lib/test_check_queue_shard.py` |
+| `skills/lib/clean_worktrees.py` | `~/.claude/skills/lib/clean_worktrees.py` (removes the worktrees and branches a merge finished, and refuses every tree it cannot prove is finished: the main checkout, the tree it runs in, dirty, detached, a branch that is not an ancestor of the base ref, and a tree a live session holds) |
+| `skills/lib/test_clean_worktrees.py` | `~/.claude/skills/lib/test_clean_worktrees.py` (15 cases, 13 of them about a refusal, on a real git fixture built in `tmp`; carries no corpus and skips nothing) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
