@@ -36,11 +36,13 @@ from collect_shards import (
     MAIN,
     QUEUE,
     REGISTER,
+    RULED,
     collect,
     drift,
     main,
     my_shard,
     render,
+    ruled_entries,
     EmptyRefused,
     SplitRefused,
     split,
@@ -550,6 +552,175 @@ class UnknownAnsweredIdTest(TreeFixture):
              "q-main-01\nq-main-77\n")
 
         self.assertEqual(unmatched_answers(collect(QUEUE, self.trees)), ["q-main-77"])
+
+
+class RuledInSessionTest(TreeFixture):
+    """An attended session retires a question the human ruled at the keyboard.
+
+    The human ruled on 2026-08-08 that an attended session sweeps its own queue
+    at close, which made a second place where an answer happens. The retirement
+    path was built when the daily brief was the only such place, so a ruled
+    question stayed on the board and each session wrote a prose note asking for
+    it. A note an agent must remember to write is the class of rule that does
+    not work, so the session writes `ruled.md` and the collector acts.
+
+    `ruled` hides an item exactly as `answered` does. It is a SEPARATE name so a
+    retirement taken in session can still be told from one the brief made, and
+    so the brief can fold them in and empty the file.
+    """
+
+    def queue_shard(self, tree, name, text, owner=None):
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/decisions-queue.d/{holder}/{name}.md", text)
+
+    def test_a_ruled_item_disappears_from_the_board(self):
+        self.queue_shard(
+            self.main, HISTORY,
+            "## Keep me `q-main-01`\n\nbody one\n\n"
+            "## Ruled in session `q-main-02`\n\nbody two\n")
+        self.queue_shard(self.main, RULED,
+                         "q-main-02 2026-09-13 02b, ## RULED by the human\n")
+
+        out = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertIn("Keep me `q-main-01`", out)
+        self.assertNotIn("Ruled in session", out)
+
+    def test_the_ruled_shard_is_never_part_of_the_board_it_filters(self):
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-99 2026-09-13 somewhere\n")
+
+        self.assertNotIn("q-main-99", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_a_ruled_id_crosses_shard_boundaries(self):
+        """The session retires an item another worktree wrote. That is the point."""
+        self.queue_shard(self.tree_a, "fin-a", "## From the run `q-run-a-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-run-a-01 2026-09-13 issue 02b\n")
+
+        self.assertNotIn("From the run", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_ruled_ids_are_read_as_whole_tokens(self):
+        """`q-main-1` must not retire `q-main-11`, the same rule `answered` holds."""
+        self.queue_shard(self.main, HISTORY, "## Eleven `q-main-11`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-1 2026-09-13 somewhere\n")
+
+        self.assertIn("Eleven", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_answered_and_ruled_both_hide_in_one_render(self):
+        """The two files are read together. Neither shadows the other."""
+        self.queue_shard(
+            self.main, HISTORY,
+            "## Brief answered `q-main-01`\n\nbody one\n\n"
+            "## Session ruled `q-main-02`\n\nbody two\n\n"
+            "## Still open `q-main-03`\n\nbody three\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-01\n")
+        self.queue_shard(self.main, RULED, "q-main-02 2026-09-13 issue 02b\n")
+
+        out = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertNotIn("Brief answered", out)
+        self.assertNotIn("Session ruled", out)
+        self.assertIn("Still open", out)
+
+    def test_the_register_never_reads_ruled(self):
+        """`ruled` is reserved on the board that reads it, and nowhere else."""
+        self.shard(self.main, HISTORY, "## A row `q-main-02`\n\nbody\n")
+        make(self.main, f".scratch/{self.feature}/register.d/main/{RULED}.md",
+             "q-main-02 2026-09-13 somewhere\n")
+
+        out = render(collect(REGISTER, self.trees, self.feature), board=REGISTER)
+
+        self.assertIn("A row", out)
+
+    def test_an_ordinary_writer_cannot_claim_ruled(self):
+        """Everything it wrote there would be read for ids and never rendered."""
+        with self.assertRaises(ValueError):
+            my_shard(QUEUE, self.tree_a, self.trees, prefix=RULED)
+
+    def test_an_attended_session_claims_ruled_by_saying_so(self):
+        path = my_shard(QUEUE, self.tree_a, self.trees, prefix=RULED, machinery=True)
+        self.assertTrue(path.endswith(os.path.join("run-a", "ruled.md")), path)
+
+    def test_a_ruled_id_matching_no_item_is_named_rather_than_ignored(self):
+        """A typo retires nothing, silently. The same guard `answered` has."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-77 2026-09-13 somewhere\n")
+
+        self.assertEqual(unmatched_answers(collect(QUEUE, self.trees)), ["q-main-77"])
+
+    def test_the_board_gains_no_header_when_something_is_ruled(self):
+        """Ruling 14: the board is a pure concatenation and carries line citations.
+
+        The visible record of an in-session retirement is the collector's own
+        note and the committed shard, never a banner that moves every line.
+        """
+        self.queue_shard(self.main, HISTORY,
+                         "## Keep me `q-main-01`\n\nbody one\n")
+        without = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.queue_shard(self.main, RULED, "q-main-99 2026-09-13 somewhere\n")
+        with_ruled = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertEqual(without, with_ruled)
+
+    def test_the_collector_reports_what_a_session_retired(self):
+        """The brief has to see these to fold them in. Printing is the road."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED,
+                         "q-main-01 2026-09-13 issue 02b, ## RULED by the human\n")
+
+        code, _, err = self.run_main("--kind", "queue")
+
+        self.assertEqual(code, 0)  # A note, never a stop.
+        self.assertIn("q-main-01", err)
+        self.assertIn("issue 02b", err)
+
+    def test_nothing_is_reported_when_no_session_retired_anything(self):
+        """An empty note reads as something having broken. Say nothing instead."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+
+        code, _, err = self.run_main("--kind", "queue")
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("ruled", err.lower())
+
+
+class RuledEntriesTest(TreeFixture):
+    """`ruled.md` carries three things per line: the id, the date, the source.
+
+    The source is where the ruling is recorded, so a reader can check it. The
+    parse is deliberately loose, the same way `answered.md`'s is: the id is the
+    token that matters and the rest is carried through for the note.
+    """
+
+    def queue_shard(self, tree, name, text, owner=None):
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/decisions-queue.d/{holder}/{name}.md", text)
+
+    def test_an_entry_carries_its_whole_line(self):
+        self.queue_shard(self.main, RULED,
+                         "q-main-01 2026-09-13 issue 02b, ## RULED by the human\n")
+
+        entries = ruled_entries(collect(QUEUE, self.trees))
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0][0], "q-main-01")
+        self.assertIn("issue 02b", entries[0][1])
+
+    def test_a_blank_line_and_a_comment_carry_nothing(self):
+        self.queue_shard(self.main, RULED,
+                         "# a heading somebody wrote\n\n"
+                         "q-main-01 2026-09-13 issue 02b\n")
+
+        self.assertEqual([entry[0] for entry in ruled_entries(collect(QUEUE, self.trees))],
+                         ["q-main-01"])
+
+    def test_entries_come_back_sorted_so_the_note_is_stable(self):
+        self.queue_shard(self.main, RULED,
+                         "q-main-02 2026-09-13 b\nq-main-01 2026-09-13 a\n")
+
+        self.assertEqual([entry[0] for entry in ruled_entries(collect(QUEUE, self.trees))],
+                         ["q-main-01", "q-main-02"])
 
 
 class SplitTest(TreeFixture):

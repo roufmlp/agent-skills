@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Refuse a queue shard that carries an item the daily brief cannot name.
 
-`collect_shards.py` retires a queue item only when the daily brief writes the
-item's id into `answered.md`, and it reads an id off a `## ` heading by one
-rule: the last backticked token of the form `q-...` on that line (`ITEM_ID`).
+`collect_shards.py` retires a queue item only when its id is written into one
+of the two retirement shards — the daily brief's `answered.md`, or an attended
+session's `ruled.md` for a question the human ruled at the keyboard — and it
+reads an id off a `## ` heading by one rule: the last backticked token of the
+form `q-...` on that line (`ITEM_ID`).
 A heading with no such token is an item with no name. It renders every time
 and can never be answered, so the same question reaches the human again after they
 have ruled on it.

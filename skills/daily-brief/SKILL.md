@@ -115,9 +115,43 @@ Then, per answer type:
   python3 ~/.claude/skills/lib/collect_shards.py --kind queue --my-shard --prefix answered --machinery
   ```
 
+  **`answered` is this skill's name and nothing else may take it.** An attended
+  session sweeping its own queue at close follows these apply rules but is not
+  the brief, so it writes `--prefix ruled` instead, and it writes three things on
+  the line rather than one: the id, the date, and where the ruling is recorded.
+  The board hides the item either way. The separate name is what lets the next
+  brief tell a retirement the human made in a walk from one a session recorded,
+  and the third field is what lets that brief check the second kind.
+
   One id per line. The regenerated queue stops carrying that item. An item with
   no id cannot be answered this way — give it one on its heading first, in the
   writer's own shard, and say so in the brief.
+
+  **Fold in what an attended session already retired, and do it before you
+  build section 2.** The human ruled on 2026-08-08 that an attended session
+  sweeps its own queue at close, so a question can be answered at the keyboard
+  without a brief. Such a session writes its own `ruled.md` shard, which hides
+  the item exactly as `answered.md` does. Collect the queue and read the
+  collector's note:
+
+  ```bash
+  python3 ~/.claude/skills/lib/collect_shards.py --kind queue
+  ```
+
+  Where it names questions retired in session, move each id into your own
+  `answered.md` with the date, then empty every `ruled.md` the note came from.
+  The board does not change — both files hide the same way — so this is
+  bookkeeping, not a fix. It is worth doing because it leaves ONE retirement
+  file to read a month from now, and because a `ruled.md` that is never emptied
+  grows into a second permanent record of what they answered.
+
+  Check each one before you fold it. The note carries where the ruling is
+  recorded, so open that file and confirm the ruling is actually there. A
+  session writes its own `ruled.md`, which means a session that mistook its own
+  default for a ruling can retire a question the human never saw. This read is
+  the only thing that catches it, and a retirement they never made is exactly
+  the fault the queue exists to prevent. Where the record does not hold the
+  ruling, put the item back into section 2 and say so in the brief.
 - **An answer that resolves the last open question on an issue** → re-stamp it
   `Hardened:` from `Hardened (provisional):`.
 - **`merge`** → see below. This is the only half that touches main.

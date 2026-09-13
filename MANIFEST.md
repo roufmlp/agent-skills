@@ -72,7 +72,7 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
 | `skills/lib/claim_number.py` | `~/.claude/skills/lib/claim_number.py` (claims an issue or migration number atomically across every worktree) |
 | `skills/lib/test_claim_number.py` | `~/.claude/skills/lib/test_claim_number.py` |
-| `skills/lib/collect_shards.py` | `~/.claude/skills/lib/collect_shards.py` (generates `register.md` and `decisions-queue.md` from one shard per writer) |
+| `skills/lib/collect_shards.py` | `~/.claude/skills/lib/collect_shards.py` (generates `register.md` and `decisions-queue.md` from one shard per writer, and hides a retired queue item on either of two reserved shards: the brief's `answered` and an attended session's `ruled`) |
 | `skills/lib/test_collect_shards.py` | `~/.claude/skills/lib/test_collect_shards.py` |
 | `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |

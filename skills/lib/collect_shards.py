@@ -67,6 +67,13 @@ MAIN = "main"
 ANSWERED = "answered"
 # Promotion's own shard, the same shape: the register row ids it resolved.
 CLOSED = "closed"
+# An attended session's own shard, holding questions the human ruled at the keyboard.
+# Same effect on the board as `answered`, and a separate name on purpose: it says
+# the retirement happened in session rather than in a brief, so the brief can fold
+# these in and empty the file. The human ruled on 2026-08-08 that an attended session
+# sweeps its own queue at close, which made a second place where an answer
+# happens; this is the retirement path catching up with that ruling.
+RULED = "ruled"
 
 # A queue item's id: the last `q-...` token on its `## ` heading. Whole token,
 # so `q-main-1` never answers `q-main-11`.
@@ -230,6 +237,32 @@ def answered_ids(chosen: list) -> set:
     return ids
 
 
+def ruled_entries(chosen: list) -> list:
+    """Every question an attended session retired, as `(id, line)` pairs, sorted.
+
+    One entry per line: the id first, then the date, then where the ruling is
+    recorded. The line is carried whole so the collector's note can point a
+    reader at the record without this file learning the format of an issue file.
+
+    A line with no id contributes nothing, which lets the shard carry a heading
+    or a blank line without those becoming entries.
+    """
+    found = []
+    for name, path in chosen:
+        if name != RULED:
+            continue
+        for line in _read(path).splitlines():
+            ids = ANSWER_TOKEN.findall(line)
+            if ids:
+                found.append((ids[0], line.strip()))
+    return sorted(found)
+
+
+def ruled_ids(chosen: list) -> set:
+    """Just the ids of `ruled_entries`, for hiding."""
+    return {found for found, _ in ruled_entries(chosen)}
+
+
 def closed_ids(chosen: list) -> set:
     """Every register row id promotion has resolved, across the shards."""
     ids = set()
@@ -299,13 +332,17 @@ def hide_answered(text: str, answered: set) -> str:
 
 
 def unmatched_answers(chosen: list) -> list:
-    """Answered ids that match no item — a typo answers nothing, silently."""
-    answered = answered_ids(chosen)
+    """Retired ids that match no item — a typo retires nothing, silently.
+
+    Both retirement roads are read: the brief's `answered` and an attended
+    session's `ruled`. A typo in either is the same fault and earns the same note.
+    """
+    answered = answered_ids(chosen) | ruled_ids(chosen)
     if not answered:
         return []
     present = set()
     for name, path in chosen:
-        if name in (ANSWERED, CLOSED):
+        if name in (ANSWERED, CLOSED, RULED):
             continue
         for part in split_items(_read(path)):
             found = item_id(part)
@@ -322,14 +359,20 @@ def render(chosen: list, board: Generated = None) -> str:
     LAST shard is emitted exactly as it sits, so a board that is one shard long
     reproduces the file it was split from byte for byte.
 
-    The queue hides items the brief has answered, and the brief's `answered.md`
-    shard never renders — it holds ids, not items.
+    The queue hides items the brief has answered and items an attended session
+    has recorded as ruled. Neither `answered.md` nor `ruled.md` renders: both
+    hold ids, not items.
+
+    Neither adds a line to the board. Ruling 14 makes this file a pure
+    concatenation because the live board carries line citations, so the visible
+    record of an in-session retirement is the collector's own note and the
+    committed shard, never a banner at the top.
     """
     hiding = bool(board and board.hides_answered)
     closing = bool(board and board.hides_closed)
-    answered = answered_ids(chosen) if hiding else set()
+    answered = (answered_ids(chosen) | ruled_ids(chosen)) if hiding else set()
     closed = closed_ids(chosen) if closing else set()
-    reserved = {ANSWERED} if hiding else set()
+    reserved = {ANSWERED, RULED} if hiding else set()
     if closing:
         reserved.add(CLOSED)
     rendered = [(name, path) for name, path in chosen if name not in reserved]
@@ -427,12 +470,13 @@ def reserved_names(board: Generated) -> set:
     """Shard names this board reads as machinery rather than as content.
 
     A writer handed one of these loses everything it writes, silently: an
-    `answered` or `closed` shard is read for ids and never rendered, and
-    `00-history` sorts ahead of every other shard.
+    `answered`, `ruled` or `closed` shard is read for ids and never rendered,
+    and `00-history` sorts ahead of every other shard.
     """
     names = {HISTORY}
     if board.hides_answered:
         names.add(ANSWERED)
+        names.add(RULED)
     if board.hides_closed:
         names.add(CLOSED)
     return names
@@ -447,10 +491,10 @@ def my_shard(board: Generated, cwd: str, trees: list, feature: str = "",
     session, the production watcher — takes the tree's own name, which is one
     writer per tree and is true for them.
 
-    `machinery` is for the two roles that own a reserved name on purpose: the
-    daily brief's `answered` and promotion's `closed`. Everything else is
-    refused one, because a writer that quietly loses its rows is the fault this
-    file exists to remove.
+    `machinery` is for the three roles that own a reserved name on purpose: the
+    daily brief's `answered`, promotion's `closed`, and an attended session's
+    `ruled`. Everything else is refused one, because a writer that quietly loses
+    its rows is the fault this file exists to remove.
     """
     holder = writer_name(cwd, trees)
     if not holder:
@@ -626,12 +670,26 @@ def main(argv=None):
     except EmptyRefused as refusal:
         print(f"REFUSED — {refusal}", file=sys.stderr)
         return 1
-    # A typo in the brief's shard answers nothing at all, silently, and the
+    # A typo in a retirement shard answers nothing at all, silently, and the
     # same settled question then reaches the human a second time. Say so; never
     # stop over it.
-    for stray in unmatched_answers(collect(board, trees, args.feature)):
+    collected = collect(board, trees, args.feature)
+    for stray in unmatched_answers(collected):
         print(f"note: {stray} is marked answered and matches no item in "
               f"{written}. Check the id.", file=sys.stderr)
+    # An attended session retires a question the human ruled at the keyboard, and
+    # the board then shows nothing where the item was. The brief has to see
+    # these to fold them into `answered.md` and empty the file, and the human has
+    # to be able to check a retirement they did not take in a brief. Ruling 14 bars a
+    # banner on the board, so the note is the road. Silence when there is
+    # nothing, because an empty note reads as something having broken.
+    entries = ruled_entries(collected)
+    if entries:
+        print(f"note: {len(entries)} question(s) retired in session, not by a "
+              f"brief. Fold into {ANSWERED}.md and empty {RULED}.md:",
+              file=sys.stderr)
+        for _, line in entries:
+            print(f"  {line}", file=sys.stderr)
     print(written)
     return 0
 
