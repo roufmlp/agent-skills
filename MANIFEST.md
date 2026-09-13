@@ -403,6 +403,23 @@ the differences are mostly the scrub doing its job. Diffing them on 2026-08-22 r
 differences; 44 were the scrub and 3 were real. Reading 47 judgements to find 3 facts is
 what this avoids.
 
+**But diff the published copy against the live one for every file you are about to
+publish, and read it as a scrub list rather than a change list.** The two instruments
+answer different questions. The tag diff says WHAT CHANGED upstream; it cannot say that
+a scrub this pack already made has been undone, because upstream the undoing is not a
+change to anything — it is just how a live file was always written.
+
+That is not hypothetical. On 2026-09-13 three files came up for their second sync and
+all three had regressed scrubs made on 2026-09-12: a person's name, two product names,
+a client checkout standing in as a fixture name, and three shard id prefixes. Nothing
+was reverted and nobody was careless; a session editing a live file has no reason to
+keep this pack's wording, and the neutral version exists only here.
+
+So a file with an existing row is not a copy job. Read the published copy beside the
+live one, take the new facts, and keep the scrub you already own. `check_queue_shard.py`
+that day needed exactly one new sentence out of a paragraph the live copy had rewritten
+whole. A scrub does not stay done.
+
 The live skills directory is a git repository. Each sync tags it at the commit it
 published, so the next sync reads the drift straight off that tag:
 
