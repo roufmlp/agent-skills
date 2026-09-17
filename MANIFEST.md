@@ -353,6 +353,8 @@ have, which is worse than having no hook:
 ~/.claude/hooks/browser-budget.py
 ~/.claude/hooks/worktree-snapshot-notice.py
 ~/.claude/hooks/test_worktree_snapshot_notice.py
+~/.claude/hooks/worktree-base-drift.py
+~/.claude/hooks/test_worktree_base_drift.py
 ~/.claude/hooks/test_settings_env.py
 ~/.claude/hooks/TOOL-SET-PROBE.md
 ```
