@@ -153,19 +153,49 @@ Fault = namedtuple("Fault", "row_id reason line has_origin", defaults=(True,))
 
 _BOLD = re.compile(r"\*+")
 _TRAILING = re.compile(r"^([a-z-]+)\b.*$")
+_LAST = re.compile(r"\b([a-z-]+)\s*$")
 
 
 def normalise(cell):
     """The bare status word inside a cell, or "" when there is none.
 
     Writers decorate: `**fixed 2026-08-23**`, `**promoted -> 421e**`. All three
-    forms were measured in the live register on 2026-09-06. The word is always
-    first, so take the first token and drop what follows it.
+    forms were measured in the live register on 2026-09-06. Takes the FIRST
+    token and drops what follows it.
+
+    **THIS READS ONE END ONLY, AND THAT IS WHY `normalise_tail` EXISTS.** This
+    docstring used to claim "the word is always first". It is not. On 2026-09-17
+    the promotion phase of run `batch-26c495` found 28 rows carrying `verified`
+    in the status cell and ending their owner-notes with the bare word `open`,
+    and every one passed this check, because nothing looked at the other end.
+    Promotion's `fixed` exit DELETES a row, so resolving those 28 would have
+    destroyed 28 possibly live defects with no record anywhere. Promotion
+    stopped and reported instead, which is the only reason they survived.
     """
     text = _BOLD.sub("", cell or "").strip().lower()
     if not text:
         return ""
     match = _TRAILING.match(text)
+    return match.group(1) if match else ""
+
+
+def normalise_tail(cell):
+    """The bare status word ENDING a cell, or "" when there is none.
+
+    The mirror of `normalise`, and it exists because a status word at the END of
+    owner-notes carries the same claim as one at the start. The human ruled on
+    2026-09-17, walking run `batch-26c495`'s decisions, that the READER is what
+    gets repaired rather than the writers: a rule asking every writer to put the
+    word first fails silently, because nothing refuses and so nobody learns.
+
+    A one-word cell reads the same from both ends, so the two agree and
+    `shape_fault` finds nothing to refuse. That is correct and is the common
+    case: a bare `open` is one word.
+    """
+    text = _BOLD.sub("", cell or "").strip().lower()
+    if not text:
+        return ""
+    match = _LAST.search(text)
     return match.group(1) if match else ""
 
 
@@ -397,9 +427,14 @@ def sweep_fault(row, how):
 def shape_fault(row):
     """The shape check's offence on one row, or None.
 
-    The two rules from the top of this file: the status cell holds a word the
-    machine knows, and where owner-notes opens with a status word it agrees
-    with the status cell. Per row for the same reason as `sweep_fault`.
+    The rules from the top of this file: the status cell holds a word the
+    machine knows, and where owner-notes carries a status word AT EITHER END it
+    agrees with the status cell. Per row for the same reason as `sweep_fault`.
+
+    **BOTH ENDS ARE READ, ruled by the human, 2026-09-17.** Reading the opening
+    word alone passed 28 rows of run `batch-26c495`'s register that said
+    `verified` in the status cell and ended their notes with the bare word
+    `open`. See `normalise` for what that nearly cost.
     """
     has_origin = row.origin is not None
     if not row.status:
@@ -409,14 +444,17 @@ def shape_fault(row):
             row.row_id,
             f"the status cell reads {row.status!r}, which the status "
             f"machine does not know", row.line, has_origin)
-    noted = normalise(row.notes)
-    if noted in LEGAL and row.status in LEGAL and noted != row.status:
-        return Fault(
-            row.row_id,
-            f"the status cell reads {row.status!r} and its own owner-notes "
-            f"opens with {noted!r}. One of the two is in the wrong "
-            f"cell, which is the transposition of run batch-b5e96d",
-            row.line, has_origin)
+    if row.status in LEGAL:
+        for word, where in ((normalise(row.notes), "opens with"),
+                            (normalise_tail(row.notes), "ends with")):
+            if word in LEGAL and word != row.status:
+                return Fault(
+                    row.row_id,
+                    f"the status cell reads {row.status!r} and its own "
+                    f"owner-notes {where} {word!r}. One of the two is in the "
+                    f"wrong cell, which is the transposition of run "
+                    f"batch-b5e96d",
+                    row.line, has_origin)
     return None
 
 

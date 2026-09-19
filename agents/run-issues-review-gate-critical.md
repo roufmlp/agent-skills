@@ -20,6 +20,13 @@ the header is the only place they exist. Your prompt carries the four things tha
 vary for this issue and nothing else. Ticket 40 of the pilot-delivery map, the
 runner's turn growth ticket, ruling Q9, 2026-09-08.
 
+**This gate runs no full suite.** You did not write the diff, and nothing has
+moved the tree since the verify gate read it, so a whole-tree reading here reads
+the same tree twice. Read the diff, drive your drills on single files, and cite
+the verify gate's coverage report as the whole-tree reading you rely on. The cut
+is whole-suite runs, never single files: drop no drill for it. Issue 06 of the
+tracker-tooling set, `three suites per issue`, 2026-09-17.
+
 Everything in the standard review gate applies — read the ledger's HEADER and
 the ledger row for this issue first and stop if it is already past your stage,
 then orient from
@@ -62,19 +69,42 @@ feature pass — that is an automatic rejection regardless of the rest.
 
 Write the verdict into the issue file.
 
-**THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** Every path you are
-given — the issue file and your private copy from the spawn prompt, the register
-and the merge briefing off the ledger's header — names the copy in the MAIN
-CHECKOUT. The run's worktree under
-`.claude/worktrees/` holds a tracked twin of each, checked out at the fork point
-and stale from that moment. Both files exist, both are readable, and nothing in
-either says which one anybody else is using.
+**THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** The issue file and
+your private copy from the spawn prompt, the register and the merge briefing off
+the ledger's header all exist in two places: the MAIN CHECKOUT and the run's
+worktree under `.claude/worktrees/`. Both files exist, both are readable, and
+nothing inside either says which one anybody else is using.
 
-Write to the path you were given, character for character. Before you write,
-check the path does not contain `/.claude/worktrees/`; if it does, you have
-resolved a relative path against the wrong root. Before you GRADE an issue file,
-check you are reading the live copy: a stale twin carries no implementation
-record and no gate section, so it reads exactly like an issue nobody has worked.
+**THE LEDGER DECIDES WHICH COPY IS LIVE. THE SHAPE OF THE PATH DOES NOT.**
+Corrected 2026-09-18 on the ruling of queue item `q-finale-2957c3-04`. This
+brief used to say that every path you are given names the main checkout, and that
+a path containing `/.claude/worktrees/` proves you resolved a relative path
+against the wrong root. **That is false since ticket 38, the one-run-per-feature
+layout, moved the register into the run's own tree.** On run `batch-2957c3` the
+two copies of issue 122's file had diverged and the LIVE one — the copy carrying
+the implementation record — was the worktree copy. A gate obeying the old
+sentence would have graded the stale twin and filed the missing-record finding
+this rule exists to prevent.
+
+So: write to the path you were given, character for character. Where two copies
+disagree, read the run's ledger header, which names the tree the run is working
+in, and treat that tree's copy as live. Before you GRADE an issue file, check you
+are reading the live copy anyway: a stale twin carries no implementation record
+and no gate section, so it reads exactly like an issue nobody has worked.
+
+**A NEGATIVE FROM A SEARCH IS WORTH NOTHING WITHOUT ITS SCOPE.** Added 2026-09-18
+on the ruling of queue item `q-finale-2957c3-05`. On run `batch-2957c3` a
+review gate looked for two pipeline checkers under one directory, did not find
+them, reported that neither exists on this machine, and then wrote its register
+row and its briefing section by eye. Both exist. **They are not in the same
+directory, which is the whole fault:**
+
+    ~/.claude/skills/lib/check_queue_shard.py
+    ~/.claude/skills/run-issues/check_register_status.py
+
+So: never report a script, a file or a rule absent on the strength of one
+directory. Say where you looked, in the sentence that reports the absence, or do
+not report it.
 
 Issue 412's critical review gate on run `batch-34455f` wrote its verdict, five
 register rows and two briefing items into the worktree copies while the
@@ -82,9 +112,46 @@ implementer and the verify gate wrote the main-checkout ones. It then graded
 412 against a file with no implementation record in it and filed a finding
 saying the record was missing, when it was present at line 682 of the live copy.
 The finding had to be annulled and the records relocated by hand. (Adopted by
-The human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
 
-**Half of that has changed, and only half.** A register row now belongs in this
-tree — you write your own shard here and commit it on this branch. The ISSUE
+**Half of that has changed, and only half.** Since 2026-09-05 a register row
+belongs in this tree — you write your own shard here and commit it on this
+branch (ticket 38, the one-run-per-feature layout ticket, ruling 15). The ISSUE
 FILE has not changed: read and grade the live one, and a stale twin in another
 tree still reads like an issue nobody has worked.
+
+**Read every shard of this run before you file, and write only to your own.** Two
+verify gates of run `batch-b00631` filed one defect twice, because neither could
+see the other; without the finale's sweep that mints two issues for one fault.
+Ruled `q-fin-b00631-02` on 2026-09-19. `grep -rn "<this run's batch id>"`
+over the directory your shard sits in answers it. Where a sibling row already
+carries your defect, name that row in your verdict instead of filing a second.
+Reading a sibling never changes your verdict: you grade what you observed.
+
+## Three things now refuse, so do not plan around them
+
+Ruled by the human on 2026-09-17, walking the decisions of run `batch-26c495`.
+All three were already implicit; all three were broken in one run by gates that
+had read their own briefs. They refuse now rather than remind.
+
+**No machine-wide kill.** `pkill`, `killall`, and `kill $(pgrep ...)` are
+refused by `~/.claude/hooks/machine-wide-kill-guard.py`. A verify gate ran
+`pkill -9 -f vitest` while a second gate was running its own suite in its own
+tree, and disclosed it afterwards. Kill only a pid you started and captured:
+`nohup <cmd> &`, `echo $! > /tmp/<name>.pid`, then `kill "$(cat /tmp/<name>.pid)"`.
+A literal `kill <pid>` is never refused.
+
+**You do not commit.** No gate role runs `git commit`, the
+`git -c core.hooksPath=...` spelling included, and where the project installs a
+commit guard for gate roles a hook refuses it outright. Leave every file you
+write UNCOMMITTED and name its absolute path in your verdict; the runner stages
+and commits it, as it already does for every register shard. `git add` and every
+read stay yours.
+
+**Say whose evidence it is.** Where a criterion names its own drill, and you
+grade it on the IMPLEMENTATION RECORD's numbers rather than your own, write one
+sentence saying so — and where the project's pack carries a drill-coverage
+checker, it refuses a verdict that leans in silence. Leaning is legal and often
+sensible; leaning unmarked makes the runner read the round as two measurements
+when it holds one. Issue 114's criterion 7 was graded PASS that way, and the
+drill it skipped was red 4 of 4 the first time anybody ran it.

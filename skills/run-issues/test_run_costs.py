@@ -513,5 +513,280 @@ class TheTrialVerdictRidesOnTheLine(unittest.TestCase):
         json.dumps(record)
 
 
+
+class TheForkPointCriteria(unittest.TestCase):
+    """`_criteria` reads each issue file AS IT WAS at the run's fork point.
+
+    Not at HEAD: the run itself appends implementation records and two gate
+    verdicts to the very file it is grading, so a count taken afterwards would
+    grade a file the implementer never saw. Ruled by the human, 2026-09-14.
+    """
+
+    def git(self, repo, *args):
+        subprocess.run(["git", "-C", str(repo), *args], check=True,
+                       capture_output=True, text=True)
+
+    def build(self, tmp):
+        repo = pathlib.Path(tmp)
+        self.git(repo, "init", "-q")
+        self.git(repo, "config", "user.email", "t@example.com")
+        self.git(repo, "config", "user.name", "t")
+        issues = repo / ".scratch" / "f" / "issues"
+        issues.mkdir(parents=True)
+        (issues / "05b-a-thing.md").write_text(
+            "# t\n\n## Acceptance criteria\n\n"
+            + "".join(f"- [ ] criterion {n}\n" for n in range(1, 4))
+            + "\n## Must still be true\n\n- x\n", encoding="utf-8")
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-qm", "fork point")
+        sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        # The run then APPENDS to the same file, as every run does.
+        with open(issues / "05b-a-thing.md", "a", encoding="utf-8") as handle:
+            handle.write("\n## Acceptance criteria\n\n"
+                         + "".join(f"- [ ] later {n}\n" for n in range(1, 9)))
+        runs = repo / ".scratch" / "f" / "runs" / "batch-aaaaaa"
+        runs.mkdir(parents=True)
+        ledger = runs / "run.md"
+        ledger.write_text(f"Fork point: `{sha}` (main's head at launch)\n",
+                          encoding="utf-8")
+        return repo, ledger
+
+    def test_it_counts_the_file_the_implementer_was_handed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, ledger = self.build(tmp)
+            found = tool._criteria(str(repo), str(ledger),
+                                   ledger.read_text(encoding="utf-8"))
+            self.assertEqual(found.get("05b"), 3)
+
+    def test_a_ledger_with_no_fork_point_reads_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, ledger = self.build(tmp)
+            self.assertEqual(tool._criteria(str(repo), str(ledger),
+                                            "no fork point here\n"), {})
+
+    def test_a_repository_git_cannot_read_returns_an_empty_map(self):
+        """Empty, which `run_measures` turns into nulls. A repository nobody
+        could read has not told us how many criteria an issue had."""
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, ledger = self.build(tmp)
+            self.assertEqual(
+                tool._criteria("/nowhere/at/all", str(ledger),
+                               ledger.read_text(encoding="utf-8")), {})
+
+
+
+class TheDeclaredClass(unittest.TestCase):
+    """What the issue file says about ITSELF, read at the fork point.
+
+    `migration` and `critical_gate` are outcomes, read after the run. Class 9
+    acts before either exists, so these two are what a harden pass can read.
+    Ruled by the human, 2026-09-14.
+    """
+
+    def git(self, repo, *args):
+        subprocess.run(["git", "-C", str(repo), *args], check=True,
+                       capture_output=True, text=True)
+
+    def build(self, tmp, body):
+        repo = pathlib.Path(tmp)
+        self.git(repo, "init", "-q")
+        self.git(repo, "config", "user.email", "t@example.com")
+        self.git(repo, "config", "user.name", "t")
+        issues = repo / ".scratch" / "f" / "issues"
+        issues.mkdir(parents=True)
+        (issues / "05b-a-thing.md").write_text(body, encoding="utf-8")
+        self.git(repo, "add", "-A")
+        self.git(repo, "commit", "-qm", "fork point")
+        sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        runs = repo / ".scratch" / "f" / "runs" / "batch-aaaaaa"
+        runs.mkdir(parents=True)
+        ledger = runs / "run.md"
+        ledger.write_text(f"Fork point: `{sha}` (main's head at launch)\n",
+                          encoding="utf-8")
+        return repo, ledger
+
+    def read(self, tmp, body):
+        repo, ledger = self.build(tmp, body)
+        return tool._declared(str(repo), str(ledger),
+                              ledger.read_text(encoding="utf-8")).get("05b")
+
+    def test_writes_rows_yes_is_true(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            got = self.read(tmp, "# t\n\n## Target database\n\n"
+                                 "Writes rows: yes\n")
+            self.assertIs(got["declared_writes_rows"], True)
+
+    def test_writes_rows_no_is_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            got = self.read(tmp, "# t\n\n## Target database\n\n"
+                                 "Writes rows: no. The change is in ci.yml\n")
+            self.assertIs(got["declared_writes_rows"], False)
+
+    def test_a_file_with_no_such_line_is_null_and_never_false(self):
+        """A file that has not answered has not answered no. Three of the 25
+        issues measured on 2026-09-14 read this way."""
+        with tempfile.TemporaryDirectory() as tmp:
+            got = self.read(tmp, "# t\n\nNo target database section.\n")
+            self.assertIsNone(got["declared_writes_rows"])
+
+    def test_a_named_migration_file_is_seen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            got = self.read(tmp, "# t\n\nApplies "
+                                 "`supabase/migrations/0004_x.sql`.\n")
+            self.assertIs(got["declared_migration"], True)
+
+    def test_the_word_migration_alone_is_not_a_named_migration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            got = self.read(tmp, "# t\n\nThis issue needs a migration one "
+                                 "day.\n")
+            self.assertIs(got["declared_migration"], False)
+
+    def test_it_reads_the_fork_point_not_head(self):
+        """The run appends to the file it is grading, so a later edit that adds
+        `Writes rows: yes` must not change what the fork point declared."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, ledger = self.build(
+                tmp, "# t\n\n## Target database\n\nWrites rows: no\n")
+            later = repo / ".scratch" / "f" / "issues" / "05b-a-thing.md"
+            with open(later, "a", encoding="utf-8") as handle:
+                handle.write("\nWrites rows: yes\n")
+            got = tool._declared(str(repo), str(ledger),
+                                 ledger.read_text(encoding="utf-8"))["05b"]
+            self.assertIs(got["declared_writes_rows"], False)
+
+    def test_a_repository_git_cannot_read_returns_an_empty_map(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _repo, ledger = self.build(tmp, "# t\n\nWrites rows: yes\n")
+            self.assertEqual(
+                tool._declared("/nowhere", str(ledger),
+                               ledger.read_text(encoding="utf-8")), {})
+
+
+# --------------------------------------------------------------------------
+# Issue 06, `three suites per issue`. The figure counts WHOLE-SUITE launches,
+# runner and subagents alike, because the ruling it answers counts them alike:
+# "one issue runs the full suite five to nine times".
+#
+# The human ruled the reading on 2026-09-17 against three rivals. Measured on
+# the `7f5b53` transcript the four candidates gave 0.07, 1.43, 5.50 and 77.86 per
+# issue; 5.50 is the one that reproduces the ruling's own "five to nine"
+# independently, and it is the only one of the four that counts what the cut
+# removes.
+
+
+def transcript_line(command, sidechain=False, call_id=None):
+    block = {"type": "tool_use", "name": "Bash", "input": {"command": command}}
+    if call_id is not None:
+        block["id"] = call_id
+    return json.dumps({"isSidechain": sidechain,
+                       "message": {"content": [block]}})
+
+
+def fixture_run(commands):
+    """One run directory of transcripts. `commands` is (command, sidechain)
+    or (command, sidechain, tool_use id)."""
+    root = pathlib.Path(tempfile.mkdtemp(prefix="suites-"))
+    (root / "session.jsonl").write_text(
+        "\n".join(transcript_line(*one) for one in commands), encoding="utf-8")
+    return root
+
+
+class WholeSuiteReadings(unittest.TestCase):
+    def count(self, commands):
+        return tool.whole_suite_readings(fixture_run(commands))
+
+    def test_a_bare_suite_run_counts(self):
+        self.assertEqual(self.count([("npm test", False)]), (1, 0))
+
+    def test_a_redirect_is_not_a_positional_path(self):
+        """`npm test > log 2>&1` is a whole suite. Reading the words after the
+        redirect as arguments to the suite is what made an early draft of this
+        rule score the real transcript at zero."""
+        self.assertEqual(
+            self.count([("npm test > /tmp/baseline.log 2>&1", False)]), (1, 0))
+
+    def test_a_scoped_run_does_not_count(self):
+        """A run over named directories reads part of the tree, so it is not a
+        whole-tree reading however much coverage it asks for."""
+        self.assertEqual(self.count([
+            ("npx vitest run --coverage.enabled tests/jobs/ tests/storage/", False),
+        ]), (0, 0))
+
+    def test_an_exclusion_repair_still_counts_as_whole(self):
+        """`--exclude <pattern>` is a flag and its value is not a positional
+        path. The `Regenerate coverage without the contended file` repair is
+        the shape this issue exists to remove, so it must be counted."""
+        self.assertEqual(self.count([
+            ('npx vitest run --coverage --exclude "tests/a.test.ts"', False),
+        ]), (1, 0))
+
+    def test_a_heredoc_that_quotes_a_command_is_prose(self):
+        """A journal entry quoting a vitest line is not a launch. `segments`
+        strips heredocs, which is why it is borrowed rather than re-written."""
+        self.assertEqual(self.count([
+            ("cat >> run-journal.md <<'J'\nran npx vitest run --coverage\nJ", False),
+        ]), (0, 0))
+
+    def test_the_runner_and_its_subagents_are_counted_apart(self):
+        self.assertEqual(self.count([
+            ("npm test", False), ("npm test", True), ("npx vitest run", True),
+        ]), (1, 2))
+
+    def test_one_call_counts_once_however_many_segments_it_carries(self):
+        """The rule the transcript reading already took: a figure one compound
+        one-liner can move is not a figure."""
+        self.assertEqual(self.count([
+            ("npm test && npx vitest run --coverage && npm test", False),
+        ]), (1, 0))
+
+    def test_two_separate_calls_of_the_same_command_count_twice(self):
+        """Identity is the tool_use id, not the command text: two gates that
+        each ran `rm -rf .vitest-cache && npm test` ran the suite twice.
+
+        Measured on `7f5b53`, 2026-09-17: 84 whole-suite calls, 84 distinct
+        ids, 78 distinct command texts. Keying on text dropped six real runs,
+        five of them that one cache-clearing line from five gate sessions.
+        """
+        self.assertEqual(self.count([("npm test", False, "a"),
+                                     ("npm test", False, "b")]), (2, 0))
+
+    def test_one_call_written_to_the_transcript_twice_counts_once(self):
+        """The other direction. A resumed or compacted session can write an
+        entry again, and the id is what refuses it."""
+        self.assertEqual(self.count([("npm test", False, "same"),
+                                     ("npm test", False, "same")]), (1, 0))
+
+    def test_a_call_carrying_no_id_is_counted_rather_than_dropped(self):
+        """A reading that happened is a reading. Dropping it would shrink the
+        figure quietly on a transcript shape we have not seen."""
+        self.assertEqual(self.count([("npm test", False), ("npm test", False)]),
+                         (2, 0))
+
+    def test_a_malformed_line_does_not_end_the_reading(self):
+        root = pathlib.Path(tempfile.mkdtemp(prefix="suites-bad-"))
+        (root / "s.jsonl").write_text(
+            "{ not json\n" + transcript_line("npm test"), encoding="utf-8")
+        self.assertEqual(tool.whole_suite_readings(root), (1, 0))
+
+    def test_a_directory_with_no_transcripts_reads_zero(self):
+        root = pathlib.Path(tempfile.mkdtemp(prefix="suites-empty-"))
+        self.assertEqual(tool.whole_suite_readings(root), (0, 0))
+
+
+class SuitesPerIssue(unittest.TestCase):
+    def test_the_figure_divides_by_issues_closed(self):
+        self.assertEqual(tool.suites_figure(1, 76, 14),
+                         {"whole": 77, "runner": 1, "subagents": 76,
+                          "per_issue": 5.5})
+
+    def test_no_issue_count_means_no_rate_rather_than_a_crash(self):
+        figure = tool.suites_figure(1, 2, 0)
+        self.assertIsNone(figure["per_issue"])
+        self.assertEqual(figure["whole"], 3)
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,7 @@ cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/coderules-gate.py hooks/retired-phrases-gate.py \
    hooks/origin-row-guard.py hooks/git-shared-state-guard.py \
    hooks/run-issues-brief-cap.py hooks/run-issues-typecheck-gate.py \
+   hooks/machine-wide-kill-guard.py hooks/gate-commit-guard.py \
    ~/.claude/hooks/
 ```
 
@@ -83,6 +84,14 @@ its `PreToolUse` array rather than replacing the array.
           {
             "type": "command",
             "command": "python3 /ABSOLUTE/PATH/TO/git-shared-state-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/machine-wide-kill-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/gate-commit-guard.py"
           }
         ]
       }
@@ -91,7 +100,7 @@ its `PreToolUse` array rather than replacing the array.
 }
 ```
 
-All eight are `PreToolUse` hooks, so each runs before the tool call it matches
+All ten are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -239,6 +248,14 @@ table whose header carries both `audience` and `severity`, which is the register
 row shape and not the prose tables a shard also holds. Every path outside a
 shard directory passes untouched.
 
+**It judges the addition, not the file.** An Edit and a heredoc append a row
+alone, so the guard reads the file on disk above them to find the table header —
+but a bad row ALREADY on disk is somebody else's, and refusing the next writer
+for it blocks the very append that would repair it. So a row fault above the
+lines being written is let past. The header check is not filtered, because a
+table that declares no `origin` column cannot carry the key on the new row
+either, whoever typed the header.
+
 **It needs one file from this pack: `skills/run-issues/check_origin.py`.** The
 hook reuses that script's row reader rather than growing a second one. It looks
 in `~/.claude/skills/run-issues` by default; set `ORIGIN_CHECK` if you keep the
@@ -292,6 +309,66 @@ motivated the guard — a session that staged its two files BY NAME still lost
 them, because another session committed between its `git add` and its
 `git commit`.
 
+## gate-commit-guard.py, on `Bash`
+
+It refuses a `git commit` by one of the six adversarial gate roles — the verify
+gate, both review gates, and the hunt's claim and two fix gates. The runner
+commits; a gate reports. The `git -c core.hooksPath=... commit` spelling is
+caught too, because a flag between `git` and `commit` is still a commit and that
+spelling is the one that turns the other hooks off.
+
+Every other role passes at any command, including the runner and the main
+session, which is where commits are supposed to come from. `git add`, `git stash`
+and every read pass for a gate as well: staging has not changed history, and the
+commit is where this bites. It reads the command string and the spawning agent's
+type, and it writes nothing.
+
+It says nothing about a gate's FILE writes. That is a separate rule with a
+separate control, and `MANIFEST.md` withholds the hook that enforces it, so in
+this pack it is a rule the loop holds rather than one you have.
+
+**Install it only if you spawn gates as subagents with these type names.** It
+keys on `agent_type`, so a loop that grades diffs some other way never meets it,
+and a loop that names its gates differently needs those names added to `GATES` in
+the file. A name in that list that no `agents/` file defines is a typo, and
+`test_gate_commit_guard.py` pins the list against the pack's own role files.
+
+Skip it and the rule survives only in prose — in `skills/run-issues/SKILL.md` and
+in `skills/run-issues/check_permission_floor.py`, which already says in as many
+words that a gate which commits is a finding rather than a permission to grant.
+Both said it before the run that broke it twice, by an agent that had read its
+own brief. That is the whole of what you lose: two written rules instead of a
+refusal.
+
+## machine-wide-kill-guard.py, on `Bash`
+
+It refuses a kill that selects processes by PATTERN rather than by pid: `pkill`
+and `killall` in any spelling, and `kill` fed from a substitution that selects by
+pattern, such as `kill $(pgrep -f vitest)` and its backtick form. Those three are
+the roads to killing a process you did not start.
+
+`kill <pid>` with a literal number is never refused, nor is a pid read back from
+a file the caller wrote, nor `pgrep` on its own, which is a read. The refusal
+prints the capture-the-pid road rather than only the rule. It reads the command
+string and nothing else — no file, no tree, no ledger — and it writes nothing.
+
+It has no opinion about who typed the command, and that is deliberate. A
+machine-wide kill is wrong from a gate, from an implementer and from the runner
+alike, because every one of them shares the machine with the others.
+
+**Install it only if more than one agent can be running on your machine at once.**
+Alone at a keyboard, `pkill -f node` is a reasonable thing to type and this hook
+will refuse it all day. What it is for is the shape that motivated it: two gates
+running their own suites in their own trees, one of them proving what a SIGKILL
+leaves behind, and `pkill -9 -f vitest` reaching the other one's processes. The
+gate disclosed the call in its own verdict, which is the only reason anybody
+knew; nothing refused it and nothing recorded which processes died.
+
+Skip it and the rule survives only as a line in a brief. The run that met this
+had that line already — "kill only what you started" was implicit in every gate
+brief on the day it was broken. That is the whole of what you lose: a reminder
+instead of a refusal.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -310,6 +387,14 @@ failure. `run-issues-foreground-gate.py` ships
 set. `git-shared-state-guard.py` ships `test_git_shared_state_guard.py`, 68
 cases; it builds a real git repository with a linked worktree in a temporary
 directory, so it needs `git` on the path and takes a few seconds.
+`machine-wide-kill-guard.py` ships `test_machine_wide_kill_guard.py`, 19 cases on
+command strings alone, with no environment set and nothing on disk.
+`gate-commit-guard.py` ships `test_gate_commit_guard.py`, 21 cases; one of them
+reads `../agents/` to pin the role list, and skips itself when the hook has been
+copied out of the pack on its own.
+`run-issues-typecheck-gate.py` ships `test_run_issues_typecheck_gate.py`, 31
+cases; its fixture trees are built in a temporary directory, so it needs no
+environment either.
 
 Only `coderules-gate.py` ships no test, because it has none in the tree it came
 from. It carries a drill in its docstring instead: pipe a JSON payload on stdin
@@ -334,7 +419,7 @@ agent is asked to remember is weaker than a rule that answers a tool call, and t
 gap is worth knowing about before you rely on one of those sentences. Every one of
 these is a `PreToolUse` or `SubagentStop` hook of about a hundred lines, so the road
 open to you is to write your own against the rule the skill states, with the shape
-the five published hooks carry: payload on stdin, reason on stderr, exit 2 to refuse,
+the published hooks beside it carry: payload on stdin, reason on stderr, exit 2 to refuse,
 exit 0 on anything it cannot read.
 
 `generated-file-guard.py` is the one of those nine that a published hook actually

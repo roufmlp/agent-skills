@@ -202,7 +202,7 @@ class TheReportIsTheDeliverable(unittest.TestCase):
         self.assertIn("30", written)
         self.assertIn("REFUSES NOTHING", written)
 
-    def test_it_says_the_verdict_is_abduls(self):
+    def test_it_says_the_verdict_is_the_humans(self):
         written = self.out.read_text(encoding="utf-8")
         self.assertIn("the human", written)
 

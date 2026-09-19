@@ -712,5 +712,34 @@ class AValidatorNeverRaises(unittest.TestCase):
         self.assertTrue(why)
 
 
+class AHistoricRowStillParses(unittest.TestCase):
+    """Issue 06 added `Suites/issue` to COST_COLUMNS. Every row written before
+    2026-09-17 carries no `suites` key at all, and those runs were not measured
+    rather than measured at zero."""
+
+    HISTORIC = {"batch": "batch-old", "kind": "run", "taken": "2026-09-01",
+                "issues": 8, "hours": 6.0, "subagents": 50}
+
+    def test_a_row_with_no_suites_key_renders(self):
+        text = tool.render_view([self.HISTORIC])
+        self.assertIn("batch-old", text)
+
+    def test_the_cost_row_has_one_cell_per_column(self):
+        """A tuple shorter than its header silently shifts every cell after the
+        gap, so the count is pinned rather than eyeballed."""
+        text = tool.render_view([self.HISTORIC])
+        header = [one for one in text.splitlines()
+                  if one.startswith("|") and "Suites/issue" in one]
+        self.assertTrue(header, "the Suites/issue column is not rendered")
+        widths = len(header[0].strip("|").split("|"))
+        self.assertEqual(widths, len(tool.COST_COLUMNS))
+
+    def test_an_unmeasured_run_does_not_read_as_zero(self):
+        text = tool.render_view([self.HISTORIC])
+        row = [one for one in text.splitlines() if "batch-old" in one]
+        self.assertTrue(row)
+        self.assertNotIn("| 0 |", row[0])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -44,7 +44,7 @@ work.
 Usage:
     collect_shards.py --kind register --feature example-feature [--repo PATH]
     collect_shards.py --kind queue [--repo PATH]
-    collect_shards.py --kind register --feature F --check    # drift, exit 1
+    collect_shards.py --kind register --feature F --check    # drift or a blinding byte, exit 1
     collect_shards.py --kind register --feature F --mtime    # newest shard mtime
     collect_shards.py --kind register --feature F --my-shard # where to write
 """
@@ -220,6 +220,46 @@ def collect(board: Generated, trees: list, feature: str = "") -> list:
 def _read(path: str) -> str:
     with open(path, encoding="utf-8") as handle:
         return handle.read()
+
+
+#: Every byte below a space that a shard may carry. Tab and newline are
+#: ordinary text. CARRIAGE RETURN is here because it is half of a legitimate
+#: line ending and no reader misbehaves on one; the human ruled "tab and
+#: newline" on 2026-09-15, and this widens what is allowed, with that reason.
+BYTES_A_SHARD_MAY_CARRY = frozenset(b"\t\n\r")
+
+
+def control_bytes(chosen: list) -> str:
+    """One sentence naming the first shard that carries a blinding byte.
+
+    Empty when every shard is clean.
+
+    THE SET IS DECIDED BY WHAT THE CONSUMER DOES WITH THE BYTES, never by what
+    the text appears to say. Two consumers decide it. `grep` goes blind on a
+    NUL and answers nothing with no error, which is how run `batch-d41839`
+    shipped a register that read as empty on 2026-09-15 and cost two findings
+    their correct cause. A terminal obeys an ESC, so a shard can paint over the
+    board a reader is looking at.
+
+    Read as BYTES and not as text: the file is what `grep` reads, and a text
+    read would raise on a byte that is not UTF-8 at all rather than name it.
+    """
+    for name, path in chosen:
+        try:
+            with open(path, "rb") as handle:
+                raw = handle.read()
+        except OSError:
+            continue  # A shard that vanished between collect and here.
+        for index, byte in enumerate(raw):
+            if byte >= 0x20 or byte in BYTES_A_SHARD_MAY_CARRY:
+                continue
+            line = raw.count(b"\n", 0, index) + 1
+            return (
+                f"shard `{name}` carries the byte 0x{byte:02x} at line {line} "
+                f"of {path}. A byte below a space blinds the readers of the "
+                f"board it builds: `grep` answers nothing on a NUL and says "
+                f"no error. Write it as an escape, then reissue.")
+    return ""
 
 
 def answered_ids(chosen: list) -> set:
@@ -420,6 +460,12 @@ def write(board: Generated, main_tree: str, trees: list, feature: str = "") -> s
     """
     target = board.generated(main_tree, feature)
     chosen = collect(board, trees, feature)
+    # Before the render, so the board on disk is never replaced by a poisoned
+    # one. A check that only reported would leave every reader looking at it
+    # until somebody ran the check.
+    poison = control_bytes(chosen)
+    if poison:
+        raise PoisonRefused(poison)
     expected = render(chosen, board)
     found = None
     try:
@@ -514,6 +560,10 @@ def my_shard(board: Generated, cwd: str, trees: list, feature: str = "",
 
 class SplitRefused(Exception):
     """The one-off migration cannot run safely. The caller stops."""
+
+
+class PoisonRefused(Exception):
+    """A shard carries a byte that blinds a reader of the board it builds."""
 
 
 class EmptyRefused(Exception):
@@ -651,7 +701,7 @@ def main(argv=None):
             # migration is a commit on this branch and must not reach into
             # anybody else's working tree.
             written = write(board, tree, trees, args.feature)
-        except (SplitRefused, EmptyRefused) as refusal:
+        except (SplitRefused, EmptyRefused, PoisonRefused) as refusal:
             print(f"REFUSED — {refusal}", file=sys.stderr)
             return 1
         print(target)
@@ -659,6 +709,13 @@ def main(argv=None):
         return 0
 
     if args.check:
+        # Ahead of the drift read: a poisoned shard makes the comparison
+        # meaningless, and its own report would name a byte count rather than
+        # the byte.
+        poison = control_bytes(collect(board, trees, args.feature))
+        if poison:
+            print(f"REFUSED — {poison}", file=sys.stderr)
+            return 1
         report = drift(board, main_tree, trees, args.feature)
         if report:
             print(report, file=sys.stderr)
@@ -667,7 +724,7 @@ def main(argv=None):
 
     try:
         written = write(board, main_tree, trees, args.feature)
-    except EmptyRefused as refusal:
+    except (EmptyRefused, PoisonRefused) as refusal:
         print(f"REFUSED — {refusal}", file=sys.stderr)
         return 1
     # A typo in a retirement shard answers nothing at all, silently, and the

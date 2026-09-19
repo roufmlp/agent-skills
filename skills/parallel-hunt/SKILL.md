@@ -307,9 +307,11 @@ above it; corrected 2026-08-07.
 
 A promoted row becomes an issue file carrying:
 
-- `Status: needs-harden`. A local file has no reporter, so there is nobody to ask
-  for more, and `needs-info` is a dead end there. `/harden-issues` sharpens it from
-  evidence instead. This is `triage`'s rule for a local file, inherited unchanged.
+- A `Status:` the promotion brief's own rule sets, and this skill does not restate
+  it: `parked` for a medium or low row that names no blocker, `needs-harden` above
+  that. Neither is `needs-info`, which is a dead end for a file with no reporter.
+  `/harden-issues` sharpens either one from evidence, and the parked sweep, where
+  the project runs one, is what puts a parked issue back in front of the human.
 - One category role, from the same set `triage` uses.
 - A link to `bugs/<ID>.md`. Promotion copies no evidence into the issue file.
 
@@ -323,9 +325,12 @@ step somebody forgets, and then the register grows in place of the issue directo
 secret, an env var, an OAuth client, a DNS record at a registrar, a console setting —
 anything the repo cannot do to itself — is written as a numbered action, one action per
 number, with one line of what is blocked on it, to the project's pending-actions file,
-if it has one. Where that file lives outside the repo, cite its path in full every time
-and never make a repo-local copy. The round report is history the moment the branch
-merges; the pending-actions file is the list a human actually reads.
+if it has one — THIS hunt's own repository's file, never another repository's, because
+the same machinery runs for more than one project. Where that file lives outside the
+repo, cite its path in full every time and never make a repo-local copy, and where the
+project's pack carries a script that prints that absolute path, run it rather than
+typing one from memory. The round report is history the moment the branch merges; the
+pending-actions file is the list a human actually reads.
 
 ## Harvesting the leads file
 

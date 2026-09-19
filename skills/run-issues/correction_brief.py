@@ -58,13 +58,18 @@ Owed items:
 """
 
 CLOSING = """
+This round runs no full suite. Run each item's named evidence test and the
+typecheck, and nothing wider. The runner re-runs coverage over this tree when
+you return, and that is the whole-tree reading — yours would read the same tree
+twice.
+
 Return when each item's NAMED evidence exists: the test is there and green, the
 mutation reds. Do not commit — the runner commits.
 """
 
 AFK = (
-    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR ABDUL. He is AFK for every "
-    "run. Take one of the two roads above now and carry on."
+    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR THE HUMAN. The human is AFK "
+    "for every run. Take one of the two roads above now and carry on."
 )
 
 GATE_HEADINGS = ("## verify gate", "## review gate")
@@ -137,19 +142,18 @@ def read_items(args) -> tuple:
 def check_issue(path) -> str:
     """The refusal for an unusable issue path, or empty."""
     text = str(path)
-    if "/.claude/worktrees/" in os.path.normpath(text):
-        return (
-            "REFUSED. Give the issue file's path in the MAIN CHECKOUT and "
-            "re-run.\n"
-            f"  {text} is inside a run worktree. The worktree holds a tracked "
-            "twin of every issue file, checked out at the fork point and stale "
-            "from that moment: it carries no implementation record and no gate "
-            "section, so an implementer briefed on it reads an issue nobody has "
-            "worked.\n"
-            "  Two roads out:\n"
-            "  1. Re-run with the main-checkout path.\n"
-            "  2. If you cannot resolve it, read the ledger header, which names "
-            "every run path in full." + AFK)
+    # NO WORKTREE REFUSAL. Until 2026-09-13 this refused any path containing
+    # `/.claude/worktrees/`, on the premise that the worktree twin is "checked
+    # out at the fork point" and so carries no gate verdict. That premise is
+    # false for a run's OWN issue file: `SKILL.md` tells the runner to check the
+    # verdict against the issue file in this run's own worktree, and gives the
+    # reason -- passing the worktree path is what turns a gate that wrote beside
+    # a private copy into a refusal. The two preconditions could not both hold,
+    # and the last runner satisfied them by hand twice (run `batch-19ff9f`,
+    # merge briefing, `## Decide` item 1). The hazard the path check was
+    # reaching for is caught by the GATE_HEADINGS check below, which asks the
+    # real question -- does this file hold a verdict -- and does not care which
+    # path carries it. Ruled by the human, 2026-09-13.
 
     try:
         body = pathlib.Path(text).read_text(encoding="utf-8", errors="replace")

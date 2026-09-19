@@ -10,7 +10,7 @@ Answer one question about the pipeline, in words, over figures `run_compare.py`
 prints. Ticket 37 of the pilot-delivery map, rulings 22, 25 and 26.
 
 **The script is the fact. This skill is the sentence.** `run_compare.py` holds
-five fixed subcommands and every figure comes from them. Run the one that
+six fixed subcommands and every figure comes from them. Run the one that
 matches the question, read what it prints, and answer.
 
 ## The one rule that shapes everything else
@@ -50,6 +50,17 @@ session's model, spawning nothing (ruling 26).
 | What has the last fortnight looked like? | `run_compare.py since <days>` |
 | Was run X cheaper than run Y? | `run_compare.py compare <a> <b>` |
 | Which runs ran the same pipeline? What changed between them? | `run_compare.py versions` |
+| Is the issue-size count any good? Does it still predict? | `run_compare.py sizing` |
+
+`sizing` is the only one that reads `issues.jsonl` rather than `runs.jsonl`. It joins
+the acceptance-criteria count `check_issue_size.py` read off each issue file at its
+run's fork point to the span that issue then occupied, and reports the rank correlation
+against the +0.62 measured on 2026-09-14, when the limit was set. **Carry its figures and
+nothing more: it deliberately prints no predicted duration, and neither do you.** A
+correlation drifting away from +0.62 is the count losing its grip; the limit is the
+human's to re-rule, and saying what it should be is advice, which this skill does not
+give. A run finaled before 2026-09-14 carries no count, and the script says so rather
+than correlating over the lines that do — that is a skip, and a skip is reported.
 
 `last` reports the newest line of each kind — a run and a hunt — each against
 its own predecessor. Start there when the question names no run.

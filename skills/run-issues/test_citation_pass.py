@@ -142,9 +142,9 @@ class Refusal(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("zzz", text)
 
-    def test_the_refusal_says_it_never_waits_for_abdul(self):
-        """Copied from `run-state-path-guard.py`: a refusal inside a run names
-        the roads out and says nobody is coming."""
+    def test_the_refusal_says_it_never_waits_for_the_human(self):
+        """A refusal inside a run names the roads out and says nobody is
+        coming, because nobody is at the keyboard to be asked."""
         root = tree({"bbb.txt": KILLED})
         _, text = self.run_main(["--deltas", str(root)])
         self.assertIn("AFK", text)

@@ -15,8 +15,9 @@ unstated:
   under one whose origin cell is empty or unreadable.
 - DELIBERATELY LETS PAST: every file outside a shard directory, every prose table
   inside one, a shard holding no table, and every Bash write that is not a
-  heredoc. On a payload it cannot parse, or with its companion script absent, it
-  exits 0.
+  heredoc. It also lets past a bad row ALREADY ON DISK above the lines being
+  written: it judges the addition, not the file. On a payload it cannot parse, or
+  with its companion script absent, it exits 0.
 
 WHY A HOOK AND NOT ONLY A SCRIPT. `check_origin.py` in the run-issues skill
 grades a file that already exists, and it SKIPS a table whose header declares no
@@ -89,12 +90,30 @@ def is_shard(path: str) -> bool:
     return SHARD_DIR in os.path.normpath(path).split(os.sep)
 
 
-def offences(text: str, check) -> list:
+def offences(text: str, check, from_line: int = 1) -> list:
     """Every reason to refuse this content, in the order they appear.
 
     Two rules. A register row table must DECLARE the origin column -- the rule
     the script cannot enforce -- and every row under it must carry a legal
     value, which the script's own reader answers, so it is not written twice.
+
+    ── IT JUDGES THE ADDITION, NOT THE FILE ───────────────────────────────────
+
+    `from_line` is where the text being WRITTEN starts. Everything above it is
+    the file already on disk, prepended by `_with_header` so the table's own
+    header is in scope, and a row fault up there is somebody else's.
+
+    This guard used to refuse on those too. One run met it twice, each time
+    blocking a role that did not write the bad row, and each time the append that
+    would have repaired the row was refused by the same rule. The human ruled it
+    on 2026-09-17: a guard that punishes the next writer for the last writer's
+    mistake trains roles to edit rows that are not theirs, and that is the larger
+    risk.
+
+    THE HEADER CHECK IS NOT FILTERED, and that is deliberate. A table on disk
+    that declares no `origin` column cannot carry the key on the new row either,
+    so a row joining it is refused wherever the header sits. That is a fact about
+    the row being written and not a fault inherited from another writer.
     """
     found = []
     for number, line in enumerate(text.splitlines(), start=1):
@@ -108,11 +127,15 @@ def offences(text: str, check) -> list:
     if found:
         return found
     return [f"line {fault.line}: {fault.row_id}: {fault.reason}"
-            for fault in check.register_faults(text)]
+            for fault in check.register_faults(text)
+            if fault.line >= from_line]
 
 
-def _with_header(path: str, written: str) -> str:
+def _with_header(path: str, written: str):
     """What is being appended, with the table header already on disk above it.
+
+    Answers the text to judge and the line the ADDITION starts on, because the
+    two are judged differently: see `offences`.
 
     An Edit's `new_string`, and a heredoc body, both carry the ROW alone. A row
     with no header above it has no `origin` column to be missing, so every bad
@@ -121,40 +144,46 @@ def _with_header(path: str, written: str) -> str:
     which is the create case and carries its own header.
     """
     if not written.strip():
-        return written
+        return written, 1
     try:
         with open(path, encoding="utf-8") as handle:
-            return handle.read().rstrip("\n") + "\n" + written
+            disk = handle.read().rstrip("\n")
     except OSError:
-        return written
+        return written, 1
+    return disk + "\n" + written, len(disk.splitlines()) + 1
 
 
-def content_of(payload: dict) -> str:
-    """What this call would put on disk, as far as the payload shows it."""
+def content_of(payload: dict):
+    """What this call would put on disk, and the line the addition starts on.
+
+    A `Write` replaces the file, so the whole of it is the addition and the line
+    is 1. An `Edit` and a heredoc append, so the disk content above them belongs
+    to whoever wrote it.
+    """
     tool = payload.get("tool_name", "")
     data = payload.get("tool_input", {}) or {}
     if tool in ("Write", "Edit", "NotebookEdit"):
         path = data.get("file_path", "")
         if not is_shard(path):
-            return ""
+            return "", 1
         written = data.get("content") or data.get("new_string") or ""
         if data.get("content") is not None:
-            return written
+            return written, 1
         return _with_header(path, written)
     if tool == "Bash":
         command = data.get("command", "") or ""
         if SHARD_DIR not in command:
-            return ""   # Cheap first: do not load a parser to answer `ls`.
+            return "", 1   # Cheap first: do not load a parser to answer `ls`.
         parser = os.path.join(HERE, "generated-file-guard.py")
         if not os.path.isfile(parser):
-            return ""   # The redirect parser is not beside this file. Pass.
+            return "", 1   # The redirect parser is not beside this file. Pass.
         guard = _load(parser, "generated_file_guard")
         targets = guard.bash_targets(command, matches=is_shard)
         if not targets:
-            return ""
+            return "", 1
         body = "\n".join(part for _, part in HEREDOC.findall(command))
         return _with_header(targets[0], body)
-    return ""
+    return "", 1
 
 
 def main() -> int:
@@ -163,7 +192,7 @@ def main() -> int:
     except (json.JSONDecodeError, ValueError):
         return 0  # Not a payload this hook can read. Never a halt.
     try:
-        text = content_of(payload)
+        text, from_line = content_of(payload)
     except Exception:
         return 0   # Never a halt: a payload this cannot read is not a refusal.
     if not text.strip():
@@ -172,7 +201,7 @@ def main() -> int:
         check = _load(CHECK, "check_origin")
     except (OSError, ImportError, AttributeError):
         return 0   # The skills repository does not carry it yet. Pass.
-    found = offences(text, check)
+    found = offences(text, check, from_line)
     if not found:
         return 0
     print(

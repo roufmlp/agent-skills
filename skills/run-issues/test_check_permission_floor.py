@@ -24,12 +24,25 @@ def settings(root: pathlib.Path, name: str, rules: list[str]) -> None:
     target.write_text(json.dumps({"permissions": {"allow": rules}}))
 
 
-def tree(tracked: list[str] | None = None, local: list[str] | None = None) -> pathlib.Path:
+def declare(root: pathlib.Path, body: str) -> None:
+    """Write `.claude/run-classes.json` verbatim, malformed bodies included."""
+    target = root / ".claude" / "run-classes.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body)
+
+
+def tree(
+    tracked: list[str] | None = None,
+    local: list[str] | None = None,
+    classes: list[str] | None = None,
+) -> pathlib.Path:
     root = pathlib.Path(tempfile.mkdtemp(prefix="permfloor-"))
     if tracked is not None:
         settings(root, "settings.json", tracked)
     if local is not None:
         settings(root, "settings.local.json", local)
+    if classes is not None:
+        declare(root, json.dumps({"classes": classes}))
     return root
 
 
@@ -64,6 +77,9 @@ TIER_A = [
     "Bash(python3 ~/.claude/skills/*)",
 ]
 
+# Every rule here is repo-independent: it names no repository's own files. That
+# is the whole point of the 2026-09-13 change -- a repo must be able to pass this
+# check on rules like these alone, with no rule naming another repo's env file.
 EVERYTHING = [
     "Bash(npx vitest*)",
     "Bash(npx tsc*)",
@@ -73,11 +89,23 @@ EVERYTHING = [
     "Bash(npm run lint*)",
     "Bash(npm run typecheck*)",
     "Bash(npm run build*)",
-    # A project's own isolation commands ride one prefix rule, and they reach the
-    # check through `--classes` rather than through REQUIRED. This entry stands for
-    # that class in the fixture.
-    "Bash(node --env-file=<env file> *)",
 ]
+
+# One repository's own four `node --env-file=<its env> scripts/*.mjs` commands,
+# and the one rule that covers them. They were built into the runner's list until
+# 2026-09-13 and are now a repo declaration, which is what the cases below drive.
+# The env path is a fixture shape: what matters is that the verdict turns on it.
+REPO_OWN_CLASSES = [
+    "node --env-file=/home/user/project/.project-spine.env"
+    " scripts/seed-run-workspace.mjs --batch batch-000000 --ledger run.md",
+    "node --env-file=/home/user/project/.project-spine.env"
+    " scripts/dev-signin-link.mjs --batch batch-000000 --site http://batch-000000.localhost:3000",
+    "node --env-file=/home/user/project/.project-spine.env"
+    " scripts/zoho-live-lock.mjs --batch batch-000000 -- npx vitest run src/lib/zoho/live",
+    "node --env-file=/home/user/project/.project-spine.env"
+    " scripts/delete-run-workspace.mjs --batch batch-000000 --ledger run.md",
+]
+REPO_OWN_RULE = "Bash(node --env-file=/home/user/project/.project-spine.env *)"
 
 
 class Covers(unittest.TestCase):
@@ -265,6 +293,87 @@ class Segments(unittest.TestCase):
         self.assertEqual(guard.segments("SEED=1 npx vitest run a.ts"), ["npx vitest run a.ts"])
 
 
+class SeparatorsInsideQuotes(unittest.TestCase):
+    """A `|` between quotes is an argument, never a separator.
+
+    Measured 2026-09-13 across one project's own session transcripts. Splitting
+    without regard to quotes reported `Tests`, `^### "`, `from`, `new` and
+    `const` as commands. Each is a fragment of one `grep` pattern, and a reading
+    that cries wolf on its own noise gets ignored.
+    """
+
+    # Every command here is verbatim from a transcript under `~/.claude/projects`,
+    # trimmed to the segment that produced the noise.
+    NOISE = (
+        ('npm test 2>&1 | grep -E "Test Files|Tests "', "Tests"),
+        ('awk \'NR>=494\' $B | grep -n "^## \\|^### " | head -30', '^### "'),
+        ("grep -rEn '\\b(bg|text|from|to|via)-(slate|red)-[0-9]{2,3}\\b' src/", "from"),
+        ('grep -nE "KINDS|kind|new|fix|deepen" check_run_rail.py | head -10', "new"),
+        ("grep -nE '^\\s*(function|const|let) [A-Za-z_]+' flow.html | sed -n '1,200p'", "const"),
+    )
+
+    def test_no_fragment_of_a_quoted_pattern_is_reported_as_a_command(self):
+        for command, noise in self.NOISE:
+            with self.subTest(noise=noise):
+                self.assertNotIn(noise, guard.segments(command))
+
+    def test_the_quoted_pattern_stays_whole_inside_its_own_segment(self):
+        found = guard.segments('npm test 2>&1 | grep -E "Test Files|Tests "')
+        self.assertEqual([s.split()[0] for s in found], ["npm", "grep"])
+        self.assertIn('"Test Files|Tests "', found[1])
+
+    def test_a_single_quoted_separator_is_not_a_separator(self):
+        self.assertEqual(guard.segments("grep -n 'a;b' f"), ["grep -n 'a;b' f"])
+
+    def test_a_backslash_escaped_separator_is_not_a_separator(self):
+        self.assertEqual(guard.segments("echo a\\;b"), ["echo a\\;b"])
+
+    def test_an_unbalanced_quote_never_raises_and_never_splits_inside_it(self):
+        """A transcript holds whatever was typed. A reading that dies on one
+        malformed command reads nothing after it."""
+        self.assertEqual(guard.segments("echo 'unbalanced | still one piece"),
+                         ["echo 'unbalanced | still one piece"])
+
+    def test_a_separator_outside_the_quotes_still_splits(self):
+        found = guard.segments('echo "a && b" && ls')
+        self.assertEqual(found, ['echo "a && b"', "ls"])
+
+    def test_an_apostrophe_in_a_comment_does_not_open_a_quote(self):
+        """The one that survived the first fix. A run-issues review gate wrote
+        `# ... only the shipped tree's own files matter` on its own line, and
+        that apostrophe inverted the quote state for the rest of the command --
+        so `grep -E 'Test Files|Tests |FAIL'` split and reported `Tests`."""
+        command = (
+            "cd $COPY\n"
+            "# remove the fixtures so only the shipped tree's own files matter\n"
+            "npm test 2>&1 | grep -E 'Test Files|Tests |FAIL'"
+        )
+        found = guard.segments(command)
+        self.assertNotIn("Tests", found)
+        self.assertEqual([s.split()[0] for s in found], ["cd", "npm", "grep"])
+
+    def test_a_hash_inside_a_url_is_not_a_comment(self):
+        self.assertEqual(guard.segments("curl http://x/y#frag"), ["curl http://x/y#frag"])
+
+    def test_a_hash_line_inside_a_quoted_string_takes_no_command_with_it(self):
+        """The comment rule has to run where the quote state is known. A pass
+        over raw lines drops `# b" && rm -rf /tmp/x`, the second line of a
+        quoted commit message, and the `rm` on it goes ungraded."""
+        found = guard.segments('git commit -m "a\n# b" && rm -rf /tmp/x')
+        self.assertEqual([s.split()[0] for s in found], ["git", "rm"])
+
+    def test_an_indented_comment_line_is_still_a_comment(self):
+        self.assertEqual(guard.segments("  # indented\nls"), ["ls"])
+
+    def test_a_line_continuation_joins_its_two_halves(self):
+        """A backslash before a newline is whitespace, so the command carries
+        on. Splitting there left 70 segments headed by a bare backslash in
+        that project's transcripts, and the real command in each was hidden
+        behind it."""
+        found = guard.segments("DATABASE_URL=postgresql://localhost/x \\\n  npx vitest run a.ts")
+        self.assertEqual(found, ["npx vitest run a.ts"])
+
+
 class JudgeCommand(unittest.TestCase):
     """The regression. `npx vitest*` tracked is not the 441 command covered."""
 
@@ -393,6 +502,130 @@ class SuggestForGateShapes(unittest.TestCase):
                         self.assertTrue(
                             guard.covers(rule, segment), f"{rule} misses {segment}"
                         )
+
+# --------------------------------------------------------------------------
+# 2026-09-13. This machinery is one copy serving more than one repository. Four
+# commands naming ONE repository's live-secrets env file sat in the runner's list
+# and a fifth in the verify gate's, so the floor graded every repo against
+# them -- and the second repository's `.claude/settings.json` carried a rule
+# allowing that path only to get past this check. Repo-specific shapes are now a
+# declaration the repo under test owns.
+# --------------------------------------------------------------------------
+
+
+class NoBuiltInClassBelongsToOneRepo(unittest.TestCase):
+    def test_no_built_in_class_names_an_env_file(self):
+        """`--env-file=<path>` is the shape whose verdict turns on the path, so
+        it can only ever be covered by a rule naming that one repository's
+        file. It belongs in a declaration, never in a shared list."""
+        for role, shapes in guard.ROLE_CLASSES.items():
+            for command in shapes:
+                with self.subTest(role=role, command=command):
+                    self.assertNotIn("--env-file=", command)
+
+    def test_no_built_in_class_names_one_repositorys_env_file(self):
+        for role, shapes in guard.ROLE_CLASSES.items():
+            for command in shapes:
+                with self.subTest(role=role, command=command):
+                    self.assertNotIn(".project-spine.env", command)
+
+    def test_a_repo_holding_no_other_repos_rule_passes(self):
+        """The second repository after the fix: tier A and the universal npm
+        and npx rules, and not one rule naming another repository. This refused
+        before 2026-09-13, which is why that rule was in its allow list."""
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        self.assertEqual(guard.main(["--repo", str(root)]), 0)
+        self.assertNotIn(REPO_OWN_RULE, EVERYTHING + TIER_A)
+
+
+class TheRepoDeclaresItsOwn(unittest.TestCase):
+    def test_a_repo_with_no_declaration_declares_nothing(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        self.assertEqual(guard.repo_classes(root / guard.REPO_CLASSES), [])
+
+    def test_the_declared_commands_are_read_back(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[], classes=REPO_OWN_CLASSES)
+        self.assertEqual(guard.repo_classes(root / guard.REPO_CLASSES), REPO_OWN_CLASSES)
+
+    def test_a_declared_class_with_no_rule_refuses_the_launch(self):
+        """The four, declared, in a repo that lost the rule covering them. The
+        2026-09-13 change must not cost that repo this refusal."""
+        root = tree(tracked=EVERYTHING + TIER_A, local=[], classes=REPO_OWN_CLASSES)
+        self.assertEqual(guard.main(["--repo", str(root)]), 1)
+
+    def test_a_declared_class_with_its_rule_passes(self):
+        root = tree(
+            tracked=EVERYTHING + TIER_A + [REPO_OWN_RULE],
+            local=[],
+            classes=REPO_OWN_CLASSES,
+        )
+        self.assertEqual(guard.main(["--repo", str(root)]), 0)
+
+    def test_a_declared_class_covered_only_locally_is_untracked(self):
+        root = tree(
+            tracked=EVERYTHING + TIER_A,
+            local=[REPO_OWN_RULE],
+            classes=REPO_OWN_CLASSES,
+        )
+        self.assertEqual(guard.main(["--repo", str(root)]), 1)
+
+    def test_an_unparseable_declaration_exits_two(self):
+        """A declaration nobody can read must not be read as a declaration of
+        nothing. Exit 2 is the same answer an unreadable settings file gets."""
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        declare(root, "{not json")
+        self.assertEqual(guard.main(["--repo", str(root)]), 2)
+
+    def test_a_declaration_that_is_not_a_list_exits_two(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        declare(root, json.dumps({"classes": "npx vitest run"}))
+        self.assertEqual(guard.main(["--repo", str(root)]), 2)
+
+    def test_a_declaration_holding_a_blank_command_exits_two(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        declare(root, json.dumps({"classes": ["npx vitest run", "   "]}))
+        self.assertEqual(guard.main(["--repo", str(root)]), 2)
+
+    def test_a_declaration_with_no_classes_key_declares_nothing(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        declare(root, json.dumps({"note": "nothing repo-specific yet"}))
+        self.assertEqual(guard.main(["--repo", str(root)]), 0)
+
+
+class TheOutputSaysWhoDeclaredWhat(unittest.TestCase):
+    def test_a_repo_declaring_nothing_is_told_so(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[])
+        import contextlib, io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(guard.main(["--repo", str(root)]), 0)
+        self.assertIn("REPO-DECLARED CLASSES: none", out.getvalue())
+
+    def test_a_repo_declaring_four_is_told_how_many_and_from_where(self):
+        root = tree(
+            tracked=EVERYTHING + TIER_A + [REPO_OWN_RULE],
+            local=[],
+            classes=REPO_OWN_CLASSES,
+        )
+        import contextlib, io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(guard.main(["--repo", str(root)]), 0)
+        printed = out.getvalue()
+        self.assertIn("REPO-DECLARED CLASSES: 4", printed)
+        self.assertIn(guard.REPO_CLASSES, printed)
+
+    def test_a_refusal_on_a_declared_class_names_it_as_the_repos_own(self):
+        root = tree(tracked=EVERYTHING + TIER_A, local=[], classes=REPO_OWN_CLASSES)
+        import contextlib, io
+
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(guard.main(["--repo", str(root)]), 1)
+        self.assertIn(guard.REPO_ROLE, err.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

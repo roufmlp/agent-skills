@@ -154,7 +154,7 @@ class Refusal(unittest.TestCase):
         self.assertIn("commit", text.lower())
         self.assertIn("runner", text.lower())
 
-    def test_the_refusal_says_it_never_waits_for_abdul(self):
+    def test_the_refusal_says_it_never_waits_for_the_human(self):
         _, text = run_main(["--test", "false",
                             "--pass-file", str(pass_file(COMPLETE))])
         self.assertIn("AFK", text)

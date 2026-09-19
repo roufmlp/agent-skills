@@ -96,6 +96,23 @@ SEPARATOR = re.compile(r"^\|[\s|:-]+\|?\s*$")
 # which is why it went ungraded. Issue 201 absorbed eight steps and read 7.34x.
 ISSUE_IN_PROMPT = re.compile(r"\bissue\s+\**(?P<issue>\d{2,4}[a-z]?)\b", re.IGNORECASE)
 
+# The same heading line, when it names the issue by its FILE instead of by the
+# word `issue`: `CORRECTION ROUND for /…/issues/05b-lifecycle-moves-…md.` and
+# `RETRY, attempt 2, for /…/issues/05b-…md`.
+#
+# **Measured on run `batch-be624c`, 2026-09-14.** Eleven of that run's 46
+# per-issue spawns opened this way -- ten correction rounds and one retry -- and
+# every one of them was UNATTRIBUTED, so the script refused its own verdict and
+# the spans it did print were short by the whole correction round. Issue 05b
+# read 45 minutes where a fully attributed walk reads 68.6, and 05f read 24
+# where it reads 36.2. The commit stamps in the ledger agree with the longer
+# figures, to within the runner's own turns.
+#
+# This is still the HEADING LINE and nothing else, so the rule the docstring
+# below states is unchanged: the body is never read. `\b` after the id keeps
+# `05b-lifecycle` from reading as `05` and `12-confirm` from reading as `1`.
+ISSUE_IN_PATH = re.compile(r"/issues/(?P<issue>\d{1,4}[a-z]?)-")
+
 # ONLY these agent types belong to one issue. The filter is not tidiness — the
 # first version of this script had none, and the run-wide roles wrecked it. The
 # finale, the promotion phase and the board rebuild all open by naming the RUN,
@@ -182,6 +199,11 @@ def issue_of(prompt: str) -> str | None:
         if not line.strip():
             continue
         found = ISSUE_IN_PROMPT.search(line)
+        if found:
+            return found.group("issue")
+        # The word form is tried first, so a heading carrying both is read the
+        # way it always was. A correction round and a retry carry only the path.
+        found = ISSUE_IN_PATH.search(line)
         return found.group("issue") if found else None
     return None
 

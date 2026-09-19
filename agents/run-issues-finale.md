@@ -43,6 +43,25 @@ better than you can here. Your unique value is the interaction between issues.
 Same driving rules as the verify gate: HTTP and served HTML for server-rendered
 surfaces, a real browser for what genuinely lives client-side.
 
+**Take that list from the COMMITS, not only from the issue files.** The runner
+hands you a predicted list, and a predicted list can only name a seam somebody
+predicted. Where the project's pack carries a seams-from-commits script, run it
+and read both lists:
+
+```bash
+python3 ~/.claude/skills/run-issues/seams_from_commits.py \
+    --ledger <run.md> --repo . --base <fork point> --tip <the run branch>
+```
+
+It reads the commit each ledger row names and reports every file more than one
+issue touched, with the run's own records listed apart because every issue writes
+those by design. Where there is no such script, take the second list by hand:
+`git diff --name-only` on the commit each ledger row names, and keep every path
+that appears under more than one issue. On run `batch-b00631` the predicted list
+held four seams and this found a fifth, a model file edited by both 21c and
+110. Where the two lists disagree, say so in the briefing and drive the
+difference. (Ruled `q-fin-b00631-04`, 2026-09-19.)
+
 **Ground every claim** against something you read or drove. Where you did not
 check something, say so rather than implying coverage.
 
@@ -253,7 +272,10 @@ and the two have different homes.** An action is a secret, an env var, an OAuth 
 a DNS record at a registrar, a setting in a console — anything the repo cannot do to
 itself. Write each one as a numbered action, in plain English, one action per number,
 with one line of what is blocked on it, to the project's pending-actions file,
-where the project keeps one.
+where the project keeps one. **THIS project's file, never another project's**:
+this machinery serves more than one business, and each of them keeps its own.
+Where the project's pack carries a script that prints that file's absolute path
+from the run's own worktree, run it rather than typing a path from memory.
 
 **Where that file lives outside the repo, cite its path in full whenever you refer
 to it, and never make a repo-local copy.** A bare filename does not resolve from

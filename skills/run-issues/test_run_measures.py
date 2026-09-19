@@ -392,5 +392,43 @@ Some prose that names 149c and 149e in passing.
         self.assertTrue(ruled.strip())
 
 
+class TheCriteriaColumn(unittest.TestCase):
+    """Class 9's prediction, on the same line as its outcome. Ruled by the
+    human, 2026-09-14."""
+
+    LEDGER = (
+        "| Issue | Status | Estimate | Stamps |\n"
+        "|---|---|---|---|\n"
+        "| 05b — lifecycle moves | done | 150 min | attempt 1; gates 1: "
+        "verify=pass review=pass; committed abc1234 |\n"
+        "| 06 — customers | done | 120 min | attempt 1; gates 1: verify=pass "
+        "review=pass; committed def5678 |\n"
+    )
+
+    def records(self, criteria=None):
+        found = tool.issue_records(batch="b1", ledger_text=self.LEDGER,
+                                   criteria=criteria)
+        return {one["issue"]: one for one in found}
+
+    def test_the_field_is_in_the_schema(self):
+        self.assertIn("criteria", tool.ISSUE_FIELDS)
+
+    def test_a_count_lands_on_the_issue_it_names(self):
+        found = self.records({"05b": 9, "06": 14})
+        self.assertEqual(found["05b"]["criteria"], 9)
+        self.assertEqual(found["06"]["criteria"], 14)
+
+    def test_an_unread_count_is_null_and_never_zero(self):
+        """An unread file and a file holding no criterion are a different
+        fact about the pipeline."""
+        found = self.records(None)
+        self.assertIsNone(found["05b"]["criteria"])
+
+    def test_an_issue_the_map_does_not_name_is_null(self):
+        found = self.records({"05b": 9})
+        self.assertEqual(found["05b"]["criteria"], 9)
+        self.assertIsNone(found["06"]["criteria"])
+
+
 if __name__ == "__main__":
     unittest.main()

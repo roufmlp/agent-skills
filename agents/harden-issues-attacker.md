@@ -157,13 +157,38 @@ Each class has shipped a real defect through green gates.
    behaviour is flagged and made executable or bounded: a prose-graded bar
    regenerates on every fix — each edit mints a new falsifiable claim — and it
    is the documented whale-maker. (181: run-issues decisions.md.)
-9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min.
+9. **Size against the one-implementer bound, which is a COUNT and not a
+   duration.** Where the installed pack carries a size checker, the session runs
+   it over the files this pass hardened and that script's refusal is the bound.
+   Read its docstring before you write anything about size: it carries the
+   measured distribution, the predictors that were tested, and the fit's own
+   error bar. Where the project has no such script, the bound is still a count of
+   independent deliverables and never a clock reading.
+
+   **You do not estimate minutes, and you do not quote a past issue's duration
+   as a comparable.** Until 2026-09-14 this class was one sentence and every
+   attacker reasoned by analogy from figures found in run ledgers. Those figures
+   were ESTIMATES, quoted by later passes as measurements. An attacker of the
+   2026-09-14 pass wrote in its own findings file, unprompted, "the estimate
+   above is mine and is a judgement, not a measurement" — and it was right. The
+   only durations you may cite are the `span_minutes` on a line of
+   `.scratch/workflow-audit/issues.jsonl`, which are measured off the run's own
+   transcript. If you have not opened that file, write no number.
+
+   Four candidates measured on 2026-09-14 predict nothing and must not be cited
+   as size signals: invariant count (rank correlation +0.05), blocker count
+   (+0.03), whether the issue ships a migration (+0.25 over a field 19 of the 25
+   run issues carried), and whether it touches a browser (+0.13).
+
+   What is still YOURS is the cut, and the count does not make it for you.
    Suspect anything whose criteria span several independent deliverables, or that
-   packs migration plus logic plus UI into one slice. Propose the cut line — where
-   one half ships and gates alone — **as a finding for the session**: it settles a
-   split it can cut, harden and stamp in the same pass, and routes the rest to
-   the human (`~/.claude/questionrules.md`, the routing table). (129 ran 4h58m, 19%
-   of its batch.)
+   packs migration plus logic plus UI into one slice, even under the limit.
+   Propose the cut line — where one half ships and gates alone — **as a finding
+   for the session**: it settles a split it can cut, harden and stamp in the same
+   pass, and routes the rest to the human (`~/.claude/questionrules.md`, the
+   routing table). A prose-graded criterion is the documented whale-maker and is
+   worth saying so about; a minutes estimate is not.
+
 10. **The database the rows land in.** An issue whose work writes data rows — an
     import, a seed, a backfill, a migration carrying data — names every database
     those rows must reach in `## Target database`: each by project ref, the owner
@@ -198,6 +223,28 @@ Each class has shipped a real defect through green gates.
     transcription and not a judgement. A subject and a verb, present tense,
     `59 characters or fewer`. Add no fact the file does not already carry. A file
     with no such line is legal, and you write one rather than raise a question.
+- **Both directions, before the stamp — your half is the issue you were given.**
+  `## Blocked by` is the section a scheduler reads to decide what may be built
+  today. Promotion cannot write it: it reads a register row and never the code.
+  You read the code, so you are the stage that can. Measured on one project,
+  2026-09-13: not one of the 22 needs-harden issues was named as a blocker by any
+  other issue, and issue 64, the tab bar, was needed by every screen in prose
+  only.
+  - **On your own issue**, write `## Blocked by` naming every open issue whose
+    work it needs, `- None` where nothing does. A file promotion minted carries
+    the single bullet `- Unknown until hardened`, which says nobody has looked
+    yet; your answer replaces it. Write it even where the answer is none — a
+    missing section and a section reading `- None` say different things, and
+    `~/.claude/skills/lib/check_issue_links.py` refuses a stamped issue that
+    carries no section at all.
+  - **The other direction goes to your findings file**, under
+    `## Downstream edges`: every OTHER open issue whose criteria depend on what
+    your issue builds, one bullet each, `<issue number> — <the quoted sentence
+    that shows it>`. The session applies them. **Their files stay shut**:
+    attackers run concurrently, and two of you appending a bullet to one third
+    file lose a bullet between you. The human ruled this split on 2026-09-13: you
+    report, the seam agent writes, and the session applies your list where no
+    seam ran.
 - **Into your findings file:** your per-class report, your numbered questions,
   and your `## Checks for the human` section. The seam agent reads this file, not the
   orchestrator's context. Write it before you return, even if you found nothing.

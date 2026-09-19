@@ -376,5 +376,48 @@ class RolesPerIssue(unittest.TestCase):
         self.assertAlmostEqual(got["agent"], 20.0)
 
 
+class TheIssueInAPath(unittest.TestCase):
+    """A correction round and a retry name the issue by its FILE, not by the
+    word `issue`. Measured on run `batch-be624c`, 2026-09-14: eleven of that
+    run's 46 per-issue spawns opened that way, every one was unattributed, and
+    the spans printed were short by the whole correction round."""
+
+    def test_a_correction_round_heading_is_attributed(self):
+        self.assertEqual(
+            tool.issue_of("CORRECTION ROUND for /Users/x/.scratch/f/issues/"
+                          "05b-lifecycle-moves-history-notifications.md."),
+            "05b")
+
+    def test_a_retry_heading_is_attributed(self):
+        self.assertEqual(
+            tool.issue_of("RETRY, attempt 2, for /Users/x/.scratch/f/issues/"
+                          "05b-lifecycle-moves.md"),
+            "05b")
+
+    def test_a_plain_number_in_a_path_is_read_whole(self):
+        """`12-confirm` is issue 12, never issue 1."""
+        self.assertEqual(
+            tool.issue_of("CORRECTION ROUND for /x/issues/12-confirm.md"),
+            "12")
+
+    def test_the_word_form_still_wins_where_both_appear(self):
+        """Existing behaviour is unchanged where a heading carries both."""
+        self.assertEqual(
+            tool.issue_of("Implement issue **201 — a thing** "
+                          "(/x/issues/999-other.md)"),
+            "201")
+
+    def test_a_path_outside_an_issues_directory_is_not_attributed(self):
+        self.assertIsNone(
+            tool.issue_of("Read /x/runs/05b-notes.md and report"))
+
+    def test_the_body_is_still_never_read(self):
+        """Only the heading line, which is the rule the 0.06x-to-7.34x spread
+        bought."""
+        self.assertIsNone(tool.issue_of(
+            "Pick up where the last gate stopped.\n\n"
+            "See /x/issues/05b-lifecycle.md for the criteria."))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -55,6 +55,10 @@ Listed in the order the loop runs.
 | `skills/run-issues/report_brief_cap.py` | `~/.claude/skills/run-issues/report_brief_cap.py` (reads the brief-cap hook's diary into the finale's measure step) |
 | `skills/run-issues/report_claim_commands.py` | `~/.claude/skills/run-issues/report_claim_commands.py` (one claim script for the commands a briefing states) |
 | `skills/run-issues/stall_watch.py` | `~/.claude/skills/run-issues/stall_watch.py` (watches a run's ledger from its own process, because a cron fires only when the REPL is idle) |
+| `skills/run-issues/read_session_settings.py` | `~/.claude/skills/run-issues/read_session_settings.py` (prints the session's model and effort and names the file or flag each was read from) |
+| `skills/run-issues/check_run_journal.py` | `~/.claude/skills/run-issues/check_run_journal.py` (refuses a run journal that has fallen behind its own ledger; imports the table parser from `check_commit_order.py`) |
+| `skills/run-issues/check_drill_coverage.py` | `~/.claude/skills/run-issues/check_drill_coverage.py` (refuses a gate verdict that grades a drill-carrying criterion on the implementation record's evidence without saying so) |
+| `skills/run-issues/seams_from_commits.py` | `~/.claude/skills/run-issues/seams_from_commits.py` (the files more than one issue of a run touched, taken from the commits rather than from what the issue files predicted; the script `agents/run-issues-finale.md` names) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
 | `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (38 files, 1,585 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
@@ -81,6 +85,14 @@ Listed in the order the loop runs.
 | `skills/lib/next_batch.py` | `~/.claude/skills/lib/next_batch.py` (orders the next batch of issues so every blocker lands first, and refuses an order it cannot honour) |
 | `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (48 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/check_claude_home.py` | `~/.claude/skills/lib/check_claude_home.py` (refuses a python file that resolves `~/.claude` by climbing parents from `__file__`, which a git worktree breaks) |
+| `skills/lib/check_issue_size.py` | `~/.claude/skills/lib/check_issue_size.py` (counts an issue file's acceptance criteria and refuses one bigger than any issue this pipeline has finished; the count replaces a judgement, and the docstring carries the measured spans it was chosen on) |
+| `skills/lib/test_check_issue_size.py` | `~/.claude/skills/lib/test_check_issue_size.py` (23 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/rulings.py` | `~/.claude/skills/lib/rulings.py` (the rulings file and its reader, so a pass cannot queue a question the human has already answered; `check_queue_shard.py` imports it, and the `ruled` and `record` refusals are off without it) |
+| `skills/lib/test_rulings.py` | `~/.claude/skills/lib/test_rulings.py` (79 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/sweep_parked.py` | `~/.claude/skills/lib/sweep_parked.py` (lists the parked issues that want a human's eye again — those past thirty days, and those some open issue now names as a blocker — so `parked` is a door rather than a deletion with a nicer name; it changes no file) |
+| `skills/lib/test_sweep_parked.py` | `~/.claude/skills/lib/test_sweep_parked.py` (20 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/board.py` | `~/.claude/skills/lib/board.py` (draws the whole tracker as one self-contained page from the issue files and the run ledgers, generated the way `register.md` is generated and thrown away the same way; it calls `next_batch.schedule` rather than re-deriving the order, stores nothing and requests nothing) |
+| `skills/lib/test_board.py` | `~/.claude/skills/lib/test_board.py` (41 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/test_check_claude_home.py` | `~/.claude/skills/lib/test_check_claude_home.py` |
 | `skills/lib/check_issue_links.py` | `~/.claude/skills/lib/check_issue_links.py` (refuses a `[[link]]` in an issue file that names no issue) |
 | `skills/lib/test_check_issue_links.py` | `~/.claude/skills/lib/test_check_issue_links.py` |
@@ -137,6 +149,83 @@ those other sessions' work in the same file, unread. That is one sync decision, 
 two, and it is the human's. The drill travels with the script because it imports it.
 Recorded 2026-09-13, from run `batch-d67136`.
 
+**Three things travel as part of a file rather than as a file, and the 2026-09-20 sync
+records them here so a reader is not left comparing line counts.**
+
+`skills/run-issues/decisions.md` withholds one section, "The retry brief states the
+invariant", 56 lines. It is the decision record for `retry_brief.py`, which is withheld
+directly above, and a decision record for a script nobody has is a reference to nothing.
+
+`skills/run-issues/test_skill_structure.py` carries 25 of the 46 cases its live copy
+gained and holds 21. Every held case grades a sentence of `SKILL.md` that this pack does
+not publish — 24 failures were measured by driving them against the published text — so
+carrying them would turn the pack red for every reader while proving nothing about the
+file they would be reading. The reasons are written above the classes that kept them.
+This is the same rule the two withheld isolation drills sit under: a drill that pins text
+this pack does not ship grades a machine nobody else has.
+
+`skills/run-compare/SKILL.md` publishes the `sizing` subcommand in full, and the way that
+decision moved is worth the line. It was first held back on the manifest's own
+skill-and-script rule, because the pack's `run_compare.py` had five subcommands and no
+`sizing`, and the paragraph leans on `check_issue_size.py`. Both premises fell inside the
+same sync: the script's sixth subcommand arrived with its own re-sync, and the size
+counter was published. The rule did its work — the two went out together — and the
+withholding it produced lasted only as long as the gap it described.
+
+**`memory_dir.py` is withheld with its drill, and the reason is the file it points
+at rather than the path it computes.** The mechanism is general and correct: slug a
+repository's main checkout, resolved through `git rev-parse --git-common-dir` so that a
+worktree answers for the repository owning it, into the matching directory under
+`~/.claude/projects`, and print its `memory`. It exists because five files in the run
+machinery had hard-coded one repository's answer, so a run on a second repository was
+told to write a human's pending actions into the first one's list. But the two files it
+can print are named in the CODE, not in prose: `--pending` and `--closed` append one
+person's pending-actions filename, which rule 2 refuses and which nothing in this pack
+has. Renaming them is not a scrub, because it changes what the script prints, and there
+is nothing here for a new name to point at — `run-issues/SKILL.md` already carries the
+shape `<the project's memory directory>` for a reader to fill by hand. Its drill is
+further away still: three of its cases read two named client checkouts by absolute path.
+A later sync that takes the filename as an argument publishes both, and writing that
+argument is authoring.
+
+**`grade_transcripts.py` is withheld with its drill, and the first reason is an import
+rather than a name.** It grades the Bash calls a repository's own sessions issued
+against its allow list, reading the session directories under `~/.claude/projects`,
+which is the reader's own directory and resolves anywhere. It cannot run here: it
+imports `lib/memory_dir.py`, withheld above, and raises `ModuleNotFoundError` before it
+parses an argument. Two more bar it. Its docstring's load-bearing claim — that the
+quote-aware split lives in `check_permission_floor._outside_quotes` — is false of the
+published floor, which carries no such function, and H3's rule that a claim must be true
+of the published file is the right test for a script as well as a hook. And its report
+prints a person's name on every run, in two lines a reader sees. The drill's only
+real-corpus class is pinned to one absolute checkout.
+
+**`check_run_isolation.py` is withheld, and the reason is the pair rather than the
+pinning.** It refuses a run launch whose worktree has not claimed its own database, and
+the fault under it is real anywhere: two suites that truncate every table between tests,
+pointed at one database, wipe each other and read as regressions. The published
+`SKILL.md` carries no isolation step, so the script would be an exit-1 refuser that
+nothing in this pack invokes, demanding a contract file no published prose asks for.
+That is the `retry_brief.py` decision arriving a second time: script and skill text are
+one sync decision, and it is the human's. Its drill is already withheld above, and a
+refusing script whose test cannot run is worse evidence than no script.
+
+**`run-isolation-2026-09-15.md` is withheld as a session record, which is a class this
+map already names.** It is a design note written for one person to rule on, and it
+argues with the shape he proposed. It names the author eight times, two products, one
+database, three `scripts/*.mjs` files this pack does not ship, and one home-directory
+env path in full. There is no scrub that leaves a skill file behind, only a rewrite. A
+project's own steering file points readers at it, which is where it belongs.
+
+**Three files arrived from a live hardening pass while this sync was running, and they
+are withheld for that reason alone.** `skills/lib/check_rulings_reach.py` and, in the
+hooks block below, `hooks/rulings-write-guard.py` with its drill, were written between
+02:21 and 02:27 on 2026-09-20, after this sync had read its trees and while its workers
+were mid-file. They look publishable and the rulings reader they guard went out in this
+same sync. Publishing a file whose live copy is minutes old, from a pass that had not
+closed, means reading a moving target; the next sync reads them settled. Recorded here
+because leaving them undecided is what the coverage check refuses.
+
 ```withheld
 ~/.claude/skills/run-issues/test_run_isolation.py
 ~/.claude/skills/run-issues/retry_brief.py
@@ -148,6 +237,13 @@ Recorded 2026-09-13, from run `batch-d67136`.
 ~/.claude/skills/run-issues/harness/fixture/*
 ~/.claude/skills/run-issues/harness/fixture/src/*
 ~/.claude/skills/run-issues/harness/fixture/test/*
+~/.claude/skills/lib/memory_dir.py
+~/.claude/skills/lib/test_memory_dir.py
+~/.claude/skills/lib/check_rulings_reach.py
+~/.claude/skills/run-issues/grade_transcripts.py
+~/.claude/skills/run-issues/test_grade_transcripts.py
+~/.claude/skills/run-issues/check_run_isolation.py
+~/.claude/skills/run-issues/run-isolation-2026-09-15.md
 ```
 
 **The run harness is withheld, and this is the decision rather than an oversight.**
@@ -200,6 +296,10 @@ than the four that govern everything else here.
 | `hooks/test_run_issues_brief_cap.py` | `~/.claude/hooks/test_run_issues_brief_cap.py` |
 | `hooks/run-issues-typecheck-gate.py` | `~/.claude/hooks/run-issues-typecheck-gate.py` (refuses a gate spawn while the run's own tree does not typecheck) |
 | `hooks/test_run_issues_typecheck_gate.py` | `~/.claude/hooks/test_run_issues_typecheck_gate.py` |
+| `hooks/gate-commit-guard.py` | `~/.claude/hooks/gate-commit-guard.py` (refuses a `git commit` by one of the adversarial gate roles; the runner commits, a gate reports) |
+| `hooks/test_gate_commit_guard.py` | `~/.claude/hooks/test_gate_commit_guard.py` (21 cases on command strings, plus one pinning the guarded role list against `agents/`) |
+| `hooks/machine-wide-kill-guard.py` | `~/.claude/hooks/machine-wide-kill-guard.py` (refuses a kill that selects processes by pattern rather than by pid) |
+| `hooks/test_machine_wide_kill_guard.py` | `~/.claude/hooks/test_machine_wide_kill_guard.py` (19 cases on command strings alone; carries no corpus and skips nothing) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**
@@ -257,6 +357,30 @@ reader, and a hook whose test cannot run is worse evidence than no test.
 All six are worth publishing and a later sync should do it, message by message. The
 skills that rely on them say so in prose instead: `run-issues/SKILL.md` names the model
 map as a rule the runner holds, and says plainly that this pack ships no refusal for it.
+
+**That reasoning is now out of date, and the 2026-09-20 sync is what dated it.** Two
+paragraphs above call rewriting an `AFK` refusal message to a role "authoring rather
+than scrubbing", and that was measured before the pack had a precedent. It has four now.
+`run-issues-foreground-gate.py`, `run-issues-brief-cap.py` and
+`run-issues-typecheck-gate.py` each ship an `AFK` constant already rewritten to a role,
+a published drill pins that wording, and `skills/run-issues/correction_brief.py` carries
+the same sentence scrubbed the same way. Copying that substitution into a fourth hook is
+following the pack, not authoring for it, which is why `gate-commit-guard.py` ships in
+this sync. The message bar on the remaining withheld hooks therefore falls; what still
+holds each of them back is its own test reading a real checkout, and that is the
+sentence a later sync should act on.
+
+**The same sync found the pack had been publishing the fault it withholds hooks for.**
+Three scripts — `check_briefing_commands.py`, `citation_pass.py` and
+`correction_close.py` — shipped a refusal reading "IT NEVER WAITS FOR <name>. He is AFK
+for every run", with the person's first name in the message a reader sees, and three
+drills carried the name in a method name. It had been public since those files were
+first published. The scrub that fixed it was already in the pack, one directory away, in
+`correction_brief.py`; the three now match it word for word. Two things let it through:
+every earlier sweep matched one capitalisation, and none looked inside an identifier,
+where `\b` does not fire against an underscore. A guard that enumerates the spellings it
+forbids passes the spelling nobody listed — which is the rule `steering/coderules.md`
+states, met here in this map's own files.
 
 **`run-issues-sweep-gate.py` arrived on 2026-09-07 and is withheld on the same rule, with its
 test beside it.** Its refusal message carries the `AFK` constant, "THIS NEVER WAITS FOR
@@ -356,6 +480,8 @@ have, which is worse than having no hook:
 ~/.claude/hooks/worktree-base-drift.py
 ~/.claude/hooks/test_worktree_base_drift.py
 ~/.claude/hooks/test_settings_env.py
+~/.claude/hooks/rulings-write-guard.py
+~/.claude/hooks/test_rulings_write_guard.py
 ~/.claude/hooks/TOOL-SET-PROBE.md
 ```
 

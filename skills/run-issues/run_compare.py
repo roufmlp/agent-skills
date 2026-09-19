@@ -103,6 +103,12 @@ FIGURES = {
     "subagents": Figure("subagents", ("subagents",), "subagents"),
     "idle": Figure("idle share", ("idle",), "idle", better=-1,
                    scale="share"),
+    # Issue 06. Whole-suite readings per issue, runner and subagents together.
+    # Lower is better: the cut exists to drive it down, and 6.00 on `7f5b53`
+    # is the reading it starts from.
+    "suites_per_issue": Figure(
+        "whole suites per issue", ("suites", "per_issue"), "suites",
+        better=-1),
     # Ruling 5's five, recorded rather than divided.
     "wall_min_per_issue": Figure(
         "wall minutes per issue", ("faster", "wall_minutes_per_issue"),
@@ -503,12 +509,12 @@ def escaped_line(count, graded, why) -> str:
 # `/run-compare` above it only reads what this prints.
 # --------------------------------------------------------------------------
 
-SUBCOMMANDS = ("last", "show", "since", "compare", "versions")
+SUBCOMMANDS = ("last", "show", "since", "compare", "versions", "sizing")
 
 # What `last`, `show` and `compare` print for the run itself, above ruling 8's
 # four direction lines. Ruling 13 keeps everything else in the view.
 HEADLINE = ("issues", "hours", "wall_min_per_issue", "agent_h_per_issue",
-            "subagents", "idle", "cache_ratio")
+            "subagents", "idle", "cache_ratio", "suites_per_issue")
 
 PER_MODEL = ("weighted", "per_issue", "orchestrator")
 
@@ -850,6 +856,154 @@ def render_versions(records, log=git_log) -> str:
     return "\n".join(text)
 
 
+def render_sizing(issue_records):
+    """Score class 9's count against what each issue then took.
+
+    The human ruled this loop in on 2026-09-14. Until then the one-implementer
+    bound was a judgement nobody audited: a harden pass wrote an estimate, a
+    run measured a duration, and the two never met. `criteria` is what
+    `check_issue_size.py` counted off the file the implementer was HANDED;
+    `span_minutes` is what that issue then occupied. Both are written once, by
+    `run_costs.py` at the finale. This only reads them.
+
+    It reports the join and the rank correlation, and **it prints no predicted
+    duration**. The count is the rule; turning it back into minutes is the
+    analogy step this whole change removed.
+    """
+    pairs = [(one.get("criteria"), one.get("span_minutes"), one.get("issue"),
+              one.get("batch"), one.get("attempts"))
+             for one in issue_records]
+    usable = [p for p in pairs if isinstance(p[0], (int, float))
+              and isinstance(p[1], (int, float))]
+    if not usable:
+        return (f"No issue line carries BOTH a criteria count and a span. "
+                f"{len(pairs)} line(s) were read. `criteria` is written by "
+                f"`run_costs.py` from the run's fork point, so a run finaled "
+                f"before 2026-09-14 has none, and a run whose transcript could "
+                f"not be read has no span. Nothing is asserted about sizing.")
+
+    lines = ["issue     batch              criteria   span min   attempts",
+             "-" * 58]
+    for count, span, issue, batch, attempts in sorted(usable,
+                                                      key=lambda p: -p[1]):
+        seen = attempts if attempts is not None else "-"
+        lines.append(f"{str(issue):9} {str(batch):18} {count:>8}   "
+                     f"{span:>8.1f}   {str(seen):>8}")
+
+    counts = [p[0] for p in usable]
+    spans = [p[1] for p in usable]
+    lines.append("")
+    lines.append(f"{len(usable)} issue(s) carry both. "
+                 f"criteria: fewest {min(counts)}, most {max(counts)}. "
+                 f"span: shortest {min(spans):.1f} min, "
+                 f"longest {max(spans):.1f} min, "
+                 f"middle {sorted(spans)[len(spans) // 2]:.1f} min.")
+
+    rho = _spearman(counts, spans)
+    if rho is None:
+        lines.append("Rank correlation is not reported: fewer than three "
+                     "issues, or every one carries the same count or the same "
+                     "span, so there is no order to correlate.")
+    else:
+        lines.append(f"Rank correlation of count against span: {rho:+.2f}. It "
+                     f"was +0.62 over the 25 issues measured on 2026-09-14, "
+                     f"when the limit was set. A figure drifting away from "
+                     f"that is the count losing its grip, and the limit is "
+                     f"the human's to re-rule.")
+
+    missing = len(pairs) - len(usable)
+    if missing:
+        lines.append(f"{missing} issue line(s) carry one half or neither and "
+                     f"are in nothing above. A skip is a finding.")
+    lines.append(render_sizing_classes(issue_records))
+    return "\n".join(lines)
+
+
+def render_sizing_classes(issue_records):
+    """Rework cost grouped by the class facts already on the issue line.
+
+    The human asked for this on 2026-09-14, believing the risk sits in
+    migrations. The record says otherwise, and the reason it is READ rather than
+    argued is that their first reading and mine were both wrong once: a proxy
+    built from the issue file's own prose put migration against correction
+    minutes at +0.30,
+    and `migration` as `run_costs.py` actually records it -- the commit's
+    touched paths -- puts it at -0.02. The signal is in `critical_gate`, the
+    runner's judgement that the DIFF touched money, authentication or secrets,
+    at +0.54 against correction minutes over the first 25 issues.
+
+    **No threshold and no refusal.** 17 of those 25 fired the critical gate and
+    13 shipped a migration, so both saturate and a cut fitted to 25 rows would
+    be fitted to noise. This prints the groups and lets the next two runs speak.
+    """
+    groups = (
+        ("shipped a migration", "migration", True),
+        ("shipped no migration", "migration", False),
+        ("money/auth/secrets (critical gate ran)", "critical_gate", True),
+        ("everything else (no critical gate)", "critical_gate", False),
+        ("declared `Writes rows: yes`", "declared_writes_rows", True),
+    )
+    lines = ["", "By class — correction cost, not clock:",
+             "  group                                    n   corr rounds   span min"]
+    printed = 0
+    for label, field, want in groups:
+        rows = [one for one in issue_records if one.get(field) is want]
+        rows = [one for one in rows if one.get("span_minutes") is not None]
+        if not rows:
+            continue
+        printed += 1
+        corr = sorted(one.get("correction_rounds") or 0 for one in rows)
+        spans = sorted(one["span_minutes"] for one in rows)
+        lines.append(f"  {label:38} {len(rows):>2}   "
+                     f"{corr[len(corr) // 2]:>11}   "
+                     f"{spans[len(spans) // 2]:>8.1f}")
+    if not printed:
+        return ("\n  No issue line carries a class fact and a span, so nothing "
+                "is grouped. `migration` and `critical_gate` are written by "
+                "`run_costs.py` at a finale.")
+    lines.append("  Medians. A group is not a comparison: the issue mix is not "
+                 "controlled, and no")
+    lines.append("  threshold is set on any of these. The limit that IS set is "
+                 "the criteria count.")
+    return "\n".join(lines)
+
+
+def _spearman(xs, ys):
+    """Rank correlation, or None when there is no order to rank.
+
+    Written here rather than borrowed: this module imports nothing that
+    computes, and pulling in a dependency for one figure is a dependency the
+    pipeline then carries forever.
+    """
+    if len(xs) < 3 or len(set(xs)) < 2 or len(set(ys)) < 2:
+        return None
+
+    def ranks(values):
+        order = sorted(range(len(values)), key=lambda i: values[i])
+        out = [0.0] * len(values)
+        index = 0
+        while index < len(order):
+            stop = index
+            while (stop + 1 < len(order)
+                   and values[order[stop + 1]] == values[order[index]]):
+                stop += 1
+            # Ties share the average rank, or a column of equal counts would
+            # invent an order the data does not hold.
+            shared = (index + stop) / 2.0
+            for position in range(index, stop + 1):
+                out[order[position]] = shared
+            index = stop + 1
+        return out
+
+    rx, ry = ranks(xs), ranks(ys)
+    mx = sum(rx) / len(rx)
+    my = sum(ry) / len(ry)
+    top = sum((a - mx) * (b - my) for a, b in zip(rx, ry))
+    bottom = ((sum((a - mx) ** 2 for a in rx)
+               * sum((b - my) ** 2 for b in ry)) ** 0.5)
+    return top / bottom if bottom else None
+
+
 def main(argv=None) -> int:
     """The five subcommands. Reads; never writes, never raises.
 
@@ -889,6 +1043,9 @@ def main(argv=None) -> int:
     pair.add_argument("second")
     sub.add_parser("versions", parents=[common],
                    help="lines grouped by pipeline fingerprint")
+    sub.add_parser("sizing", parents=[common],
+                   help="class 9's criteria count against what each issue "
+                        "then took")
 
     args = parser.parse_args(argv)
     if not args.what:
@@ -922,6 +1079,14 @@ def main(argv=None) -> int:
         print(render_since(seen.records, args.days, register_text=text))
     elif args.what == "compare":
         print(render_compare(seen.records, args.first, args.second, text))
+    elif args.what == "sizing":
+        read = run_records.read_issues(repo)
+        print(render_sizing(read.records))
+        if read.damaged:
+            print(f"\n{len(read.damaged)} line(s) of {run_records.ISSUES} "
+                  "could not be parsed and are NOT in anything above. Read "
+                  "them by hand.")
+        return 0
     else:
         print(render_versions(seen.records))
 

@@ -32,6 +32,33 @@ rather than pass. `run-issues/SKILL.md` already carries the general form of that
 rule for worktree readiness: a green produced without dependencies on disk is a
 false green, and this is the same fault one layer up.
 
+## When the runner runs this, and why a refusal buys the round already open
+
+The human ruled on 2026-09-13 (fork `q-finale-be624c-03` of run `batch-be624c`)
+that the runner grades coverage BEFORE step 5, and that a refusal here is an item
+for the ONE correction round the verdicts already bought. The cap does not move
+and no second round exists.
+
+The gap was structural. `SKILL.md` ordered this check at the commit step, which
+is after step 5, so a refusal could only ever arrive with the round spent, and
+the rule that sends anything bigger to a register row then fired every time. It
+fired twice in one run: issue 05c shipped two untested empty states, one of them
+the branch every record in the product rendered that day, and issue 06 shipped 21
+untested lines including both of its write actions. Both became rows and both
+were promoted, so the row road worked -- it cost a later hardening pass and a
+later run slot each, where two component tests inside a round already open cost
+minutes. `decisions.md` holds the measurement: +4 to +5 per cent of a run that
+has two gaps, and under a minute on a run that has none.
+
+Ruling Q4 of ticket 40 is untouched by that ordering. Q4 moved the SUITE out of
+the runner's foreground and into the verify gate's private copy, and the suite
+stays there. Only this script moves, and it reads a report that already exists.
+
+A correction round invalidates the gate's report, which then predates the code,
+so the runner re-runs coverage in the RUN TREE afterwards with no
+`--report-root`. `/coverage/` is gitignored, so it never reaches `git status`.
+That fact lived in one run ledger's carry-forward and would have died with it.
+
 **The threshold defaults to 100 and that is not severity theatre.** Every other
 number is arbitrary and would be argued down once per run. One hundred percent
 of CHANGED executable lines is the standing expectation of a pipeline whose

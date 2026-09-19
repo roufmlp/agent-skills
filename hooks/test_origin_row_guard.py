@@ -159,6 +159,59 @@ class TestTheEditHole(unittest.TestCase):
         self.assertEqual(code, 0)
 
 
+class TestItJudgesTheAdditionAndNotTheFile(unittest.TestCase):
+    """A bad row somebody else left on disk may not refuse the next writer.
+
+    One run met this twice, each time blocking a role that did not write the bad
+    row, and each time the append that would have repaired the row was refused by
+    the same rule. The human ruled it on 2026-09-17.
+    """
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / "register.d" / "run-a" / "rg454.md"
+        self.path.parent.mkdir(parents=True)
+        # The table is sound and one row already on it is not: an empty origin
+        # cell, which is exactly what blocked a review gate mid-run.
+        self.path.write_text(GOOD + EMPTY_CELL.split("|---|", 1)[1].split("\n", 1)[1])
+
+    def test_a_good_row_appended_under_a_bad_one_passes(self):
+        good = ("| rg454-03 | a third thing | operator | low | candidate "
+                "| 149g/batch-170a59 | candidate; bugs/rg454-03.md |\n")
+        code, err = run_hook({"tool_name": "Edit",
+                              "tool_input": {"file_path": str(self.path),
+                                             "new_string": good}})
+        self.assertEqual(code, 0, err)
+
+    def test_the_bad_row_on_disk_still_refuses_when_it_is_the_one_written(self):
+        """The rule itself is unchanged. Only whose fault it is has moved."""
+        bad = ("| rg454-04 | a fourth thing | operator | low | candidate "
+               "|  | candidate; bugs/rg454-04.md |\n")
+        code, err = run_hook({"tool_name": "Edit",
+                              "tool_input": {"file_path": str(self.path),
+                                             "new_string": bad}})
+        self.assertEqual(code, 2)
+        self.assertIn("rg454-04", err)
+
+    def test_a_table_on_disk_declaring_no_origin_column_still_refuses_a_new_row(self):
+        """The header check is deliberately NOT filtered.
+
+        A row joining a table that cannot carry the key has no origin to name,
+        whoever typed the header.
+        """
+        path = Path(self.tmp.name) / "register.d" / "run-a" / "rg455.md"
+        path.write_text(NO_COLUMN)
+        row = ("| rg455-02 | another thing | operator | low | candidate "
+               "| candidate; bugs/rg455-02.md |\n")
+        code, err = run_hook({"tool_name": "Edit",
+                              "tool_input": {"file_path": str(path),
+                                             "new_string": row}})
+        self.assertEqual(code, 2)
+        self.assertIn("origin", err)
+
+
 class TestItNeverHalts(unittest.TestCase):
     def test_a_missing_check_script_passes_rather_than_throwing(self):
         """`hooks` and `skills` are separate repositories. One can sit at a

@@ -67,8 +67,8 @@ TERMINATOR = "=== CITATION PASS COMPLETE ==="
 TAIL = re.compile(re.escape(TERMINATOR) + r"\s+exit=(\d+)\s+pinned=(\S+)")
 
 AFK = (
-    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR ABDUL. He is AFK for every "
-    "run. Take one of the two roads above now and carry on."
+    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR THE HUMAN. The human is AFK "
+    "for every run. Take one of the two roads above now and carry on."
 )
 
 

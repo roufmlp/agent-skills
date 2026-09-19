@@ -65,7 +65,7 @@ def test_the_refusal_names_the_count_and_the_cap():
     assert str(mod.CAP_WORDS) in message
 
 
-def test_the_refusal_never_waits_for_abdul():
+def test_the_refusal_never_waits_for_the_human():
     message = decide(words(900))[1]
     assert "not a halt" in message.lower()
 

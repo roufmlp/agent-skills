@@ -345,7 +345,14 @@ def live_run_trees(cwd):
     spec.loader.exec_module(ledger)
     worktrees = ledger.list_worktrees(cwd)
     candidates = ledger.collect_candidates(worktrees=worktrees)
-    return tuple(getattr(item, "tree", "") for item in ledger.runs(candidates))
+    # The tree a run OWNS is the one its `Worktree:` line names, not the tree
+    # its ledger copy sits in: a live copy also sits in the main checkout, and
+    # linked worktrees nest under it. `parse_worktree_value` is the ledger's own
+    # reading of that line, so there is one definition of the named tree.
+    return tuple(
+        ledger.parse_worktree_value(getattr(item, "worktree_line", None))
+        or getattr(item, "tree", "")
+        for item in ledger.runs(candidates))
 
 
 def main():

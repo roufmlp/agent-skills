@@ -2118,3 +2118,146 @@ finale is the first thing after it that looks.
 
 `bypassPermissions` refuses nothing except what a PreToolUse hook refuses, and
 the hooks were measured the same day to still fire and still block in that mode.
+
+---
+
+## The coverage check moves before the correction round (2026-09-13)
+
+The human ruled fork `q-finale-be624c-03` of run `batch-be624c`. **The runner runs
+`check_diff_coverage.py` before step 5, and its refusals are items for the one
+correction round the verdicts already bought.** The one-round cap does not move,
+and no second round is created.
+
+**The gap was structural, not a judgement.** `SKILL.md` ordered the check "at the
+commit step", which is after step 5. So a coverage refusal could only ever arrive
+with the round already spent, and the rule "anything bigger becomes a register
+row" then sent it to a row every time. Nothing in the run was doing this wrong.
+
+**The two incidents, both in `batch-be624c`, both on 2026-09-13.**
+
+- Issue 05c, row `rn05c-1`. 87 of 89 changed lines executed. The two unexecuted
+  were two empty states on one record page. One of them was the branch EVERY
+  record in the product rendered that day, because a migration in the same batch
+  adds the column it tests for as nullable and nothing in that batch fills it.
+  The repair was two component tests. That issue's correction round ran 4.3
+  minutes and was spent on prose.
+- Issue 06, row `rn06-1`. 99 of 120 changed lines executed. The unexecuted lines
+  included BOTH of the issue's write actions. The runner measured that this is a
+  departure from the repository rather than its convention: sign-out 3 of 3
+  statements, sign-in confirm 10 of 10, login 4 of 4. That issue's round ran 8.6
+  minutes and was spent on the read road.
+
+Both rows were promoted, into issues 74 and 73. The row road worked. What it cost
+is a later hardening pass and a later run slot for each.
+
+**The measured cost of the change, taken off `batch-be624c`'s own cost record.**
+
+The run: 6.81 h wall clock, 6.83 h weighted agent time, 47 spawns, 25 per cent
+idle. All ten issues had a correction round; the ten ran 79.4 minutes in total,
+mean 7.9.
+
+The check itself adds nothing that matters. It reads a report the verify gate has
+already written and runs a `git diff`; there is no suite in it. Ten issues, ten
+invocations, seconds each.
+
+The cost is the extra work inside the round, and only on an issue that has a gap
+— two of ten here. The calibration is in the run's own rounds: a round that only
+deleted prose ran short (issue 05 at 2.3 min, 40 at 3.8, 05c at 4.3) and a round
+that WROTE TESTS ran long (05f at 11.9 with a test gap, 05b at 12.1 for two
+undriven throws). So 05c's round would have gone from 4.3 to about 9-11 minutes,
+and 06's from 8.6 to about 18-22. **Estimated +15 to +20 minutes, which is +4 to
++5 per cent of the run.** No new spawn: two existing rounds get longer.
+
+Against that, one issue on this run cost about 34 minutes of agent time all in —
+implementer 10.5, verify gate 9.2, review gate 6.5, correction round 7.9 — so the
+two rows cost roughly 68 minutes of a later run, plus two hardening passes, for
+which no measurement exists anywhere in the audit and none is claimed here.
+
+**The shape that made this the right road: the cost is proportional to the
+defects it catches.** A run with no coverage gap pays ten script invocations and
+nothing else.
+
+**Considered and rejected: giving a runner-found finding its own round.** That
+was the fork's own proposal. It uncaps the round — every check the runner later
+adds buys another one — and it makes the runner judge whether a finding counts as
+"runner-found", which is the judgement that drifts. It also breaks the invariant
+that makes the cap simple, that while any row shows `correction` no new
+implementer spawns. Refused under `~/.claude/CLAUDE.md`'s third class: a rule an
+agent must remember to apply is not a rule that works.
+
+**Considered and rejected: the verify gate runs the check itself.** It cannot.
+The private-copy recipe excludes `.git`, and git reads are a classifier-judged
+command class a gate in `auto` mode should expect to be refused, so a gate cannot
+compute a diff range.
+
+**One fact was written down at the same time, having never been written down
+before.** A correction round invalidates the gate's coverage report, because the
+report then predates the code, so the check re-runs in the run tree afterwards
+with no `--report-root`. Run `batch-be624c` carried that in its ledger's
+carry-forward, where it would have died with the ledger.
+
+---
+
+## Sitting 6 of ticket 36 — paying for the lines the coverage ruling added (2026-09-13)
+
+`SKILL.md` sat at 1199 lines through four commits, one below the ceiling ruling 14
+set. Then `f8f02f4`, the coverage-check ruling, added 45 lines and moved nothing
+out, and the file reached 1244. `test_the_skill_is_below_its_ceiling` went red, and
+`lib/run_python_suites.py` then refused that file on every walk, so any new red
+suite would have sat behind a known one.
+
+Two sittings answered that red, and neither knew about the other. `c099bba` and
+the commits around it moved the coverage ordering story into
+`check_diff_coverage.py`'s docstring and brought the file back to 1199. This
+sitting was cut before that landed and paid the same debt more widely: nineteen
+stories out, and 1173 lines once the two were merged. Where the two touched the
+same paragraph the earlier one won, because it is tighter and it shipped first.
+
+The stories left, the rules stayed, and the drill on `SKILL.md` carries both
+halves of every move: one list for the rule each move left behind, one for the
+story and the file that is now its only home. The anchors went in before one line
+moved, so the anchor test was already watching while the edits happened.
+
+Most of what moved was a second copy. `decisions.md` or a script's own docstring
+already held the story in full, and `SKILL.md` was carrying it again. Two edits had
+to be reversed, which is the discipline working: deleting the refutation beside
+`run_in_background`, and deleting the cron's one real rescue, both took a
+correction out with the story, and `test_the_reason_travels_with_the_instruction`
+refused them.
+
+Three stories had nowhere else to go, and all three come from the same night.
+
+**The cron job that never fired.** Measured 2026-09-12: a `CronCreate` job due at
+04:44:00 sat unfired at 04:45:32, under one tool call that held 04:42:02 to
+04:45:32. A cron job is evaluated only while the REPL is idle, and a session behind
+a permission modal is mid-query. That is why run `batch-200d42` stalled for 208.8
+minutes with a wakeup installed, and why the stall watch is a separate process.
+
+**What the modals cost that run.** `batch-200d42` lost 5.7 hours of its 9.22 to two
+permission prompts with nobody there to press them. The same day, `coderules-gate.py`
+and an unconditional `PreToolUse` hook were both measured still blocking under
+`bypassPermissions`, with the denial still reaching the agent, which is what makes
+the mode safe to launch in. The rest of that reasoning is under "Why the launch mode
+is `bypassPermissions` and not `dontAsk`" above.
+
+**The floor that graded the wrong list.** `batch-200d42`'s pre-flight printed
+`ok: 12 command class(es)` and the run then lost 3 h 37 m to a permission modal on
+issue 441's verify gate. The twelve were the runner's classes. The command that
+halted was a gate's, and it was compound: `cd ... && export PATH=... && sed ... &&
+npx vitest ... | tail`. `npx vitest*` was tracked and the other four segments were
+in no allow list, and the classifier admits a compound command only when every
+segment is admitted. `check_permission_floor.py` now grades four roles and splits
+each shape into segments.
+
+Two facts from the other sitting's own record of the same day, kept because this
+account does not carry them. The human ruled the road at the keyboard while
+tracker-tooling issue 03 was being merged: move a story out, never raise the
+ceiling — "That is the correct way, no need story in skill." And one measurement
+had no home and is written here rather than deleted: **run `batch-200d42` lost 5.7
+hours of 9.22 to two permission prompts nobody was there to press.** That is why
+the launch mode is part of the launch line and not an option.
+
+**Those two lists are not reproduced in this pack.** They grade the text of a
+`SKILL.md` this pack ships at an earlier version, so they would report a move
+that has not happened here. `test_skill_structure.py` records the withholding
+beside the cases it kept, and the lists travel when `SKILL.md` travels.

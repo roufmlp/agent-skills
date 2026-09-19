@@ -30,7 +30,9 @@
    from existing code, check `docs/patterns.md`. Recorded there: reuse it and cite
    the entry. Not recorded: what you found is evidence somebody did it once, not
    that it is right. Copy it only if you can state in one line why it is correct,
-   and put that line in your final message. Repetition never confers approval — a
+   and put that line in your final message. Either way, take the WHOLE shape or
+   say in one line which part you left and why: a half-copy keeps the fence and
+   drops what the fence was built around. Repetition never confers approval — a
    second occurrence is not a convention, and neither is a fifth.
 
 ## Security: the non-negotiables
@@ -66,6 +68,11 @@
 - Check object ownership on every request: not "is this user logged in" but "does
   this row belong to this user". Guessable IDs plus a missing ownership check is
   the most common API hole there is.
+- **Code that runs outside the row policy carries the policy's own test inside
+  it.** `security definer`, the service role, the admin client: the table's
+  policy does not run, so the function's own `where` clause IS the policy for
+  every caller that reaches it. "The caller is authenticated" is never that
+  test. Name the right, and ask the question the right was granted on.
 - Sessions in httpOnly, secure, sameSite cookies. Magic links single-use and
   expiring. Auth endpoints and anything that sends email or WhatsApp messages get
   rate limits; the key being public means anyone can hammer the endpoint, and you
@@ -74,6 +81,18 @@
 ### Input, output, webhooks
 - Validate every input on the server with a schema (zod or equivalent), whatever
   the client already validated.
+- **A guard is written and tested against what the CONSUMER does with the value,
+  never against what the string appears to say.** `pg` honours a `host=` query
+  parameter over the URL's own host, so a local-only check reading `.hostname`
+  passes a string that dials elsewhere. The same gap opens in redirect
+  allowlists, filename fences and every URL parser.
+- **A guard over an artefact reads the WHOLE artefact and refuses what it cannot
+  place. It never enumerates what it forbids.** A guard built as a list of banned
+  spellings passes anything spelled a way the author did not list, and it reads green
+  while doing it. Eight guards failed this way in one run. Build the collector so an
+  item it cannot recognise lands in the refused pile, assert the collector found
+  something, and drive the guard on every input it must refuse plus one control that
+  must pass.
 - User content renders escaped. `dangerouslySetInnerHTML` with user data does not
   pass review (XSS).
 - File uploads: allowlist of types, size cap, stored in object storage, never
@@ -141,5 +160,8 @@ Run before anything goes live with real users or real data, every time:
 _Sources: [OWASP Top 10 (2025)](https://owasp.org/Top10/2025/);
 [Supabase production checklist](https://supabase.com/docs/guides/deployment/going-into-prod);
 [Supabase, Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)._
-_Last updated: 2026-07-27 — added rule 6, reuse approved patterns
-(docs/patterns.md precedence over unreviewed precedent)._
+_Last updated: 2026-09-18 — a guard reads the whole artefact and refuses what it
+cannot place, from run batch-0b9c1d, ruling `q-0b9c1d-04`.
+2026-09-13 — a guard is written against what the consumer does;
+code outside the row policy restates the policy; rule 6 covers the half-copy.
+All three from run batch-d67136._

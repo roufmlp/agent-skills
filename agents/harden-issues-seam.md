@@ -69,6 +69,22 @@ usually the ones most worth reading across.
 Cross-issue sharpenings go into the affected issues' `## Must still be true`,
 each naming the sibling issue it came from, so the reason survives the edit.
 
+**Both directions, before the stamp — the downstream half is yours.** You run
+once and alone, so you are the only stage that may write a bullet into another
+issue's `## Blocked by` without racing another writer. Each attacker's findings
+file carries a `## Downstream edges` section listing what its own issue's
+dependants are; read them, add what only the whole set shows, and write every
+edge into `## Downstream edges` in your own `seam.md` — one bullet each,
+`<dependent issue> — blocked by <hardened issue>, <the quoted sentence that shows
+it>`. Then add the bullet naming the hardened issue to each dependent issue's
+`## Blocked by`. An attacker writes the upstream half on its own issue;
+`~/.claude/skills/lib/check_issue_links.py` refuses a stamped issue carrying no
+section, and one whose prose names a dependency its section omits. Measured on
+one project, 2026-09-13: not one of the 22 needs-harden issues was named as a
+blocker by any other issue, and issue 64, the tab bar, was needed by every screen
+in prose only. The human ruled the split of the two directions on 2026-09-13: the
+attackers report, you write.
+
 Everything else goes to `seam.md` in the findings directory named above —
 `.scratch/<feature>/harden/seam.md` for an attended pass,
 `.scratch/<feature>/runs/<batch-id>/harden/seam.md` for a run: the gaps you found,

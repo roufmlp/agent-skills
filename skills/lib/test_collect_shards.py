@@ -44,7 +44,9 @@ from collect_shards import (
     render,
     ruled_entries,
     EmptyRefused,
+    PoisonRefused,
     SplitRefused,
+    control_bytes,
     split,
     unmatched_answers,
     write,
@@ -899,6 +901,92 @@ class QueueIdTest(TreeFixture):
                 REGISTER.shards(self.main, self.feature), "main", f"{HISTORY}.md"),
                 encoding="utf-8") as handle:
             self.assertNotIn("q-h-", handle.read())
+
+
+class ControlByteTest(TreeFixture):
+    """The fault run `batch-d41839` shipped, measured on 2026-09-15.
+
+    A gate found a real defect about a NUL byte reaching a database column, and
+    in writing its evidence it put a LITERAL NUL byte into its register shard.
+    The shard was committed with it. From that moment every plain `grep` over
+    the generated register answered NOTHING, with no error, because `grep`
+    treats a file holding a NUL as binary.
+
+    It cost two findings. Issue 08c's verify gate reported that the register
+    carried no row from that run, and the run journal refined that to "stale,
+    not unreachable". The register in fact carried 229 mentions of the batch.
+    Both readings came from a grep that was lying, and a later reader would
+    have believed either one.
+
+    THE GUARD IS WRITTEN AGAINST WHAT THE CONSUMER DOES WITH THE BYTES, never
+    against what the text appears to say. Two consumers decide the set: `grep`,
+    which goes blind on a NUL, and a terminal, which obeys an ESC. Tab, newline
+    and CARRIAGE RETURN are let through — a CR is half of a legitimate line
+    ending and no reader misbehaves on one. The human's ruling said "tab and
+    newline"; carriage return is added here with that reason, and it widens
+    what is allowed rather than narrowing it.
+    """
+
+    def poison(self, tree, name, byte):
+        """A shard carrying one raw byte, written past the text layer."""
+        path = self.shard(tree, name, "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 | a row about a " + byte + b" byte | open |\n")
+        return path
+
+    def test_a_nul_byte_in_a_shard_is_named(self):
+        self.poison(self.tree_a, "gate", b"\x00")
+        report = control_bytes(collect(REGISTER, self.trees, self.feature))
+        self.assertIn("gate", report)
+        self.assertIn("0x00", report)
+
+    def test_an_escape_byte_is_named_too(self):
+        self.poison(self.tree_a, "gate", b"\x1b")
+        self.assertIn("0x1b", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_tab_newline_and_carriage_return_pass(self):
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 |\tone\r\ntwo |\n")
+        self.assertEqual("", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_a_clean_shard_reports_nothing(self):
+        self.shard(self.tree_a, "gate", "| r1 | an ordinary row | open |\n")
+        self.assertEqual("", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_the_report_names_the_line_so_the_byte_can_be_found(self):
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"clean line\nsecond line\nthird \x00 line\n")
+        self.assertIn("line 3", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_check_refuses_a_poisoned_shard(self):
+        self.poison(self.tree_a, "gate", b"\x00")
+        code, _, err = self.run_main("--kind", "register", "--feature", self.feature,
+                                     "--check")
+        self.assertEqual(1, code)
+        self.assertIn("0x00", err)
+
+    def test_the_write_is_refused_rather_than_the_board_poisoned(self):
+        """The board is never built from a poisoned shard.
+
+        The human's ruling named `--check`. The write is refused as well,
+        because a check that only reports leaves the poisoned board on disk for
+        every reader until somebody runs the check. `~/.claude/CLAUDE.md`:
+        build the thing that can refuse.
+        """
+        self.poison(self.tree_a, "gate", b"\x00")
+        with self.assertRaises(PoisonRefused):
+            write(REGISTER, self.main, self.trees, self.feature)
+
+    def test_a_poisoned_write_leaves_the_old_board_alone(self):
+        self.shard(self.tree_a, "gate", "| r1 | first, clean | open |\n")
+        target = write(REGISTER, self.main, self.trees, self.feature)
+        before = open(target, encoding="utf-8").read()
+        self.poison(self.tree_b, "second", b"\x00")
+        with self.assertRaises(PoisonRefused):
+            write(REGISTER, self.main, self.trees, self.feature)
+        self.assertEqual(before, open(target, encoding="utf-8").read())
 
 
 if __name__ == "__main__":

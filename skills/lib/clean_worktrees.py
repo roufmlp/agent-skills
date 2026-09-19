@@ -28,6 +28,8 @@ reason to remove it.
 
     main checkout        never a candidate; it is not under the worktrees dir
     the current tree     removing the tree you are standing in loses the shell
+    locked               git locks the tree, so `git worktree remove` would
+                         refuse it; the lock reason names the holder
     dirty                uncommitted or untracked work; `git status --porcelain`
     detached HEAD        no branch, so "merged" has no meaning to test
     unmerged branch      NOT an ancestor of the base ref. Measured across two
@@ -71,6 +73,10 @@ import sys
 
 WORKTREE_DIR = pathlib.Path(".claude") / "worktrees"
 
+# Where an installed Claude Code binary lives. A session started from here
+# has the VERSION NUMBER as its command name, not "claude".
+VERSIONS_DIR = pathlib.Path.home() / ".local" / "share" / "claude" / "versions"
+
 
 class GitError(RuntimeError):
     pass
@@ -90,7 +96,16 @@ def git(repo: str, *args: str) -> str:
 def worktrees(repo: str) -> list[dict]:
     """Parse `git worktree list --porcelain` into one dict per tree.
 
-    Keys: `path`, and `branch` (short name) or None for a detached HEAD.
+    Keys: `path`, `branch` (short name) or None for a detached HEAD, `locked`
+    (bool) and `lock_reason` (git's own text, or "").
+
+    THE LOCK IS READ BECAUSE GIT ENFORCES IT AND THIS SCRIPT DOES NOT FORCE.
+    `git worktree remove` refuses a locked tree without `-f -f`, which nothing
+    here passes, so a locked tree listed as removable is an instruction git will
+    refuse every time it is run. Measured in one repository on 2026-09-19: ten
+    of eleven listed trees were held by live sessions the human had ruled must
+    stay; the report proposed all ten and git refused all ten. Nothing was lost,
+    and the report was wrong for ten lines out of twelve.
     """
     out = git(repo, "worktree", "list", "--porcelain")
     trees, current = [], {}
@@ -102,7 +117,14 @@ def worktrees(repo: str) -> list[dict]:
             continue
         key, _, value = line.partition(" ")
         if key == "worktree":
-            current = {"path": value, "branch": None, "detached": False}
+            current = {"path": value, "branch": None, "detached": False,
+                       "locked": False, "lock_reason": ""}
+        elif key == "locked":
+            # `locked` alone, or `locked <reason>`. The reason is git's own text
+            # and is quoted back rather than interpreted: it names the holder,
+            # which is the one thing the reader needs to decide what to do.
+            current["locked"] = True
+            current["lock_reason"] = value.strip()
         elif key == "branch":
             current["branch"] = value.removeprefix("refs/heads/")
         elif key == "detached":
@@ -140,31 +162,87 @@ def is_dirty(path: str) -> bool:
     return bool(proc.stdout.strip())
 
 
+class ProbeFailed(RuntimeError):
+    """A process probe did not answer, so nothing may be concluded from it."""
+
+
+def versioned_claude_pids() -> list[str]:
+    """PIDs whose EXECUTABLE sits under `VERSIONS_DIR`.
+
+    `lsof -c claude` matches a command NAMED claude. A session started from
+    `~/.local/share/claude/versions/<version>` carries the version number as
+    its command name, so the named test alone cannot see it. Measured
+    2026-09-18: this script offered eight merged worktrees for removal and
+    `lsof +D` found a live process in every one of the eight.
+
+    `ps -o comm=` prints the executable path itself. That is the thing the
+    rule names, and unlike the command line no caller can spell it another
+    way.
+
+    Raises `ProbeFailed` on anything but a clean answer, because the caller
+    reads a failed probe as "keep the tree".
+    """
+    try:
+        proc = subprocess.run(
+            ["ps", "-A", "-o", "pid=,comm="],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise ProbeFailed("ps did not answer") from exc
+    if proc.returncode != 0:
+        raise ProbeFailed(f"ps -A: {proc.stderr.strip()}")
+    prefix = str(VERSIONS_DIR) + os.sep
+    pids = []
+    for line in proc.stdout.splitlines():
+        pid, _, comm = line.strip().partition(" ")
+        if pid.isdigit() and comm.strip().startswith(prefix):
+            pids.append(pid)
+    return pids
+
+
+def cwds_of(*select: str) -> list[str]:
+    """The cwd of every process `select` picks out, one path per entry.
+
+    `select` is the lsof selector -- `-c claude`, or `-p 41,42`. The exit
+    status is not read: lsof exits non-zero when one named pid has already
+    gone, which is not a reason to distrust the lines it did print.
+    """
+    try:
+        proc = subprocess.run(
+            ["lsof", "-a", "-d", "cwd", *select, "-Fn"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise ProbeFailed("lsof did not answer") from exc
+    return [line[1:] for line in proc.stdout.splitlines() if line.startswith("n")]
+
+
 def held_by_process(path: str) -> bool:
-    """True when a running `claude` process has its cwd at or inside `path`.
+    """True when a running Claude session has its cwd at or inside `path`.
+
+    Two probes, because one command name does not cover both ways a session
+    is started: `lsof -c claude` for a command named claude, and a second
+    `lsof -p` over the pids whose executable sits under `VERSIONS_DIR`.
 
     The shape is `session_alive` in `run-issues/stall_watch.py`, reused whole
-    rather than in part: `lsof -a -d cwd -c claude -Fn` prints one `n<path>` line
-    per claude process, which is a fixed amount of work. The obvious
+    rather than in part: each lsof call is a fixed amount of work. The obvious
     alternative, `lsof +D <path>`, walks the entire tree and would recurse
     `node_modules` on every candidate.
 
-    Where `lsof` is missing, fails, or is slow enough to time out this returns
-    True and the tree is kept. A tool that did not answer must never read as
+    Where any probe is missing, fails, or times out this returns True and
+    the tree is kept. A tool that did not answer must never read as
     "nothing is running".
     """
     want = os.path.realpath(path)
     try:
-        proc = subprocess.run(
-            ["lsof", "-a", "-d", "cwd", "-c", "claude", "-Fn"],
-            capture_output=True, text=True, timeout=30,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        cwds = cwds_of("-c", "claude")
+        pids = versioned_claude_pids()
+        if pids:
+            cwds += cwds_of("-p", ",".join(pids))
+    except ProbeFailed:
         return True
-    for line in proc.stdout.splitlines():
-        if not line.startswith("n"):
-            continue
-        cwd = os.path.realpath(line[1:])
+    for raw in cwds:
+        cwd = os.path.realpath(raw)
         if cwd == want or cwd.startswith(want + os.sep):
             return True
     return False
@@ -179,6 +257,9 @@ def judge(repo: str, tree: dict, base: str, here: str) -> tuple[bool, str]:
         return False, "the tree this command is running in"
     if tree.get("detached") or not tree.get("branch"):
         return False, "detached HEAD, so there is no branch to test"
+    if tree.get("locked"):
+        reason = tree.get("lock_reason") or "no reason given"
+        return False, f"git locks this tree: {reason}"
     if is_dirty(path):
         return False, "uncommitted or untracked work in the tree"
     if not is_merged(repo, tree["branch"], base):

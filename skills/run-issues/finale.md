@@ -42,8 +42,8 @@ the board render is safe to repeat:
    had no live harness, the briefing says so; the gap is silent otherwise. (R3,
    adopted by the human 2026-08-18; `decisions.md` holds the finale it happened to.)
 
-   Preview deploy is **skipped in this repo** by standing decision — see the repo
-   CLAUDE.md. Say so in the briefing; never work around it; never re-litigate it.
+   Preview deploy: do what the repo's own CLAUDE.md documents. Where it documents a
+   skip, say so in the briefing; never work around it; never re-litigate it.
 
    **When you drive a server action live to prove it dispatches, pass an argument
    that CANNOT write.** Read the action's first validation branch and pass
@@ -187,8 +187,8 @@ the board render is safe to repeat:
    direct fix — see "The direct road" in `~/.claude/CLAUDE.md`. Without the sweep those
    rows belong to no run and accumulate for ever (ticket 29 of the pilot-delivery map,
    2026-08-12). Of the rest it promotes on the audience-and-severity
-   thresholds, and refuses the others. A promoted row becomes an issue file at
-   `Status: needs-harden` with one category role and a link to its bug file. All three
+   thresholds, and refuses the others. A promoted row becomes an issue file at the
+   status that brief sets, one category role, and a link to its bug file. All three
    exits delete the row, so the register's length stays the promotion backlog and
    nothing else.
 
@@ -207,16 +207,22 @@ the board render is safe to repeat:
    in it. The runner spawns, gets two lists back, and appends them to
    `merge-briefing.md`, one line each. `/daily-brief` carries both to the human and they
    hold the veto over either direction.
-4. **Tear down what this run seeded outside the repo, then measure the run and
-   append its row.** The judgement step above is the last thing that drives the app,
-   so anything the launch created outside git — a database workspace row, a sandbox
-   tenant — goes first, by the id the ledger itself records. Where the project has a
-   teardown script, run it here and let it read the id off the ledger rather than
-   taking one by hand: deleting by the marker the run itself wrote is what the
-   "delete only rows you marked" rule in `SKILL.md` requires. A teardown that
-   refuses is not a stop — journal the refusal, put its printed remedy into the merge
-   briefing as an action on the human, and go on to the measurement. Nothing else in
-   the finale needs the teardown to have happened.
+4. **Drop what this run made, then measure the run and append its row.**
+   The judgement step above is the last thing that drives the app, so anything the
+   launch created outside git goes first here: this run's databases, and any
+   workspace row or sandbox tenant the launch seeded. **Where the project declares a
+   run-isolation contract, run the `drop` verb that declaration names** — it is the
+   same file the launch's permission floor graded, so the command is already
+   permitted. A drop matches on the batch id in the name, takes the run worktree's
+   database and every private copy's, and KEEPS any a session still holds. Dropping
+   on the marker the run itself wrote is what the "delete only rows you marked" rule
+   in `SKILL.md` requires. Where the repo also seeds fixture rows, its `drop` verb
+   deletes them first on the same marker: one project's audits the cascade of every
+   foreign key from its workspace table and refuses a row carrying another batch id
+   (ticket 38, sitting 2, ruling 12). **A refusal here is exit 1 with the cause
+   printed, and the finale continues** — journal it, put the printed road into the
+   merge briefing as an action on the human, and go on to the measurement. Nothing
+   else in the finale needs the drop, and the brief's sweeper takes what is left.
 
    Then run
 

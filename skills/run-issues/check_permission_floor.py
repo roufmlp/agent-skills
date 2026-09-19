@@ -73,6 +73,26 @@ it is now per-SEGMENT, through `segments()` and `judge_command()`.
 Measured across batch-200d42's 18 gate transcripts: 1009 of 1011 gate Bash calls
 carried at least one segment no tracked rule covered. Ten were refused outright.
 
+## The four strings that named another repository
+
+This machinery is one copy serving more than one repository. Until 2026-09-13 the
+runner's list held four literal commands of the shape
+
+    node --env-file=<one repo's canonical env file> scripts/<name>.mjs
+
+and the verify gate's list held a fifth. That env file belongs to ONE of those
+repositories, and it holds a live service-role key, a production database URL and six
+more secrets. The other repository has none of those four scripts, so those are
+commands its runs can never issue -- and the floor still refused every one of its
+launches until its own `.claude/settings.json` carried a rule naming the first
+repository's secret file. The rule sat there for exactly that reason.
+
+A check that makes one repository hold a permission over another repository's secret
+file is doing harm. Repo-specific shapes now come from the repo under test, in
+`.claude/run-classes.json`, which the repo owns and git carries into every worktree. A
+repo that declares none is graded on the shapes every run issues whatever the repo, and
+the output says it declared none rather than printing a bare `ok`.
+
 ## What it cannot see, and does not pretend to
 
 A command no run has issued yet, and any role in `UNGRADED_ROLES`. The class lists
@@ -93,6 +113,9 @@ Usage:
 
     python3 check_permission_floor.py --repo .
     python3 check_permission_floor.py --repo . --class "npx playwright test"
+
+`--repo` is the run's own worktree, and the repo classes are read from that worktree's
+`.claude/run-classes.json`.
 
 Exit 0 when every class is tracked, 1 on any refusal, 2 when a file is unreadable.
 """
@@ -117,6 +140,13 @@ import sys
 # -- 9 verify, 8 review, 1 review-critical, 1011 Bash calls. The shapes below are
 # verbatim, with paths, file names and feature directories generalised. What is
 # NOT here is in `RULED_UNCOVERED`.
+#
+# Every list here is repo-INDEPENDENT: a shape that any run in any repo issues.
+# The paths inside them are the measured ones and no verdict turns on them --
+# `cd /home/user/project` is graded by `Bash(cd:*)` and would be graded the same
+# with any path after `cd`. A shape whose PATH is load-bearing, such as a
+# `node --env-file=<that repo's env>` call, is repo-specific and belongs in
+# `.claude/run-classes.json` rather than here.
 ROLE_CLASSES: dict[str, tuple[str, ...]] = {
     "runner": (
         "npx vitest run src/example.test.ts",
@@ -127,6 +157,11 @@ ROLE_CLASSES: dict[str, tuple[str, ...]] = {
         "npm run lint",
         "npm run typecheck",
         "npm run build",
+        # A seed, a sign-in link, a third-party lock wrapper and the finale's
+        # delete used to sit here as four literal commands of one repository.
+        # They are repo-specific -- each names one repo's canonical env file and
+        # scripts another repo does not have -- so they moved to
+        # `.claude/run-classes.json` in the repo under test. See `repo_classes()`.
     ),
     "verify-gate": (
         # THE ANCHOR. The exact compound shape that halted one run for 3 h 37 m,
@@ -153,6 +188,8 @@ ROLE_CLASSES: dict[str, tuple[str, ...]] = {
         'node scripts/http-probe.mjs "example" http://batch-000000.localhost:3101/app/example',
         "lsof -p 50264 | awk '$4==\"cwd\"{print $NF}'",
         "pgrep -f next-server",
+        # The gate's own sign-in-link call is repo-specific for the same reason
+        # as the runner's four. It belongs in `.claude/run-classes.json`.
         # The register shard, which the brief makes the only route for a finding.
         "python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature example-feature --my-shard --prefix rv441",
         "env | sort | head -5",
@@ -172,6 +209,7 @@ ROLE_CLASSES: dict[str, tuple[str, ...]] = {
         "stat -f %z src/lib/example/repo.ts",
         "head -50 src/lib/example/repo.ts",
         "tail -30 .scratch/example-feature/runs/batch-000000/run-journal.md",
+        "python3 ~/.claude/skills/lib/origin-row-guard.py --file .scratch/example-feature/register.md",
         "python3 ~/.claude/skills/run-issues/check_register_status.py --feature example-feature",
         "python3 ~/.claude/skills/run-issues/check_briefing_commands.py --file .scratch/example-feature/runs/batch-000000/merge-briefing.md",
         "python3 ~/.claude/skills/lib/check_verdict.py --file .scratch/example-feature/issues/441-example.md",
@@ -251,15 +289,16 @@ RULED_UNCOVERED: tuple[tuple[str, str], ...] = (
     ),
 )
 
-# A project that isolates its runs outside git — a seeded workspace, a sign-in
-# link, a lock wrapper around a live third-party suite, a teardown — runs those
-# as unattended commands too, and every one needs a rule. They are the project's
-# own, so they are NOT listed above: pass each as `--classes "<command>"`. The
-# seed runs BEFORE this check in pre-flight, so a missing rule stops the launch
-# here on the very next line rather than hours into an unattended run.
-
 TRACKED = ".claude/settings.json"
 LOCAL = ".claude/settings.local.json"
+
+# Where the repo under test declares the command shapes only IT issues. Tracked
+# by git, so a worktree inherits it -- the same property this whole check is
+# about. An agent may write this file; it may not write `.claude/settings.json`.
+REPO_CLASSES = ".claude/run-classes.json"
+
+# The label a repo-declared class is reported under, beside the role names.
+REPO_ROLE = "repo-declared"
 
 REMEDY = (
     "Add the missing rule to `.claude/settings.json`, which git carries into every\n"
@@ -282,6 +321,39 @@ def rules_in(path: pathlib.Path) -> list[str]:
         raise RuntimeError(f"{path}: {error}") from error
     allow = ((data or {}).get("permissions") or {}).get("allow") or []
     return [one for one in allow if isinstance(one, str) and one.startswith("Bash(")]
+
+
+def repo_classes(path: pathlib.Path) -> list[str]:
+    """Every command shape the repo under test declares as its own.
+
+    Repo-specific means the PATH inside the command decides the verdict: a
+    `node --env-file=<this repo's env file> scripts/<name>.mjs` call is covered
+    only by a rule naming that exact env file. Four such commands used to sit in
+    the runner's list naming ONE repository's env file, which held that
+    repository's live service-role key, and a second repository had to allow
+    that path before it could launch a run at all.
+
+    The file is optional, and a repo with none is graded on the repo-independent
+    lists alone. `main()` says so in the output, because a floor that grades
+    nothing and prints `ok` is the fault this check was built for.
+
+    A file that exists and does not parse, or whose `classes` is not a list of
+    non-empty strings, raises. Exit 2 follows, and that is deliberate: a
+    declaration nobody can read must not be read as a declaration of nothing.
+    """
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"{path}: {error}") from error
+    declared = ((data or {}).get("classes")) or []
+    if not isinstance(declared, list):
+        raise RuntimeError(f"{path}: `classes` must be a list of command strings")
+    for one in declared:
+        if not isinstance(one, str) or not one.strip():
+            raise RuntimeError(f"{path}: `classes` holds {one!r}, which is not a command")
+    return [one.strip() for one in declared]
 
 
 def covers(rule: str, command: str) -> bool:
@@ -341,6 +413,81 @@ def _without_heredocs(command: str) -> str:
     return "\n".join(kept)
 
 
+def _outside_quotes(command: str) -> list[str]:
+    """Split on `&&`, `||`, `;`, `|` and newline, but only outside quotes.
+
+    A `|` between quotes is an argument. Measured 2026-09-13 across one project's
+    65 session directories: a plain regex split reported `Tests`, `^### "`,
+    `from`, `new` and `const` as commands, and every one of them is a fragment of
+    a `grep` pattern. A reading that cries wolf on its own noise gets ignored,
+    which is worse than no reading.
+
+    An unbalanced quote never raises and never splits: the rest of the string
+    stays one piece. A transcript holds whatever was typed, and a reading that
+    dies on one malformed command reads nothing after it.
+
+    A `#` that OPENS a line outside quotes runs to the end of that line, because
+    a comment is not shell. It is dropped here rather than in a pass of its own,
+    and that placement is the fault: a pass over raw lines drops
+    `# b" && rm -rf /tmp/x`, the second line of a quoted commit message, and the
+    `rm` with it. Only the scanner knows whether a line is inside a quote.
+    """
+    pieces: list[str] = []
+    current: list[str] = []
+    quote = ""
+    index = 0
+    line_start = True
+    while index < len(command):
+        char = command[index]
+        if not quote and line_start and char == "#":
+            while index < len(command) and command[index] != "\n":
+                index += 1
+            continue
+        if not quote and line_start and char not in " \t":
+            line_start = False
+        if quote:
+            current.append(char)
+            if char == "\\" and quote == '"' and index + 1 < len(command):
+                current.append(command[index + 1])
+                index += 2
+                continue
+            if char == quote:
+                quote = ""
+            index += 1
+            continue
+        if char in "'\"":
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        if char == "\\" and index + 1 < len(command):
+            if command[index + 1] == "\n":
+                # A line continuation is whitespace, and the command carries on
+                # across it. Splitting here left 70 segments headed by a bare
+                # backslash in that project's transcripts, each hiding a real one.
+                current.append(" ")
+            else:
+                current.append(char)
+                current.append(command[index + 1])
+            index += 2
+            continue
+        if command.startswith("&&", index) or command.startswith("||", index):
+            pieces.append("".join(current))
+            current = []
+            index += 2
+            continue
+        if char in ";|\n":
+            pieces.append("".join(current))
+            current = []
+            line_start = char == "\n"
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    pieces.append("".join(current))
+    return pieces
+
+
 def segments(command: str) -> list[str]:
     """Split one Bash invocation into the pieces the classifier judges.
 
@@ -348,9 +495,12 @@ def segments(command: str) -> list[str]:
     Grading the whole string against one rule is what let batch-200d42's
     `cd ... && export ... && sed ... && npx vitest ... | tail -20` through a
     floor that had `npx vitest*` tracked and nothing else in that line.
+
+    Quotes hold. `_outside_quotes` says why, and the transcript reading is what
+    needs it.
     """
     found: list[str] = []
-    for piece in re.split(r"&&|\|\||;|\||\n", _without_heredocs(command)):
+    for piece in _outside_quotes(_without_heredocs(command)):
         piece = piece.strip().lstrip("(").strip()
         if piece in KEYWORD_ONLY:
             continue
@@ -441,6 +591,7 @@ def main(argv=None) -> int:
     try:
         tracked = rules_in(repo / TRACKED)
         local = rules_in(repo / LOCAL)
+        declared = repo_classes(repo / REPO_CLASSES)
     except RuntimeError as error:
         print(f"REFUSED unreadable: {error}", file=sys.stderr)
         return 2
@@ -448,6 +599,7 @@ def main(argv=None) -> int:
     wanted: list[tuple[str, str]] = [
         (role, command) for role, shapes in ROLE_CLASSES.items() for command in shapes
     ]
+    wanted += [(REPO_ROLE, command) for command in declared]
     wanted += [("--class", command) for command in args.classes]
 
     faults: list[tuple[str, str, str, str, str]] = []
@@ -465,7 +617,7 @@ def main(argv=None) -> int:
             f"-- {roles} -- every segment covered by {repo / TRACKED}, which git carries "
             f"into every worktree ({len(tracked)} tracked rule(s), {len(local)} local-only)."
         )
-        report_the_blind_spots(ungraded)
+        report_the_blind_spots(ungraded, len(declared), repo / REPO_CLASSES)
         return 0
 
     for verdict, role, command, segment, rule in faults:
@@ -491,19 +643,37 @@ def main(argv=None) -> int:
         file=sys.stderr,
     )
     print(f"\n{REMEDY}", file=sys.stderr)
-    report_the_blind_spots(ungraded, stream=sys.stderr)
+    report_the_blind_spots(ungraded, len(declared), repo / REPO_CLASSES, stream=sys.stderr)
     return 1
 
 
-def report_the_blind_spots(ungraded: str, stream=None) -> None:
+def report_the_blind_spots(
+    ungraded: str, declared: int, declaration: pathlib.Path, stream=None
+) -> None:
     """Say what this check did NOT look at.
 
     A floor that grades its own list and prints `ok` is evidence about the list
     and nothing else. Run batch-200d42 read `ok: 12 command class(es)` and then
-    halted for 3 h 37 m on a thirteenth. These two blocks are the price of that
+    halted for 3 h 37 m on a thirteenth. These blocks are the price of that
     sentence being honest.
     """
     stream = stream or sys.stdout
+    if declared:
+        print(
+            f"\nREPO-DECLARED CLASSES: {declared}, from {declaration}.",
+            file=stream,
+        )
+    else:
+        print(
+            f"\nREPO-DECLARED CLASSES: none. {declaration} does not exist or lists none, "
+            "so nothing above is a shape specific to this repository.",
+            file=stream,
+        )
+        print(
+            "    A repo whose run drives its own scripts -- a seed, a sign-in link, a "
+            "workspace delete -- declares them there or this check never sees them.",
+            file=stream,
+        )
     print(f"\nROLES NOT GRADED: {ungraded}.", file=stream)
     print(
         "    Their command shapes have never been enumerated. This check says "

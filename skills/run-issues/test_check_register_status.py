@@ -60,6 +60,43 @@ def test_the_transposed_row_is_caught_by_the_disagreement_rule():
     assert "verified" in found[0].reason and "open" in found[0].reason
 
 
+def test_a_status_word_at_the_END_of_the_notes_is_caught_too():
+    # The measured fault of run batch-26c495, 2026-09-17: 28 rows carried
+    # `verified` in the status cell and ENDED their owner-notes with the bare
+    # word `open`. Reading the opening word alone passed all 28. Promotion's
+    # `fixed` exit deletes a row, so resolving them would have destroyed 28
+    # possibly live defects with no record anywhere.
+    text = HEADER + row(
+        "rv06b-01",
+        "verified",
+        "the fix landed in the commit the gate was reading, so this is open")
+    found = faults(text)
+    assert len(found) == 1
+    assert found[0].row_id == "rv06b-01"
+    assert "verified" in found[0].reason and "open" in found[0].reason
+    assert "ends with" in found[0].reason
+
+
+def test_a_notes_cell_ending_in_its_OWN_status_word_still_passes():
+    # The agreeing case must stay legal, or every well-formed row refuses.
+    text = HEADER + row("a-07", "fixed", "the route now refuses an empty body; fixed")
+    assert faults(text) == []
+
+
+def test_a_one_word_notes_cell_reads_the_same_from_both_ends():
+    # `open` is one token, so head and tail are the same word. A status cell of
+    # `open` agrees with both and there is nothing to refuse.
+    text = HEADER + row("a-08", "open", "open")
+    assert faults(text) == []
+
+
+def test_prose_ending_in_an_ordinary_word_is_not_read_as_a_status():
+    # Only the status vocabulary counts, so a note ending in an English word
+    # that is not a status must pass.
+    text = HEADER + row("a-09", "open", "nobody has finished reading")
+    assert faults(text) == []
+
+
 def test_every_offence_is_reported_not_only_the_first():
     text = HEADER + row("a-01", "nearly", "open") + row("a-02", "verified", "open")
     assert [f.row_id for f in faults(text)] == ["a-01", "a-02"]

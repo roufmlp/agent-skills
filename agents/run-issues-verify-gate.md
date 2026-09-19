@@ -42,10 +42,23 @@ acceptance path.
 link with the batch id, which derives the address, and with `--site` naming this
 run's own host, `<batch-id>.localhost`, on the port `preview_start` returned when
 you started the server — the entry carries `autoPort`, so a second run may hold
-the default and the result is the only place the port exists. Drive the browser
+the default and the result is the only place the port exists.
+
+**PROVE THE PORT IS YOURS BEFORE YOU TRUST ANYTHING ON IT.** Probe it once with
+`--expect-database <the ledger header's `Dev server:` database>`. The probe reads
+the pid listening on that port and the tree that pid runs in, and refuses, naming
+both databases, when the server belongs to another run. Inside a claimed tree it
+refuses without either that flag or the word `--any-server`, so there is nothing
+to remember. A refusal here is not a reject of the issue: re-read your own
+`preview_start` result for the right port, and say in your verdict that you did.
+
+Drive the browser
 and the probe at that host too, never at bare `localhost`: a cookie is scoped to
 the host and not the port, so two runs on `localhost` share one session, and the
-script refuses a bare-localhost `--site`:
+script refuses a bare-localhost `--site`. Take the spelling from the repo's own
+run-class config where it declares one, and where the repo has no sign-in-link
+script, sign in the way that repo documents and say in the verdict which road you
+took:
 
 ```
 node --env-file=<env file> scripts/dev-signin-link.mjs --batch <batch-id> --site http://<batch-id>.localhost:<port from the preview_start result>
@@ -54,15 +67,20 @@ node --env-file=<env file> scripts/dev-signin-link.mjs --batch <batch-id> --site
 Inside a run's worktree that script refuses a bare email that is not this run's
 user, and where the project wires it that way its fixture scripts seed into the
 header's `QA workspace:` id by themselves, read off `run.md`, refusing an override
-that names any other. A page that reads empty under this user while the
+that names any other (ticket 38, the one-run-per-feature layout ticket,
+sitting 5). A page that reads empty under this user while the
 implementer's record shows rows was seeded from outside this worktree, which is a
 finding about the implementation record, not about the code. A live third-party
 suite runs only through the lock wrapper, which the harness verifies by reading
-the lock file for the account it writes:
+the lock file for the account it writes (ticket 38, the one-run-per-feature
+layout ticket, sitting 2):
 
 ```
 node --env-file=<env file> scripts/zoho-live-lock.mjs --batch <batch-id> --journal <run-journal.md> -- npx vitest run src/lib/zoho/live
 ```
+
+That wrapper belongs to one project. A repo with no live third-party suites and
+no lock wrapper of its own has no lock to take here.
 
 For server-rendered surfaces, drive over HTTP and read the served HTML — it is the
 whole truth and costs no browser. Open a real browser for what genuinely lives
@@ -230,6 +248,28 @@ you both run at once. A write to `register.md` itself is refused, and the
 refusal names the directory your shard belongs in. Append one row:
 `ID | one-line summary | audience | severity | status | origin | owner-notes`.
 
+**READ every shard of this run before you file. Write only to your own.** Two
+verify gates of run `batch-b00631` filed one defect twice -- `rn-b00631-31` and
+`rn-b00631-34v-01`, the signed-in home answering HTTP 500 for an admin with one
+budget env var unset -- because neither could see the other. One defect, two
+rows, and without the finale's sweep, two minted issues costing a run slot and a
+hardening pass each. Ruled `q-fin-b00631-02` on 2026-09-19: reading is open to
+you, writing stays yours alone.
+
+```bash
+grep -rn "<this run's batch id>" "$(dirname "<the path --my-shard printed>")"
+```
+
+Where a sibling row already carries the defect you were about to file, do not
+file a second one. Name that row in your verdict and say you reached it
+independently. That sentence is the evidence the finding was made twice, and it
+is worth more than a duplicate row.
+
+**This reading never changes your verdict.** You grade the issue in front of you
+on what you observed yourself, and a sibling's framing is not evidence about your
+issue. The one thing this reading may change is whether you write a row that
+already exists.
+
 - **`origin` names where the fault came from: the issue and the run that
   shipped the code it is in, written `<issue>/<run>`.**
   For you that is the issue you are grading and this run's batch id, for
@@ -289,11 +329,34 @@ CHECKOUT. The run's worktree under
 and stale from that moment. Both files exist, both are readable, and nothing in
 either says which one anybody else is using.
 
-Write to the path you were given, character for character. Before you write,
-check the path does not contain `/.claude/worktrees/`; if it does, you have
-resolved a relative path against the wrong root. Before you GRADE an issue file,
-check you are reading the live copy: a stale twin carries no implementation
-record and no gate section, so it reads exactly like an issue nobody has worked.
+Write to the path you were given, character for character.
+
+**THE LEDGER DECIDES WHICH COPY IS LIVE. THE SHAPE OF THE PATH DOES NOT.**
+Corrected 2026-09-18 on the ruling of queue item `q-finale-2957c3-04`. This
+brief used to say that a path containing `/.claude/worktrees/` proves you
+resolved a relative path against the wrong root. **That is false since ticket 38,
+the one-run-per-feature layout, moved the register into the run's own tree.** On
+run `batch-2957c3` the live copy of issue 122's file — the one carrying the
+implementation record — was the worktree copy, and a gate obeying the old
+sentence would have graded the stale twin. Where two copies disagree, read the
+run's ledger header, which names the tree the run is working in, and treat that
+tree's copy as live. Before you GRADE an issue file, check you are reading the
+live copy anyway: a stale twin carries no implementation record and no gate
+section, so it reads exactly like an issue nobody has worked.
+
+**A NEGATIVE FROM A SEARCH IS WORTH NOTHING WITHOUT ITS SCOPE.** Added 2026-09-18
+on the ruling of queue item `q-finale-2957c3-05`. On run `batch-2957c3` a
+review gate looked for two pipeline checkers under one directory, did not find
+them, reported that neither exists on this machine, and then wrote its register
+row and its briefing section by eye. Both exist. **They are not in the same
+directory, which is the whole fault:**
+
+    ~/.claude/skills/lib/check_queue_shard.py
+    ~/.claude/skills/run-issues/check_register_status.py
+
+So: never report a script, a file or a rule absent on the strength of one
+directory. Say where you looked, in the sentence that reports the absence, or do
+not report it.
 
 Issue 412's critical review gate on run `batch-34455f` wrote its verdict, five
 register rows and two briefing items into the worktree copies while the
@@ -301,4 +364,32 @@ implementer and the verify gate wrote the main-checkout ones. It then graded
 412 against a file with no implementation record in it and filed a finding
 saying the record was missing, when it was present at line 682 of the live copy.
 The finding had to be annulled and the records relocated by hand. (Adopted by
-The human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+the human 2026-08-25, from candidate rule 5 of that run's merge briefing.)
+
+## Three things now refuse, so do not plan around them
+
+Ruled by the human on 2026-09-17, walking the decisions of run `batch-26c495`.
+All three were already implicit; all three were broken in one run by gates that
+had read their own briefs. They refuse now rather than remind.
+
+**No machine-wide kill.** `pkill`, `killall`, and `kill $(pgrep ...)` are
+refused by `~/.claude/hooks/machine-wide-kill-guard.py`. A verify gate ran
+`pkill -9 -f vitest` while a second gate was running its own suite in its own
+tree, and disclosed it afterwards. Kill only a pid you started and captured:
+`nohup <cmd> &`, `echo $! > /tmp/<name>.pid`, then `kill "$(cat /tmp/<name>.pid)"`.
+A literal `kill <pid>` is never refused.
+
+**You do not commit.** No gate role runs `git commit`, the
+`git -c core.hooksPath=...` spelling included, and where the project installs a
+commit guard for gate roles a hook refuses it outright. Leave every file you
+write UNCOMMITTED and name its absolute path in your verdict; the runner stages
+and commits it, as it already does for every register shard. `git add` and every
+read stay yours.
+
+**Say whose evidence it is.** Where a criterion names its own drill, and you
+grade it on the IMPLEMENTATION RECORD's numbers rather than your own, write one
+sentence saying so — and where the project's pack carries a drill-coverage
+checker, it refuses a verdict that leans in silence. Leaning is legal and often
+sensible; leaning unmarked makes the runner read the round as two measurements
+when it holds one. Issue 114's criterion 7 was graded PASS that way, and the
+drill it skipped was red 4 of 4 the first time anybody ran it.

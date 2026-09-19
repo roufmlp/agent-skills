@@ -63,6 +63,13 @@ rejection on correct work. The finale runs the suite as well; that is a second
 reading, not a substitute for this one. (Adopted by the human 2026-08-07, from the
 203-206 run.)
 
+**One exception, and only one: a correction round runs no full suite.** When your
+prompt opens `CORRECTION ROUND`, run each owed item's named evidence test and the
+typecheck, and nothing wider. The runner re-runs coverage over this tree the
+moment you return, and that is the whole-tree reading; yours would read the same
+tree twice. A first or retry attempt is not a correction round and keeps the
+order above. (Adopted by the human 2026-09-17.)
+
 **When an invariant says which client a read must use, your test must be able to
 tell the two clients apart.** One shared fake answers identically whether the
 code calls the user client or the admin client, so a test built on it stays green

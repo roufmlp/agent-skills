@@ -28,14 +28,12 @@ from pathlib import Path
 RUN_ISSUES = Path(__file__).resolve().parent
 SKILLS = RUN_ISSUES.parent
 # The promotion and attacker briefs live in `agents/` beside `skills/`, so
-# `SKILLS` does not reach them. This file already names
-# `~/.claude/agents/promotion.md` once, but only as a string to search for.
-#
-# Being outside this repo is also why they cannot be reached by climbing from
-# `SKILLS`. This checkout is one of several -- git worktrees live at
-# `.claude/worktrees/<name>/` inside the main one -- so `SKILLS.parent` is
-# `~/.claude` here and `.claude/worktrees` there. `agents/` and `hooks/` have
-# exactly one home on this machine, so that is what they are resolved against.
+# `SKILLS` does not reach them. `agents/` and `hooks/` are installed under
+# `~/.claude` and have exactly one home on a machine, with no worktree copy, so
+# an absolute anchor is what reaches them. A climb from `__file__` lands on
+# `.claude/worktrees` when this checkout is a worktree, which is the fault
+# `lib/check_claude_home.py` refuses -- and that checker names THIS file as the
+# one whose comment knew the fact and wrote the climb anyway.
 CLAUDE = Path.home() / ".claude"
 AGENTS = CLAUDE / "agents"
 
@@ -51,7 +49,7 @@ LAUNCH_HARDEN = RUN_ISSUES / "launch-harden.md"
 # Sentences that live inside the finale block and nowhere else. Every one is
 # load-bearing prose a reader would miss if the move dropped it.
 FINALE_MARKS = [
-    "Preview deploy is **skipped in this repo**",
+    "Preview deploy: do what the repo's own CLAUDE.md documents.",
     "A published checksum expires the moment the file moves.",
     "Main moved while you worked. Read it before you write a question.",
     "Sweep the register for rows their own issue already fixed.",
@@ -2186,6 +2184,314 @@ class TheDetailsLeftByDestination(unittest.TestCase):
             stories |= set(marks)
         anchors = set(SKILL_MARKS) | set(SITTING_FIVE_ANCHORS)
         self.assertEqual(stories & anchors, set())
+
+
+
+
+
+
+
+
+# --------------------------------------------------------------------------
+# WITHHELD from this drill, and this is a decision rather than an oversight.
+#
+# Three groups of cases in the live drill grade the TEXT of `SKILL.md`. The
+# `SKILL.md` this pack ships is deliberately behind the live one, so those cases
+# would grade sentences that are not here and turn the pack red for every
+# reader. They travel with `SKILL.md` when it travels, and not before.
+#
+# 1. `SITTING_SIX_ANCHORS`, `SITTING_SIX_STORIES_MOVED` and the class
+#    `TheFileWasBroughtBackUnderItsCeiling`. They pin a line-for-line move of
+#    nineteen stories out of `SKILL.md` and into `decisions.md` and several
+#    script docstrings: one list asserts the rule each move LEFT BEHIND is still
+#    in `SKILL.md`, the other asserts the story is now ABSENT from it. Both
+#    halves read the file that did not move.
+# 2. `COVERAGE_ON_FAILURE`, `SUITE_HEADS`, `command_texts`, `produces_coverage`
+#    and the class `EveryCoverageRunKeepsItsReportOnFailure`. Its own guard case
+#    -- "if the extractor stopped finding commands the assertion below would
+#    pass over an empty list and report green" -- goes red here, which is that
+#    guard doing its job: the published `SKILL.md` states no coverage-producing
+#    suite command for it to grade.
+# 3. Two cases of `ParkedIsBelowTheBatchLine`, noted again above the class.
+#    A third case of it was widened rather than held; its docstring says why.
+#
+# A fourth group is withheld for a different reason. The class
+# `TheRetryBriefStatesTheInvariant` grades a script MANIFEST.md holds back until
+# the sync that takes `SKILL.md` whole. A drill for a script the pack does not
+# ship has nothing to grade; MANIFEST.md's withheld block is the record.
+# --------------------------------------------------------------------------
+
+
+class PromotionMayMergeUpToThreeRows(unittest.TestCase):
+    """Ruled by the human on 2026-09-13, out of run `batch-d67136`.
+
+    That run shipped 7 issues and minted 13, because the brief said "One issue
+    file per promoted row" and nothing else. Three of the 13 were one finding
+    written twice, and two of those three were asked for in plain words by the
+    finale's own merge briefing (lines 625 and 633), which promotion had no
+    licence to obey.
+
+    A merge rule with no ceiling is how three real defects become one
+    unreviewable ticket, so every clause of the ceiling is mechanical and
+    `check_origin.py` refuses a file that breaks one. An editor who keeps the
+    licence and drops a clause leaves promotion free to merge without limit,
+    and nothing downstream would notice.
+    """
+
+    PROMOTION = AGENTS / "promotion.md"
+
+    def brief(self):
+        return read(self.PROMOTION)
+
+    def test_the_one_row_per_file_rule_is_gone(self):
+        """The licence to merge and the old rule cannot both stand. An editor who
+        restores the sentence leaves every clause of the ceiling in place, and no
+        clause of the ceiling fires on a file that never merges."""
+        self.assertNotIn("One issue file per promoted row", self.brief())
+
+    def test_the_narrow_detector_carries_the_measurement_that_keeps_it_narrow(self):
+        """Merging on `Origin:` alone reaches 13 files to 7, which is the rate at
+        which the backlog stops growing, and it is the wrong trade: hardening
+        splits most of it back and the saving at build time is not measured. A
+        brief holding the narrow rule without that figure invites the widening."""
+        brief = self.brief()
+        self.assertIn("not measured", brief)
+        self.assertIn("13 files to 7", brief)
+
+    def test_every_clause_of_the_ceiling_is_stated(self):
+        brief = self.brief()
+        for clause in (
+            "at most three",
+            "same `Origin:`",
+            "same audience and the same severity",
+            "`Rows:` line",
+            "never `Direct-road: candidate`",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, brief)
+
+    def test_the_ceiling_names_the_check_that_refuses_it(self):
+        """Every clause is checkable, and a clause with no check beside it is a
+        reminder. The three-class test refuses those."""
+        brief = self.brief()
+        self.assertIn("check_origin.py --issue", brief)
+        self.assertIn("--minted", brief)
+
+    def test_the_sweep_is_scoped_by_run_id_so_it_backfills_nothing(self):
+        brief = self.brief()
+        start = brief.index("--minted")
+        window = brief[start - 1200:start + 1200]
+        self.assertIn("backfill", window.lower())
+
+    def test_append_is_refused_and_the_blocker_is_recorded(self):
+        """Measured over run `batch-d67136`: no promoted row named an existing
+        unbuilt issue as the place its criterion belongs, so append would have
+        fired zero times. An editor who meets a bare "do not append" will read
+        it as caution and argue with it. The blocker is the reason."""
+        brief = self.brief()
+        self.assertIn("Never append", brief)
+        self.assertIn("Never investigate", brief)
+        self.assertIn("zero times", brief)
+
+    def test_the_floor_is_named_as_what_the_severity_clause_protects(self):
+        """Merging a `low` into a `medium` carries a row past the operator floor
+        set on 2026-08-09. Clause 3 is the only thing standing there."""
+        brief = self.brief()
+        start = brief.index("same audience and the same severity")
+        window = brief[start:start + 700]
+        self.assertIn("floor", window)
+
+
+
+# WITHHELD from this class: the two cases that grade `SKILL.md`'s own text --
+# `parked` beside the `ready-for-human` skip in the all-scope rule, and the
+# sentence naming the parked sweep as the door back. The published `SKILL.md` is
+# deliberately behind the live one and carries neither sentence, and the sweep
+# script is not in this pack. The rule they pin survives in the five cases below,
+# which grade the promotion brief and the finale -- both of which this pack ships.
+class ParkedIsBelowTheBatchLine(unittest.TestCase):
+    """Issue 03 of the tracker-tooling set, ruled by the human, 2026-09-13.
+
+    Promotion mints a medium or low row that names no blocker at `Status:
+    parked`, and nothing offers a parked issue again. `all` is the one scope
+    that resolves itself off the `Status:` line, so a run that did not know the
+    fifth status would build a backlog nobody has ever scheduled.
+
+    The skill also has to name the door back. A status a run silently skips and
+    no command ever re-offers is a deletion with a nicer name, which is the
+    fault this issue exists to avoid rather than create.
+    """
+
+    PROMOTION = AGENTS / "promotion.md"
+
+    def test_the_brief_parks_a_medium_row_that_names_no_blocker(self):
+        brief = squash(read(self.PROMOTION))
+        self.assertIn("Status: parked", brief)
+        self.assertIn("`medium` or `low`", brief)
+
+    def test_the_brief_keeps_needs_harden_for_high_and_above(self):
+        brief = squash(read(self.PROMOTION))
+        start = brief.index("Status: parked")
+        window = brief[start - 600:start + 900]
+        self.assertIn("high", window)
+        self.assertIn("needs-harden", window)
+
+    def test_the_brief_writes_the_date_the_sweep_ages_the_issue_off(self):
+        """Either spelling of the sweep satisfies this, and that is deliberate.
+        The live tree names the sweep script; this pack does not ship it and
+        names the sweep by role instead. Both say the same thing, and the two
+        facts that must travel are the same in both: the date field exists, and
+        something ages the issue off it."""
+        brief = squash(read(self.PROMOTION))
+        self.assertIn("Parked:", brief)
+        self.assertTrue(
+            "parked sweep" in brief or "sweep_parked" in brief,
+            "the brief writes `Parked:` and names nothing that reads it, so a "
+            "parked issue is parked for ever",
+        )
+
+    def test_the_rule_names_the_check_that_refuses_it(self):
+        """A rule that can refuse is built rather than written down twice
+        (`~/.claude/CLAUDE.md`, the three classes). `check_origin.py --issue`
+        already runs on every minted file, so it is where this lands."""
+        brief = squash(read(self.PROMOTION))
+        self.assertIn("check_origin.py --issue", brief)
+
+    def test_the_finale_does_not_restate_the_minted_status(self):
+        """The thresholds live in the promotion brief and nowhere else, and the
+        status is now decided by the same row the thresholds read. A second copy
+        here would go stale the next time the rule moves."""
+        finale = squash(read(FINALE))
+        self.assertNotIn("issue file at `Status: needs-harden`", finale)
+
+
+
+# --------------------------------------------------------------------------
+# A whole-tree reading is bought only where the tree has changed since the last
+# one, and only by a party that did not write the change. Three readings satisfy
+# that rule: the implementer's own, the verify gate's with coverage, and the
+# runner's after the correction round. Every other reading in the loop reads a
+# tree that has not moved since one of the three.
+#
+# Graded against the RULE and not against a list of names. A sixth role added
+# later earns a reading by the rule; a gate that reads an unmoved tree breaches
+# it even though it is not named below.
+
+# Both halves of the sentence are required. A brief that denies itself the suite
+# and then names no substitute has told the gate to read less and given it
+# nothing to cite, which is how a gate talks itself back into the suite.
+NO_SUITE_DENIAL = ("runs no full suite", "no whole-suite run", "runs no whole suite")
+NO_SUITE_SUBSTITUTE = ("verify gate's", "verify gate’s")
+
+
+def review_gate_briefs():
+    """Every review-gate brief, derived rather than named.
+
+    Three hard-coded names would pass a fifth brief added later that orders a
+    whole suite, which is the breach the rule exists to catch.
+    """
+    return sorted(AGENTS.glob("run-issues-review-gate*.md"))
+
+
+class NoGateBuysAnUnmovedTreeReading(unittest.TestCase):
+    """Criterion 1 of issue 06, `three suites per issue`."""
+
+    def test_at_least_one_review_gate_brief_is_found(self):
+        """The derived list is the point of the criterion. An empty glob would
+        make every assertion below vacuous and still report green."""
+        self.assertTrue(
+            review_gate_briefs(),
+            f"no run-issues-review-gate*.md under {AGENTS}; the glob found "
+            "nothing, so the assertions below would pass on an empty list",
+        )
+
+    READ_PROOF = "THE LEDGER'S HEADER CARRIES THE RUN FACTS"
+
+    def _proof(self, path, brief):
+        """Quote text found INSIDE the brief in every failure message.
+
+        Criterion 1's drive has a wrong reason it could go red: the briefs
+        resolve through `Path.home()`, so a red caused by the path reaching
+        nothing looks exactly like the assertion working. A message carrying
+        text this test just read out of the file tells the two apart.
+        """
+        found = self.READ_PROOF in brief
+        return (f"read {len(brief)} chars from {path}; it "
+                f"{'contains' if found else 'DOES NOT contain'} "
+                f"\"{self.READ_PROOF}\"")
+
+    def test_every_review_gate_brief_denies_itself_a_whole_suite(self):
+        for path in review_gate_briefs():
+            brief = squash(read(path))
+            self.assertTrue(
+                any(mark in brief for mark in NO_SUITE_DENIAL),
+                f"{path.name} does not deny itself a whole-suite run. "
+                f"Expected one of {NO_SUITE_DENIAL}. "
+                + self._proof(path, brief),
+            )
+
+    def test_every_review_gate_brief_names_the_reading_it_cites_instead(self):
+        """Both halves in the SAME passage, not merely both in the file.
+
+        `verify gate's` occurs twice in the plain brief for unrelated reasons,
+        so a file-wide search for it passes a brief that denies itself the
+        suite and names no substitute at all — which is the exact breach
+        criterion 1 asks this case to catch. The window is measured from the
+        denial.
+        """
+        for path in review_gate_briefs():
+            brief = squash(read(path))
+            at = -1
+            for mark in NO_SUITE_DENIAL:
+                at = brief.find(mark)
+                if at != -1:
+                    break
+            if at == -1:
+                continue        # the denial case above owns this failure
+            passage = brief[at:at + 500]
+            self.assertTrue(
+                any(mark in passage for mark in NO_SUITE_SUBSTITUTE),
+                f"{path.name} denies itself the suite and names no substitute "
+                "in the same passage. Name the verify gate's report as the "
+                "whole-tree reading it cites instead. Passage read: "
+                f"\"{passage[:200]}\"",
+            )
+
+    def test_the_review_gates_keep_the_drills_and_the_shared_header(self):
+        """`Must still be true`: the cut is whole-suite runs, never single
+        files. A brief that loses the header line while gaining the no-suite
+        sentence is a breach, not a saving."""
+        for path in review_gate_briefs():
+            brief = squash(read(path))
+            self.assertIn(
+                "the full suite runs WITHOUT the canonical", brief,
+                f"{path.name} lost the shared header line",
+            )
+
+    def test_the_implementer_brief_exempts_the_correction_spawn(self):
+        brief = squash(read(AGENTS / "run-issues-implementer.md"))
+        self.assertIn(
+            "correction", brief.lower(),
+            "the implementer brief never names the correction spawn",
+        )
+        self.assertTrue(
+            any(mark in brief for mark in CORRECTION_EXEMPTION),
+            "the implementer brief does not exempt the correction spawn from "
+            f"the full suite. Expected one of {CORRECTION_EXEMPTION}.",
+        )
+
+    def test_the_verify_gates_whole_suite_is_untouched(self):
+        """`Must still be true`: ruling Q4 gave the verify gate the suite. An
+        edit that reads as trimming it is a breach of Q4, not a saving."""
+        brief = read(AGENTS / "run-issues-verify-gate.md")
+        self.assertIn("RUN THE WHOLE SUITE IN THAT COPY, WITH COVERAGE", brief)
+
+
+CORRECTION_EXEMPTION = (
+    "correction spawn runs no full suite",
+    "correction round runs no full suite",
+    "A correction spawn does not run the full suite",
+)
 
 
 if __name__ == "__main__":

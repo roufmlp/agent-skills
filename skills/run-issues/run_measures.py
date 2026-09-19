@@ -115,6 +115,18 @@ ISSUE_FIELDS = (
     "stage", "critical_gate", "migration", "cut_on_a_default",
     # Ruling 28's marker, counted rather than assumed.
     "marked_rounds", "derived_strike_disputed",
+    # The count `check_issue_size.py` read off the issue file the implementer
+    # was HANDED, so the prediction can be scored against the outcome beside
+    # it. Ruled by the human, 2026-09-14, closing class 9's loop. Null where
+    # nothing read it -- an older run, or a file the fork point does not hold.
+    "criteria",
+    # What the issue file DECLARED about its own class, read at the same fork
+    # point. Both are declarations, unlike `migration` (the commit's touched
+    # paths) and `critical_gate` (the transcript), which are OUTCOMES. Class 9
+    # acts before either outcome exists, so a harden pass can read these two and
+    # can read neither of those. Ruled by the human, 2026-09-14; nothing refuses
+    # on them yet, and nothing should until the loop holds two more runs.
+    "declared_writes_rows", "declared_migration",
 )
 
 
@@ -204,13 +216,23 @@ def _migration(sha, touched):
 
 
 def issue_records(batch, ledger_text, briefing_text="", spans=None,
-                  touched=None):
+                  touched=None, criteria=None, declared=None):
     """One record per row of the ledger's status table (ruling 17).
 
     `spans` is `estimate_accuracy.actuals(...)[0]`; `touched` answers "what
-    paths did this sha change", and both are passed in so that this is pure.
+    paths did this sha change"; `criteria` maps an issue id to the number of
+    acceptance criteria its file carried at the run's fork point. All three are
+    passed in so that this is pure.
+
+    **`criteria` is the prediction and `span_minutes` is the outcome, and they
+    sit on one line so nothing has to join them later.** Until 2026-09-14
+    nothing compared a class 9 judgement to what the issue then took, which is
+    why the bound went four passes without being scored. Two runs of this
+    column are worth more than any argument about the right number.
     """
     spans = spans or {}
+    criteria = criteria or {}
+    declared = declared or {}
     estimates = _ESTIMATES.estimates(ledger_text or "")
     stages = stages_from(briefing_text)
     ruled = ruled_section(briefing_text)
@@ -244,6 +266,15 @@ def issue_records(batch, ledger_text, briefing_text="", spans=None,
             "migration": _migration(commit_of(rows.get(one.issue, "")), touched),
             "cut_on_a_default": cut_on_a_default(one.issue, ruled),
             "marked_rounds": one.marked,
+            # `null`, not 0: an unread file and a file holding no criterion are
+            # a different fact, and `check_issue_size.py` refuses the second.
+            "criteria": criteria.get(one.issue),
+            # `null` where the file was not read AND where it was read and says
+            # nothing. A file with no `Writes rows:` line has not answered no.
+            "declared_writes_rows":
+                declared.get(one.issue, {}).get("declared_writes_rows"),
+            "declared_migration":
+                declared.get(one.issue, {}).get("declared_migration"),
             # Sitting 4's `*`, carried onto the line rather than left in the
             # printed block. Ruling 28 keeps it: a row whose own words disagree
             # with the derived strike count.

@@ -615,7 +615,7 @@ def _percent(value) -> str:
 
 COST_COLUMNS = ("Batch", "Kind", "Taken", "Version", "Issues", "Hours",
                 "Weighted", "Per issue", "Subagents", "Orchestrator", "Idle",
-                "Note")
+                "Suites/issue", "Note")
 
 QUALITY_COLUMNS = ("Batch", "Orchestrator model", "Worker map", "Pipeline",
                    "Trial", "Issues graded", "First-attempt passes",
@@ -728,6 +728,10 @@ def render_view(records, issues=None) -> str:
             _cell(record.get("subagents")),
             _share(record),
             _percent(record.get("idle")),
+            # Issue 06. Absent on every row written before 2026-09-17, which
+            # `_cell` renders as the absent mark rather than a zero: those runs
+            # were not measured, and a zero would read as a run that ran none.
+            _cell((record.get("suites") or {}).get("per_issue")),
             note,
         ))
         counts = record.get("quality") or {}

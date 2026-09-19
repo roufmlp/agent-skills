@@ -81,7 +81,7 @@ def test_the_refusal_reads_the_pretty_format_too():
     assert "148" in message
 
 
-def test_the_refusal_never_waits_for_abdul():
+def test_the_refusal_never_waits_for_the_human():
     (_, message), _ = run(code=1, output=BROKEN)
     assert "not a halt" in message.lower()
 
@@ -301,6 +301,61 @@ def test_the_cache_file_from_an_older_shape_is_dropped():
     open(path, "w").write(json.dumps({"version": mod.STATE_VERSION - 1,
                                       "a": ["fp", 1.0]}))
     assert mod.load_cache(path) == {}
+
+
+FAKE_LEDGER = """
+import os
+
+
+class Candidate:
+    def __init__(self, tree, worktree_line):
+        self.tree = tree
+        self.worktree_line = worktree_line
+
+
+def parse_worktree_value(line):
+    if not line:
+        return None
+    return line.split(":", 1)[1].strip().strip("`")
+
+
+def list_worktrees(cwd):
+    return (MAIN, RUN_TREE)
+
+
+def collect_candidates(worktrees=()):
+    return (Candidate(MAIN, "Worktree: `" + RUN_TREE + "`"),)
+
+
+def runs(candidates):
+    return candidates
+
+
+MAIN = "/Users/x/code/p"
+RUN_TREE = "/Users/x/code/p/.claude/worktrees/run-abc123"
+"""
+
+
+def _with_fake_ledger():
+    """Point the hook at a ledger whose one live copy sits in the MAIN checkout
+    and whose `Worktree:` line names a LINKED tree. That is the common layout:
+    linked worktrees nest inside the main checkout."""
+    folder = tempfile.mkdtemp()
+    path = os.path.join(folder, "find_live_ledger.py")
+    open(path, "w").write(FAKE_LEDGER)
+    return path
+
+
+def test_live_run_trees_reads_the_worktree_line_not_where_the_ledger_sits():
+    # The copy sits in the main checkout; the run owns the linked tree. Grading
+    # the main checkout is the silent fault: in a repo whose main checkout
+    # carries node_modules, the wrong tree typechecks clean and the gate passes.
+    saved = mod.LEDGER_SCRIPT
+    try:
+        mod.LEDGER_SCRIPT = _with_fake_ledger()
+        assert mod.live_run_trees("/Users/x/code/p") == (TREE,)
+    finally:
+        mod.LEDGER_SCRIPT = saved
 
 
 if __name__ == "__main__":

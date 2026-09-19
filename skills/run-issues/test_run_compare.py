@@ -451,9 +451,13 @@ class TheFiveSubcommands(unittest.TestCase):
                           "escalations": 0}),
         ]
 
-    def test_there_are_exactly_five(self):
+    def test_there_are_exactly_six(self):
+        """Five until 2026-09-14, when the human ruled class 9's loop in and
+        `sizing` joined them. The count is pinned so a seventh needs a ruling
+        rather than a commit."""
         self.assertEqual(sorted(tool.SUBCOMMANDS),
-                         ["compare", "last", "show", "since", "versions"])
+                         ["compare", "last", "show", "since", "sizing",
+                          "versions"])
 
     def test_last_reports_the_newest_line_of_each_kind(self):
         found = tool.render_last(self.records, register_text="")
@@ -986,6 +990,181 @@ class WhatTheReviewFound(unittest.TestCase):
         finally:
             tool.escaped_faults = real
         self.assertEqual(len(seen), 1)
+
+
+
+class Sizing(unittest.TestCase):
+    """Class 9's loop: the count against the outcome. Ruled 2026-09-14."""
+
+    @staticmethod
+    def issue(name, criteria=None, span=None, attempts=1, batch="b1"):
+        return {"issue": name, "batch": batch, "criteria": criteria,
+                "span_minutes": span, "attempts": attempts}
+
+    def test_a_record_set_with_no_criteria_asserts_nothing(self):
+        """Every run finaled before the column existed reads this way, and a
+        reader that printed a correlation over nothing would be the borrowed
+        figure this whole ticket exists to end."""
+        found = tool.render_sizing([self.issue("01", None, 40.0),
+                                    self.issue("02", None, 55.0)])
+        self.assertIn("Nothing is asserted about sizing", found)
+        self.assertIn("2 line(s) were read", found)
+
+    def test_it_joins_the_count_to_the_span(self):
+        found = tool.render_sizing([self.issue("05b", 9, 68.6),
+                                    self.issue("05f", 2, 36.2),
+                                    self.issue("06", 14, 40.5)])
+        self.assertIn("05b", found)
+        self.assertIn("68.6", found)
+        self.assertIn("3 issue(s) carry both", found)
+
+    def test_a_half_filled_line_is_reported_as_a_skip(self):
+        found = tool.render_sizing([self.issue("a", 9, 68.6),
+                                    self.issue("b", 2, 36.2),
+                                    self.issue("c", 5, 20.0),
+                                    self.issue("d", 7, None)])
+        self.assertIn("1 issue line(s) carry one half", found)
+        self.assertIn("A skip is a finding", found)
+
+    def test_it_prints_no_predicted_duration(self):
+        """The analogy step is what this change removed. A predicted-minutes
+        figure here would put it straight back."""
+        found = tool.render_sizing([self.issue("a", 9, 68.6),
+                                    self.issue("b", 2, 36.2),
+                                    self.issue("c", 5, 20.0)])
+        for word in ("predict", "expected", "should take"):
+            self.assertNotIn(word, found.lower())
+
+    def test_it_reports_the_rank_correlation_against_the_day_it_was_set(self):
+        found = tool.render_sizing([self.issue("a", 2, 20.0),
+                                    self.issue("b", 5, 40.0),
+                                    self.issue("c", 9, 60.0)])
+        self.assertIn("Rank correlation", found)
+        self.assertIn("+0.62", found)
+
+    def test_one_column_of_equal_counts_correlates_nothing(self):
+        found = tool.render_sizing([self.issue("a", 5, 20.0),
+                                    self.issue("b", 5, 40.0),
+                                    self.issue("c", 5, 60.0)])
+        self.assertIn("no order to correlate", found)
+
+    def test_spearman_is_one_on_a_perfect_order(self):
+        self.assertAlmostEqual(tool._spearman([1, 2, 3], [10, 20, 30]), 1.0)
+
+    def test_spearman_is_minus_one_on_a_reversed_order(self):
+        self.assertAlmostEqual(tool._spearman([1, 2, 3], [30, 20, 10]), -1.0)
+
+    def test_spearman_ties_share_a_rank(self):
+        """A column of equal values must not invent an order."""
+        self.assertIsNotNone(tool._spearman([1, 2, 2, 3], [10, 20, 30, 40]))
+
+    def test_spearman_refuses_under_three_points(self):
+        self.assertIsNone(tool._spearman([1, 2], [10, 20]))
+
+
+
+class SizingByClass(unittest.TestCase):
+    """The class breakdown, ruled by the human, 2026-09-14. It groups; it
+    never thresholds."""
+
+    @staticmethod
+    def issue(name, criteria, span, migration=None, critical=None,
+              writes=None, corr=0):
+        return {"issue": name, "batch": "b1", "criteria": criteria,
+                "span_minutes": span, "attempts": 1, "migration": migration,
+                "critical_gate": critical, "declared_writes_rows": writes,
+                "correction_rounds": corr}
+
+    def test_it_groups_by_migration(self):
+        found = tool.render_sizing([
+            self.issue("a", 5, 40.0, migration=True),
+            self.issue("b", 6, 50.0, migration=True),
+            self.issue("c", 7, 20.0, migration=False)])
+        self.assertIn("shipped a migration", found)
+        self.assertIn("shipped no migration", found)
+
+    def test_it_groups_by_the_critical_gate(self):
+        found = tool.render_sizing([
+            self.issue("a", 5, 40.0, critical=True),
+            self.issue("b", 6, 50.0, critical=True),
+            self.issue("c", 7, 20.0, critical=False)])
+        self.assertIn("money/auth/secrets", found)
+
+    def test_a_class_nothing_carries_is_not_printed(self):
+        found = tool.render_sizing([
+            self.issue("a", 5, 40.0), self.issue("b", 6, 50.0),
+            self.issue("c", 7, 20.0)])
+        self.assertIn("No issue line carries a class fact", found)
+
+    def test_it_sets_no_threshold_on_any_class(self):
+        """The human's own constraint: 17 of 25 fired the critical gate, so a cut
+        fitted to this record would be fitted to noise."""
+        found = tool.render_sizing([
+            self.issue("a", 5, 40.0, critical=True),
+            self.issue("b", 6, 50.0, critical=True),
+            self.issue("c", 7, 20.0, critical=False)])
+        self.assertIn("no", found.lower())
+        self.assertIn("threshold is set", found)
+        for word in ("refuse", "too big", "must be cut"):
+            self.assertNotIn(word, found.lower())
+
+    def test_a_null_class_is_not_counted_as_false(self):
+        """`None` means nothing read it. Grouping it with `False` would report
+        an unread run as a clean one."""
+        found = tool.render_sizing([
+            self.issue("a", 5, 40.0, migration=None),
+            self.issue("b", 6, 50.0, migration=False),
+            self.issue("c", 7, 20.0, migration=False)])
+        self.assertIn("shipped no migration                    2", found)
+
+
+class SuitesPerIssueIsPrinted(unittest.TestCase):
+    """Criterion 4 of issue 06, graded on the RENDERED OUTPUT of `render_last`.
+
+    `run_compare.py` reads no `*_COLUMNS` tuple, so a test asserting a column
+    exists would pass on a build that prints nothing. The figure has two homes:
+    a `Figure` in `FIGURES` reachable by its source path, and a name in one of
+    the printed lists. Both are graded here, through the rendering.
+    """
+
+    def record(self, per_issue=5.57):
+        # 5.57 is a synthetic value, chosen because it renders unambiguously.
+        # The measured reading for `7f5b53` is 6.00; see `run_costs.py`.
+        return {
+            "batch": "batch-7f5b53", "kind": "run", "taken": "2026-09-17",
+            "issues": 14, "hours": 9.0,
+            "suites": {"whole": 78, "runner": 1, "subagents": 77,
+                       "per_issue": per_issue},
+        }
+
+    def test_the_figure_is_registered_with_a_source_path_that_reaches_it(self):
+        figure = tool.FIGURES["suites_per_issue"]
+        value = self.record()
+        for step in figure.path:
+            value = value[step]
+        self.assertEqual(value, 5.57)
+
+    def test_the_rendered_output_carries_the_figure(self):
+        text = tool.render_last([self.record()])
+        self.assertIn("5.57", text,
+                      f"render_last printed no 5.57:\n{text}")
+
+    def test_the_rendered_output_names_the_figure(self):
+        text = tool.render_last([self.record()]).lower()
+        self.assertIn("suite", text,
+                      "the rendered output carries the number and never says "
+                      "what it counts")
+
+    def test_a_run_with_no_reading_renders_without_crashing(self):
+        record = self.record(per_issue=None)
+        text = tool.render_last([record])
+        self.assertTrue(text.strip())
+
+    def test_lower_is_better(self):
+        """The whole point of the cut is to drive this down, so a comparison
+        that called a rise an improvement would read backwards."""
+        self.assertEqual(tool.FIGURES["suites_per_issue"].better, -1)
+
 
 
 if __name__ == "__main__":

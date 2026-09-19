@@ -103,22 +103,39 @@ class Refusal(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("gate", text.lower())
 
-    def test_an_issue_path_inside_a_worktree_refuses(self):
+    def test_an_issue_path_inside_a_worktree_is_accepted(self):
+        """Ruled by the human, 2026-09-13, reversing the refusal this pinned.
+
+        The gates write their verdict beside the BRANCH, so the worktree copy is
+        the one that holds the owed list. The GATE_HEADINGS check below is what
+        actually protects the round, and it is path-agnostic.
+        """
         root = pathlib.Path(tempfile.mkdtemp(prefix="corrbrief-"))
         deep = root / ".claude" / "worktrees" / "batch-1" / ".scratch"
         deep.mkdir(parents=True)
         path = deep / "501-a.md"
         path.write_text(GATED, encoding="utf-8")
         code, text = run_main(["--issue", str(path), "--item", "x"])
+        self.assertEqual(code, 0, text)
+        self.assertNotIn("MAIN CHECKOUT", text)
+
+    def test_a_worktree_path_with_no_verdict_is_still_refused(self):
+        root = pathlib.Path(tempfile.mkdtemp(prefix="corrbrief2-"))
+        deep = root / ".claude" / "worktrees" / "batch-1" / ".scratch"
+        deep.mkdir(parents=True)
+        path = deep / "501-a.md"
+        path.write_text("# 501 a thing\n\n## Acceptance criteria\n\n1. x\n",
+                        encoding="utf-8")
+        code, text = run_main(["--issue", str(path), "--item", "x"])
         self.assertEqual(code, 1)
-        self.assertIn("worktree", text.lower())
+        self.assertIn("Verify gate", text)
 
     def test_a_blank_item_refuses(self):
         code, text = run_main(["--issue", str(issue()), "--item", "   "])
         self.assertEqual(code, 1)
         self.assertIn("REFUSED", text)
 
-    def test_the_refusal_says_it_never_waits_for_abdul(self):
+    def test_the_refusal_says_it_never_waits_for_the_human(self):
         _, text = run_main(["--issue", str(issue())])
         self.assertIn("AFK", text)
 
@@ -196,6 +213,44 @@ class SharedRule(unittest.TestCase):
             self.assertIn("CORRECTION ROUND", text)
         finally:
             brief.hook_module = original
+
+
+class TheCorrectionSpawnIsExemptedFromTheFullSuite(unittest.TestCase):
+    """Criterion 3 of issue 06, `three suites per issue`.
+
+    A correction round runs its named evidence tests and the typecheck. The
+    runner's coverage re-run that follows is the whole-tree reading, so the
+    spawn's own full suite reads a tree the runner is about to read again.
+    """
+
+    def test_the_prompt_states_the_exemption(self):
+        text = brief.compose(issue(), ["a missing pin on the totals test"])
+        self.assertIn("full suite", text)
+        self.assertIn("typecheck", text)
+
+    def test_the_exemption_survives_main_and_reaches_the_spawn(self):
+        code, text = run_main(["--issue", str(issue()), "--item",
+                               "a missing pin on the totals test"])
+        self.assertEqual(code, 0, text)
+        self.assertIn("full suite", text)
+
+    def test_the_exemption_is_not_bought_at_the_cost_of_the_marker(self):
+        """The sentence must not push `CORRECTION ROUND` out of the hook's
+        400-character opening window. A brief that gains the sentence and
+        loses its exemption is refused by the cap and never spawns."""
+        text = brief.compose(issue(), ["a missing pin on the totals test"])
+        self.assertTrue(
+            brief.earns_exemption(text),
+            "the exemption sentence pushed `CORRECTION ROUND` out of the "
+            "hook's opening window, so the prompt no longer earns the cap "
+            "exemption",
+        )
+
+    def test_the_marker_still_opens_the_prompt(self):
+        """Pinned directly, so a future edit cannot satisfy the test above by
+        weakening the hook."""
+        text = brief.compose(issue(), ["one owed item"])
+        self.assertTrue(text.lstrip().startswith("CORRECTION ROUND"))
 
 
 if __name__ == "__main__":

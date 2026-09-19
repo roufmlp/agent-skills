@@ -73,9 +73,11 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 
+import check_permission_floor
 import model_map
 import pipeline_fingerprint
 import run_records
@@ -86,6 +88,25 @@ def _module(name):
     two would diverge on any module state, and a caller pointing one of them at
     a different transcript root would be patching a copy nobody reads."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), name + ".py")
+    existing = sys.modules.get(name)
+    if existing is not None and os.path.realpath(
+            getattr(existing, "__file__", "") or "") == os.path.realpath(path):
+        return existing
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _lib(name):
+    """Load a script from `~/.claude/skills/lib` by path.
+
+    `_module` above loads a SIBLING of this file. The shared checkers live one
+    directory up in `lib/`, and `check_origin.py` reaches them the same way.
+    """
+    path = os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "lib", name + ".py")
     existing = sys.modules.get(name)
     if existing is not None and os.path.realpath(
             getattr(existing, "__file__", "") or "") == os.path.realpath(path):
@@ -392,6 +413,172 @@ def transcript(run: str):
     return chosen, ""
 
 
+# --------------------------------------------------------------------------
+# Whole-suite readings, issue 06 of the tracker-tooling set.
+#
+# The rule the count serves: a whole-tree reading is bought only where the tree
+# has changed since the last one, and only by a party that did not write the
+# change. This counts the readings so the cut can be watched.
+#
+# It counts the RUNNER and its SUBAGENTS alike, because the ruling counts them
+# alike -- "one issue runs the full suite five to nine times". Measured by
+# THIS rule on the `7f5b53` transcript, 2026-09-17: runner 1, subagents 83, so
+# 84 over 14 issues and 6.00 per issue. That reproduces the ruling's own figure
+# from a different instrument, which is why the human chose this reading over the
+# three rivals: 0.07 runner-only whole, 1.43 runner-only coverage-bearing, and
+# 77.86 counting every launch whether scoped or not.
+#
+# `isSidechain` is what separates the two. The field has always been in the
+# transcripts; no code here read it before.
+
+# A flag that takes a SEPARATE value. Its value is not a positional path, so an
+# exclusion repair -- the `Regenerate coverage without the contended file`
+# shape this issue exists to remove -- is still a whole-suite reading.
+SUITE_VALUE_FLAGS = frozenset({
+    "--exclude", "--reporter", "--project", "--pool", "--config", "--shard",
+    "--testTimeout", "--hookTimeout", "--coverage.reporter",
+})
+
+# Shell redirection. The words after `>` belong to the redirect, not to the
+# suite, and reading them as arguments scores `npm test > log 2>&1` -- a real
+# whole-suite run -- as a scoped one. That error read the whole `7f5b53`
+# transcript as zero whole-suite runs.
+REDIRECT_PAIRS = frozenset({">", ">>", "<", "2>", "&>", "2>>"})
+REDIRECT_ALONE = frozenset({"2>&1", "1>&2", "&"})
+
+
+def _suite_arguments(segment):
+    """The arguments of a vitest or npm-test invocation, or None.
+
+    None means this segment does not START one. A segment that merely mentions
+    a suite command -- a journal heredoc quoting one, say -- never reaches
+    here, because `segments` strips heredocs before splitting.
+    """
+    try:
+        argv = shlex.split(segment)
+    except ValueError:
+        return None
+    if not argv:
+        return None
+    if argv[0] == "npx" and len(argv) > 1 and argv[1] == "vitest":
+        rest = argv[2:]
+    elif argv[0] == "vitest":
+        rest = argv[1:]
+    elif argv[0] == "npm" and len(argv) > 1 and argv[1] == "test":
+        rest = argv[2:]
+    elif (argv[0] == "npm" and len(argv) > 2 and argv[1] == "run"
+          and argv[2].startswith("test")):
+        rest = argv[3:]
+    else:
+        return None
+    if rest and rest[0] == "run":
+        rest = rest[1:]
+    kept, i = [], 0
+    while i < len(rest):
+        token = rest[i]
+        if token in REDIRECT_PAIRS:
+            i += 2
+            continue
+        if token in REDIRECT_ALONE:
+            i += 1
+            continue
+        if len(token) > 1 and token[0] in "><" or token.startswith("2>"):
+            i += 1
+            continue
+        kept.append(token)
+        i += 1
+    return kept
+
+
+def _is_whole_suite(segment):
+    """True when this segment runs the suite over no named path."""
+    body = _suite_arguments(segment)
+    if body is None:
+        return False
+    i = 0
+    while i < len(body):
+        token = body[i]
+        if token.startswith("-"):
+            i += 2 if token in SUITE_VALUE_FLAGS else 1
+            continue
+        return False        # a positional path: this reads part of the tree
+    return True
+
+
+def whole_suite_readings(directory):
+    """`(runner, subagents)` whole-suite launches in one run's transcripts.
+
+    A call counts AT MOST ONCE however many whole-suite segments it carries,
+    which is the rule the transcript reading already took: a figure that one
+    compound one-liner can move is not a figure.
+
+    Identity is the tool_use id, NOT the command text. Two gates that each run
+    `rm -rf .vitest-cache && npm test` ran the suite twice, and this figure
+    counts suite runs. Measured on `7f5b53`, 2026-09-17: 84 whole-suite calls
+    carrying 84 distinct ids and 78 distinct command texts, so keying on text
+    dropped six real runs -- five of them that same cache-clearing line issued
+    by five different gate sessions. The id still refuses a genuine duplicate,
+    where one entry is written to the transcript twice; there were none here.
+
+    A bad line is skipped and the rest is read. A reading that dies on one
+    half-written line reports nothing after it, and reports it as zero.
+    """
+    seen = {False: set(), True: set()}
+    unkeyed = {False: 0, True: 0}
+    for transcript_file in sorted(pathlib.Path(directory).rglob("*.jsonl")):
+        try:
+            text = transcript_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            message = entry.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, list):
+                continue
+            side = bool(entry.get("isSidechain"))
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") != "tool_use" or block.get("name") != "Bash":
+                    continue
+                given = block.get("input")
+                command = given.get("command") if isinstance(given, dict) else None
+                if not isinstance(command, str) or not command.strip():
+                    continue
+                if not any(_is_whole_suite(one)
+                           for one in check_permission_floor.segments(command)):
+                    continue
+                key = block.get("id")
+                if isinstance(key, str) and key:
+                    seen[side].add(key)
+                else:
+                    # No id to key on. Counted rather than dropped: a call that
+                    # ran is a reading that happened, and the alternative is a
+                    # figure that quietly shrinks on a transcript shape we have
+                    # not seen.
+                    unkeyed[side] += 1
+    return (len(seen[False]) + unkeyed[False],
+            len(seen[True]) + unkeyed[True])
+
+
+def suites_figure(runner, subagents, issues):
+    """The recorded figure. `per_issue` is None where no issue count is known,
+    because a rate over an unknown denominator is not a rate."""
+    whole = runner + subagents
+    return {
+        "whole": whole,
+        "runner": runner,
+        "subagents": subagents,
+        "per_issue": round(whole / issues, 2) if issues else None,
+    }
+
+
 def in_process(call) -> str:
     """Take one reading in this process. A failure becomes text, as `run` does.
 
@@ -692,7 +879,9 @@ def report(args, session, this_run, path, spawns, cwd, mains=None):
         ledger_text=ledger_text,
         briefing_text=briefing_text,
         spans=spans,
-        touched=_touched(args.repo or str(cwd)))
+        touched=_touched(args.repo or str(cwd)),
+        criteria=_criteria(args.repo or str(cwd), path, ledger_text),
+        declared=_declared(args.repo or str(cwd), path, ledger_text))
 
     record = build_record(
         batch=this_run,
@@ -718,6 +907,10 @@ def report(args, session, this_run, path, spawns, cwd, mains=None):
         # Ruling 14's one threshold needs a figure on the line. The finale has
         # printed this at every run since 2026-08-16 and stored it on none.
         cache=probe_cache(path),
+        # Issue 06. Counted over the whole run directory, not the one chosen
+        # transcript: the gates run in sidechain sessions of the same run, and
+        # they are most of the readings this figure exists to watch.
+        suites=suites_figure(*whole_suite_readings(path.parent), issues),
     )
 
     print("### The line for the comparison record\n")
@@ -771,6 +964,123 @@ def _agent_steps(session, spawns):
              "label": one.description or ""}
             for one in spawns or ()]
 
+
+# `Fork point: `c58b4f61` (main's head at launch…)`. Every /run-issues ledger
+# carries one line of this shape, and it names the tree the implementers were
+# handed.
+FORK_POINT = re.compile(r"^Fork point:\s*`(?P<sha>[0-9a-f]{7,40})`", re.M)
+
+
+# `Writes rows: no`, `Writes rows: yes`, `Writes rows: no. The change is in ...`.
+# The line a project's own `## Target database` rule makes every issue carry, and
+# the only class an issue DECLARES about itself in a fixed place.
+WRITES_ROWS = re.compile(r"^Writes rows:\s*(?P<answer>yes|no)\b", re.M | re.I)
+
+# A migration file the issue names. The path is one directory, named once, and
+# `run_measures.MIGRATIONS` names the same one for the commit-side reader.
+NAMES_MIGRATION = re.compile(r"supabase/migrations/\S+\.sql")
+
+
+def _issue_blobs(repo, ledger_path, ledger_text):
+    """Yield `(issue id, file text)` for every issue file at the run's FORK POINT.
+
+    One git walk, shared by every fact read off the pre-run file. Reading at the
+    fork point and not at HEAD is the whole point: the run APPENDS its own
+    implementation records and two gate verdicts to the very file it is grading,
+    so anything counted afterwards grades a file the implementer never saw.
+
+    Yields nothing on any failure. A repository git cannot read has told us
+    nothing, and `run_measures` turns that into nulls rather than zeroes.
+    """
+    found = FORK_POINT.search(ledger_text or "")
+    if not found:
+        return
+    sha = found.group("sha")
+    # `.scratch/<feature>/runs/<batch>/run.md` -> `.scratch/<feature>/issues`.
+    runs_dir = os.path.dirname(os.path.dirname(os.path.dirname(ledger_path)))
+    issues_dir = os.path.join(runs_dir, "issues")
+    try:
+        listing = subprocess.run(
+            ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", sha],
+            capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return
+    if listing.returncode != 0:
+        return
+    want = os.path.relpath(issues_dir, str(repo))
+    for path in listing.stdout.splitlines():
+        path = path.strip()
+        if not path.startswith(want + os.sep) or not path.endswith(".md"):
+            continue
+        match = re.match(r"^(\d{1,4}[a-z]?)-", os.path.basename(path))
+        if not match:
+            continue
+        try:
+            blob = subprocess.run(
+                ["git", "-C", str(repo), "show", f"{sha}:{path}"],
+                capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if blob.returncode == 0:
+            yield match.group(1), blob.stdout
+
+
+def _criteria(repo, ledger_path, ledger_text):
+    """Issue id -> acceptance-criteria count, read at the run's FORK POINT.
+
+    The prediction half of class 9's loop (ruled 2026-09-14). See `_issue_blobs`
+    for why the fork point and not HEAD. Returns `{}` on any failure.
+    """
+    counts = {}
+    try:
+        # `check_issue_size.py` is in `../lib`, not beside this file, so
+        # `_module` cannot reach it. Same road `check_origin.py` takes.
+        size = _lib("check_issue_size")
+    except Exception:
+        return counts
+    for issue, text in _issue_blobs(repo, ledger_path, ledger_text):
+        read = size.read_criteria(text)
+        # `None` is "no section at all" and `[]` is "a section holding
+        # nothing". Neither is a count, so neither is written.
+        if read:
+            counts[issue] = len(read)
+    return counts
+
+
+def _declared(repo, ledger_path, ledger_text):
+    """Issue id -> what the issue file DECLARES about its own class.
+
+    **These are declarations, not outcomes, and that is the point.** The two
+    class facts already on the issue line are both read AFTER the run:
+    `migration` off the commit's touched paths, and `critical_gate` off the
+    transcript, where it records that the runner judged the DIFF to touch money,
+    authentication or secrets. Neither exists when `/harden-issues` decides how
+    big an issue may be, which is when class 9 acts. These two do.
+
+    Added 2026-09-14 on the human's instruction, after the measurement showed the
+    rework signal sits in the money/auth/secrets class (`critical_gate` against
+    correction minutes, +0.54) rather than in the migration (-0.02 against the
+    same, on the recorded field). Nothing is refused on either value yet, and
+    nothing should be until the loop holds two more runs: 17 of 25 issues fired
+    the critical gate and 13 of 25 shipped a migration, so both saturate this
+    tracker, and a threshold fitted to 25 rows would be fitted to noise.
+
+    **No money, authentication or secrets reader is built here, deliberately.**
+    `critical_gate` already records that quantity, and this codebase's own rule
+    is that two readers of one quantity drift apart. What is recorded here is
+    only what the file states in a fixed place.
+
+    Each value is True, False, or None where the file says nothing.
+    """
+    out = {}
+    for issue, text in _issue_blobs(repo, ledger_path, ledger_text):
+        says = WRITES_ROWS.search(text)
+        out[issue] = {
+            "declared_writes_rows": (says.group("answer").lower() == "yes"
+                                     if says else None),
+            "declared_migration": bool(NAMES_MIGRATION.search(text)),
+        }
+    return out
 
 def _touched(repo):
     """A callable answering "what paths did this sha change", or None.

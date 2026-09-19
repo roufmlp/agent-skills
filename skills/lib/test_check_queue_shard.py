@@ -15,6 +15,16 @@ import unittest
 
 from check_queue_shard import CLEAN, EMPTY, WRONG, check_file, check_text, main
 
+try:
+    from rulings import parse
+    RULINGS_READER = True
+except ImportError:  # pragma: no cover - a pack shipped without the reader
+    # `rulings.py` is optional in this pack, and so is the guard that reads it.
+    # The two classes below are skipped rather than deleted: they are the
+    # acceptance tests for that guard and they run the moment the reader is
+    # beside them. Everything above them runs either way.
+    RULINGS_READER = False
+
 NAMED = (
     "# a shard\n\n"
     "## 01-Q1: Which local Postgres `q-h0912-1`\n\nbody\n\n"
@@ -78,13 +88,22 @@ class File(unittest.TestCase):
             self.assertEqual(check_file(os.path.join(tmp, "missing.md"))[0], EMPTY)
 
 
+def drive(*paths):
+    """`main` run over `paths`, as `(exit code, stdout, stderr)`.
+
+    Lifted out of `Main` when `AnIncompleteRecord` needed the same road. One
+    driver, because two would drift on which stream they captured.
+    """
+    err = io.StringIO()
+    out = io.StringIO()
+    with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+        code = main(list(paths))
+    return code, out.getvalue(), err.getvalue()
+
+
 class Main(unittest.TestCase):
     def run_main(self, *paths):
-        err = io.StringIO()
-        out = io.StringIO()
-        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
-            code = main(list(paths))
-        return code, out.getvalue(), err.getvalue()
+        return drive(*paths)
 
     def test_a_clean_shard_exits_zero_and_says_so(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -109,6 +128,183 @@ class Main(unittest.TestCase):
             bad = write(tmp, "b.md", "# t\n\n" + BARE)
             code, _, _ = self.run_main(empty, bad)
         self.assertEqual(code, EMPTY)
+
+
+RULINGS = (
+    "# Rulings\n\n"
+    "## 2026-09-13 `01-Q1` — local Postgres for tests, and at what concurrency\n"
+    "Ruled: one Postgres 16 container per worktree, tests serial.\n"
+    "Carried by: `.scratch/example-feature/issues/01-the-test-database.md`\n\n"
+    "## 2026-09-10 `03-Q2` — where the search radius comes from\n"
+    "Ruled: the radius is a column on the depot row, not a constant.\n"
+    "Carried by: `.scratch/example-feature/issues/03-the-radius.md`\n"
+)
+ASKED = ("## 05-Q2: which local Postgres at what concurrency `q-ti04-1`\n\n"
+         "The batch needs a database. Which one, and how many at once?\n")
+CHECKED = (
+    "## 05-Q2: which local Postgres at what concurrency `q-ti04-1`\n\n"
+    "Rulings checked: none match\n"
+    "> 2026-09-13 `01-Q1` — local Postgres for tests, and at what concurrency\n"
+    "> 2026-09-10 `03-Q2` — where the search radius comes from\n\n"
+    "01-Q1 fixes the container. This asks who tears it down between batches.\n"
+)
+
+
+@unittest.skipUnless(RULINGS_READER, "this pack ships without `rulings.py`")
+class TheRulingsGuard(unittest.TestCase):
+    """Acceptance criteria 1 and 2 of issue 04."""
+
+    def setUp(self):
+        self.entries = parse(RULINGS)
+
+    def test_a_question_already_ruled_is_refused_with_the_entry_printed(self):
+        refusals = check_text("# s\n\n" + ASKED, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1)
+        self.assertTrue(refusals[0].startswith("s.md:3:"), refusals[0])
+        self.assertIn("`01-Q1`", refusals[0])
+        self.assertIn("one Postgres 16 container", refusals[0])
+        self.assertIn(".scratch/example-feature/issues/01-the-test-database.md",
+                      refusals[0])
+
+    def test_the_same_item_that_checked_the_rulings_passes(self):
+        self.assertEqual(check_text("# s\n\n" + CHECKED, "s.md", self.entries), [])
+
+    def test_a_declaration_that_quotes_neither_entry_is_still_refused(self):
+        item = ASKED.replace("The batch needs",
+                             "Rulings checked: none match\n\nThe batch needs")
+        refusals = check_text("# s\n\n" + item, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1)
+        self.assertIn("quotes no entry", refusals[0])
+
+    def test_a_declaration_that_skips_the_matching_entry_is_refused(self):
+        """Reading around the answer is not reading it.
+
+        The item declares a check and quotes an entry, but not the one that
+        rules its subject. Without this the escape line would pass any item
+        that quoted anything at all.
+        """
+        item = (
+            "## 05-Q2: which local Postgres at what concurrency `q-ti04-1`\n\n"
+            "Rulings checked: none match\n"
+            "> 2026-09-10 `03-Q2` — where the search radius comes from\n\n"
+            "The batch needs a database, and nothing on record says which.\n"
+        )
+        refusals = check_text("# s\n\n" + item, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1)
+        self.assertIn("`01-Q1`", refusals[0])
+        self.assertIn("does not quote", refusals[0])
+
+    def test_an_unruled_question_needs_no_declaration(self):
+        item = "## 05-Q3: how the invoice pdf is rendered `q-ti04-2`\n\nbody\n"
+        self.assertEqual(check_text("# s\n\n" + item, "s.md", self.entries), [])
+
+    def test_an_empty_rulings_file_changes_nothing(self):
+        self.assertEqual(check_text("# s\n\n" + ASKED, "s.md", []), [])
+
+    def test_the_unnamed_refusal_still_fires_under_the_guard(self):
+        refusals = check_text("# s\n\n" + BARE, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1)
+        self.assertIn("no backticked `q-` id", refusals[0])
+
+
+# The rulings file of 2026-09-17, with one entry whose `Carried by:` line
+# carries two backticked paths. `rulings.parse` read one entry out of two.
+HALF_READ = (
+    "# Rulings\n\n"
+    "## 2026-09-13 `01-Q1` — local Postgres for tests, and at what concurrency\n"
+    "Ruled: one Postgres 16 container per worktree, tests serial.\n"
+    "Carried by: `.scratch/example-feature/issues/01-the-test-database.md`\n\n"
+    "## 2026-09-17 `ti06-9` — where the search radius comes from\n"
+    "Ruled: the radius is a column on the depot row.\n"
+    "Carried by: `run-issues/SKILL.md` line 1020, and `.scratch/x.md`\n"
+)
+
+
+# A shard asking something no entry of `HALF_READ` or `RULINGS` rules, so the
+# only thing under test here is whether the record itself read whole.
+UNRULED = "# s\n\n## how the invoice pdf is rendered `q-x-1`\n\nbody\n"
+
+
+def stage(tmp, rulings, shard):
+    """A shard under a `.scratch` tree, with a rulings file governing it.
+
+    This is the layout `rulings.path_for` walks: the shard sits at
+    `<tree>/.scratch/decisions-queue.d/<owner>/<x>.md` and the record two
+    directories above it.
+    """
+    scratch = os.path.join(tmp, ".scratch")
+    owner = os.path.join(scratch, "decisions-queue.d", "t")
+    os.makedirs(owner)
+    with open(os.path.join(scratch, "rulings.md"), "w", encoding="utf-8") as h:
+        h.write(rulings)
+    path = os.path.join(owner, "x.md")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(shard)
+    return path, os.path.join(scratch, "rulings.md")
+
+
+@unittest.skipUnless(RULINGS_READER, "this pack ships without `rulings.py`")
+class AnIncompleteRecord(unittest.TestCase):
+    """This is the consumer whose silence causes the harm.
+
+    A dropped entry cannot refuse the question it answered, so the pass asks
+    the human again — the exact failure the rulings file exists to prevent. A
+    shard graded against a record this reader could not fully read is not a
+    clean shard, whatever its own headings say.
+    """
+
+    def test_a_shard_graded_against_a_dropped_entry_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shard, rulings = stage(tmp, HALF_READ, UNRULED)
+            code, refusals = check_file(shard)
+        self.assertEqual(code, WRONG)
+        self.assertTrue(any("ti06-9" in line for line in refusals), refusals)
+        self.assertTrue(any(rulings in line for line in refusals), refusals)
+
+    def test_a_record_that_reads_whole_leaves_a_clean_shard_clean(self):
+        """The other direction. This guard refuses a broken entry, never a
+        file that parses."""
+        with tempfile.TemporaryDirectory() as tmp:
+            shard, _ = stage(tmp, RULINGS, UNRULED)
+            code, refusals = check_file(shard)
+        self.assertEqual((code, refusals), (CLEAN, []))
+
+    def test_the_command_line_says_nothing_passed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shard, _ = stage(tmp, HALF_READ, UNRULED)
+            code, out, err = drive(shard)
+        self.assertEqual(code, WRONG)
+        self.assertIn("REFUSED", err)
+        self.assertNotIn("every heading carries an id", out)
+
+    def test_a_rulings_file_named_on_the_command_line_is_graded_too(self):
+        """`--rulings` parses the file itself, so the same hole is open on
+        that road."""
+        with tempfile.TemporaryDirectory() as tmp:
+            rulings = write(tmp, "rulings.md", HALF_READ)
+            code, out, err = drive(write(tmp, "a.md", UNRULED),
+                                   "--rulings", rulings)
+        self.assertEqual(code, WRONG)
+        self.assertIn("ti06-9", err)
+        self.assertIn(rulings, err)
+        self.assertNotIn("every heading carries an id", out)
+
+
+class WithoutTheRulingsReader(unittest.TestCase):
+    """What `--rulings` does where this pack ships without `rulings.py`.
+
+    It refuses rather than reporting a clean walk it did not perform. A flag
+    that silently checked nothing would read as "no ruling covers this".
+    """
+
+    @unittest.skipIf(RULINGS_READER, "the reader is present in this pack")
+    def test_the_flag_refuses_rather_than_passing_silently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out, err = drive(write(tmp, "a.md", NAMED),
+                                   "--rulings", write(tmp, "r.md", "# Rulings\n"))
+        self.assertEqual(code, WRONG)
+        self.assertIn("REFUSED", err)
+        self.assertEqual(out, "")
 
 
 if __name__ == "__main__":

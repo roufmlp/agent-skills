@@ -82,8 +82,8 @@ FENCE = re.compile(r"^\s*```")
 HEADING = re.compile(r"^\s{0,3}#{1,6}\s")
 
 AFK = (
-    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR ABDUL. He is AFK for every "
-    "run. Take one of the two roads above now and carry on."
+    "\nTHIS IS NOT A HALT AND IT NEVER WAITS FOR THE HUMAN. The human is AFK "
+    "for every run. Take one of the two roads above now and carry on."
 )
 
 
