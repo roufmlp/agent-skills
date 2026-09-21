@@ -413,6 +413,21 @@ shard>` and stop on exit 1: a heading with no backticked `q-` id is an item the 
 never retire, and it comes back to the human after they have ruled. Three groups of
 queued items were repaired by hand for that fault before the check existed.
 
+**A ruling the human gives at the keyboard goes into the RULINGS FILE, not only into the
+issue.** Where an attended pass ends with a ruling, write each one into `.scratch/rulings.md`
+as its own entry, with the issue on its `Carried by:` line. An answer recorded only under a
+`## RULED ...` heading in the issue is invisible to `check_queue_shard.py`, which grades a
+queued question against the rulings file ALONE, so nothing can refuse the re-ask and the next
+pass puts the same question again. That happened three days apart on one tracker, and the
+human's words were "why this question again?"
+
+**This pack ships no refusal for that, and the gap is deliberate.** A reader who wants one
+writes a check that counts the issue files carrying such a heading that no rulings entry
+names, and refuses a RISE in that count rather than the count itself — a tracker carries
+rulings written before the rule, and a flat refusal would block every stamp on it. The
+sibling fault, an entry the reader cannot parse, IS refused at write time, by
+`hooks/rulings-write-guard.py` in this pack.
+
 Where an answer needs input nobody here has — a third party, a credential, a
 product call with no defensible default — set `needs-harden` instead, so the issue
 comes back to this pass rather than dying in a status nothing reads.

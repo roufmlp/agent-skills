@@ -34,7 +34,17 @@ Scope, as given: **147, 318, 321b**.
 """
 
 
+# The same table with no rows, so a test can add exactly the row it is about.
+HEADER = """Owner: run-issues-batch-0a1b2c
+
+## Status
+
+| Issue | Status | Stamps |
+|---|---|---|
+"""
+
 class FindRow(unittest.TestCase):
+
     def test_finds_a_bare_numeric_issue(self):
         self.assertIn("attempt 1 02:35", find_row(LEDGER, "147"))
 
@@ -131,6 +141,47 @@ class Decide(unittest.TestCase):
         self.assertFalse(d.allowed)
         self.assertEqual(d.attempt, 4)
         self.assertIn("3 attempts", d.reason)
+
+    def test_a_criteria_reset_refunds_the_attempt_it_consumed(self):
+        """The human's ruling of 2026-09-20. Three attempts and one reset
+        spends two."""
+        row = ("| 501 | in-progress | attempt 1; gates 1: verify=reject review=reject; "
+               "attempt 2; gates 2: verify=reject review=reject; criteria reset 1; "
+               "attempt 3; gates 3: verify=reject review=reject |")
+        ledger = HEADER + row + "\n"
+        d = decide(ledger, "501")
+        self.assertTrue(d.allowed, d.reason)
+        self.assertEqual(d.attempt, 4)
+
+    def test_a_refunded_row_still_stops_one_attempt_later(self):
+        """The refund buys one attempt, not an open cap."""
+        row = ("| 502 | in-progress | attempt 1; criteria reset 1; attempt 2; "
+               "attempt 3; attempt 4 |")
+        ledger = HEADER + row + "\n"
+        d = decide(ledger, "502")
+        self.assertFalse(d.allowed)
+        self.assertEqual(d.attempt, 5)
+        self.assertIn("refund", d.reason.lower())
+
+    def test_the_refund_does_not_depend_on_where_the_reset_sits(self):
+        """The row is prose. A reset written first refunds the same attempt."""
+        row = "| 503 | in-progress | criteria reset 1; attempt 1; attempt 2; attempt 3 |"
+        ledger = HEADER + row + "\n"
+        d = decide(ledger, "503")
+        self.assertTrue(d.allowed, d.reason)
+
+    def test_a_reset_cannot_refund_an_attempt_that_was_never_taken(self):
+        """A reset with no attempt behind it must not buy a fourth attempt."""
+        row = "| 504 | in-progress | criteria reset 1 |"
+        ledger = HEADER + row + "\n"
+        d = decide(ledger, "504")
+        self.assertTrue(d.allowed, d.reason)
+        self.assertEqual(d.attempt, 1)
+
+    def test_three_attempts_and_no_reset_still_refuses_the_fourth(self):
+        """The refund changes nothing for a row that never took a reset."""
+        d = decide(LEDGER, "288")
+        self.assertFalse(d.allowed)
 
     def test_two_resets_refuses_the_third(self):
         d = decide(LEDGER, "321b")

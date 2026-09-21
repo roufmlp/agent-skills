@@ -72,6 +72,23 @@ than written down twice. The date is what the parked sweep ages the
 issue off, and a parked issue with no date is parked for ever, which is the
 deletion this status must not become.
 
+THE AUDIENCE CLAUSE, ruled by the human on 2026-09-19, narrows the rule above:
+an `operator` row goes to `needs-harden` whatever its severity, and only
+`tester` and `agent` rows park. MEASURED on 2026-09-19 on one tracker: 50
+parked issues, and every one of them `operator`/`medium`. Among them a list
+page showing none of the design files it exists to show, a raise form that
+never names the customer it just created, and two primary buttons painting dark
+ink on dark green. The old rule read severity and a blocker and never the
+audience, so it could not tell a screen from a build check. The cost, recorded
+because the human must be able to overturn it: an `operator`/`medium` issue
+nothing blocks still sorts last under `next_batch.py`'s fan-out, so the drain
+for it is their eye rather than the sweep -- the gain is that it is visible and
+offerable. THE SCRIPT LEARNED THE CLAUSE ON 2026-09-21, two days after the
+ruling. Until then all nine issues promotion minted from one run exited 1 here
+and nowhere else, and about 50 issues in that tracker carried a hand-written
+`Un-parked: 2026-09-19` repair line, so the workaround was the majority case
+and promotion was overriding its own checker every time.
+
 Usage:
     python3 check_origin.py --register <register.md>
     python3 check_origin.py --issue <issue file>
@@ -231,6 +248,15 @@ NEEDS_HARDEN = "needs-harden"
 PARKS = ("medium", "low")
 HARDENS = ("critical", "high")
 
+# The audience clause, ruled by the human on 2026-09-19. The three words
+# promotion writes, and the two of them that may park. It is an ALLOWLIST of
+# what parks rather than a list of what does not: a fourth word is a
+# mislabelled row, and the one direction that must never happen by accident is
+# a file going invisible. `operator` is the word that means a person using the
+# product, so a row carrying it is always offered.
+AUDIENCES = ("operator", "tester", "agent")
+PARK_AUDIENCES = ("tester", "agent")
+
 # The direct-road stamp, so a merged file can be refused one.
 DIRECT_ROAD = re.compile(r"^Direct-road:\s*(\S+)", re.MULTILINE | re.IGNORECASE)
 
@@ -367,6 +393,24 @@ def _status_faults(header, text):
     was named as a blocker by any other issue. Under `next_batch.py`'s fan-out order an issue
     nothing waits on sits last for ever, so the backlog only grows.
 
+    THE AUDIENCE IS READ BEFORE THE SEVERITY, the clause the human ruled on
+    2026-09-19. An `operator` row never parks, whatever its severity; only
+    `tester` and `agent` rows reach the severity question at all. `operator` is
+    the audience word that means a person using the product, and on 2026-09-19
+    all 50 of one tracker's parked issues were `operator`/`medium` -- among
+    them a list page showing none of the design files it exists to show. The
+    same rule is written out in `~/.claude/agents/promotion.md`, which is the
+    writer this grades; the two are kept in step by the drill beside this file.
+
+    AN AUDIENCE THE CLAUSE CANNOT PLACE IS REFUSED BY NAME, whatever status the
+    file carries. The clause is an allowlist of what may park, so an unknown
+    word lands in the refused pile rather than passing quietly: promotion writes
+    one of three words, and a fourth is a mislabelled row. This is the one field
+    a silent pass would decide, because a wrong audience is the difference
+    between a file the human is offered and one they never see. The severity
+    vocabulary is still silent on a word it does not know, which is older than
+    this clause and is not what 2026-09-19 ruled on.
+
     IT IS GRADED HERE RATHER THAN REMEMBERED IN THE BRIEF. Promotion already
     runs this check on every file it mints, and a rule that can refuse is built
     rather than written down twice (`~/.claude/CLAUDE.md`, the three classes).
@@ -394,9 +438,18 @@ def _status_faults(header, text):
     declared = {r.severity for r in rows}
     if len(declared) > 1:
         return []
+    if len({r.audience for r in rows}) > 1:
+        return []
     severity = rows[0].severity
     if severity not in PARKS + HARDENS:
         return []
+    audience = rows[0].audience
+    if audience not in AUDIENCES:
+        return [Fault("(the issue file)",
+                      f"its `Rows:` line reads the audience {audience!r}, which "
+                      f"is not `operator`, `tester` or `agent`, so nothing can "
+                      f"tell whether this file parks. Name the row's own "
+                      f"audience.", _line_of(header, rows_line))]
 
     status_line = STATUS_LINE.search(header)
     if not status_line:
@@ -406,20 +459,33 @@ def _status_faults(header, text):
     status = _BOLD.sub("", status_line.group(1)).strip("`").lower()
     line = _line_of(header, status_line)
     blockers = next_batch.blockers_of(text.splitlines())
-    wanted = PARKED if severity in PARKS and not blockers else NEEDS_HARDEN
+    parks = (severity in PARKS and audience in PARK_AUDIENCES and not blockers)
+    wanted = PARKED if parks else NEEDS_HARDEN
     if status != wanted and wanted == PARKED:
         return [Fault("(the issue file)",
-                      f"its rows are `{severity}` and its `## Blocked by` names "
-                      f"no issue, so promotion writes `Status: parked` and this "
-                      f"file reads {status!r}. A needs-harden issue nothing "
-                      f"waits on sits last for ever.", line)]
+                      f"its rows are `{audience}`/`{severity}` and its "
+                      f"`## Blocked by` names no issue, so promotion writes "
+                      f"`Status: parked` and this file reads {status!r}. A "
+                      f"needs-harden issue nothing waits on sits last for "
+                      f"ever.", line)]
     if status != wanted:
-        why = (f"its `## Blocked by` names {blockers[0]}"
-               if blockers else f"its rows are `{severity}`")
+        # Where two of the three reasons are true at once the message names
+        # one, and it names the oldest: a blocker, then the severity, then the
+        # audience. A reader repairing an `operator`/`high` file needs to be
+        # told the thing that has been true since 2026-09-13, not the newest
+        # clause that also happens to catch it.
+        if blockers:
+            why = f"its `## Blocked by` names {blockers[0]}"
+        elif severity in HARDENS:
+            why = f"its rows are `{severity}`"
+        else:
+            why = (f"its rows are `{audience}`, the audience of a person using "
+                   f"the product")
         return [Fault("(the issue file)",
                       f"{why}, so promotion writes `Status: needs-harden` and "
                       f"this file reads {status!r}. Parked is for an issue "
-                      f"nothing waits on and that waits on nothing.", line)]
+                      f"nothing waits on, that waits on nothing, and that no "
+                      f"person using the product ever sees.", line)]
     if status != PARKED:
         return []
 

@@ -13,6 +13,7 @@ cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/origin-row-guard.py hooks/git-shared-state-guard.py \
    hooks/run-issues-brief-cap.py hooks/run-issues-typecheck-gate.py \
    hooks/machine-wide-kill-guard.py hooks/gate-commit-guard.py \
+   hooks/rulings-write-guard.py \
    ~/.claude/hooks/
 ```
 
@@ -94,13 +95,22 @@ its `PreToolUse` array rather than replacing the array.
             "command": "python3 /ABSOLUTE/PATH/TO/gate-commit-guard.py"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/rulings-write-guard.py"
+          }
+        ]
       }
     ]
   }
 }
 ```
 
-All ten are `PreToolUse` hooks, so each runs before the tool call it matches
+All eleven are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -280,6 +290,26 @@ of faults nobody can act on. A hook sees only writes happening now, so it can
 demand the column without ever meeting history. That is the whole of what you
 lose.
 
+## rulings-write-guard.py, on `Edit|Write`
+
+It refuses a write that would leave a `.scratch/rulings.md` holding more entries
+`skills/lib/rulings.py` cannot read than it holds now, and a write that empties
+one that currently holds entries. It applies the edit in memory, parses the
+result with that one reader, and compares the two counts. It writes nothing.
+
+A ruling the reader cannot parse is dropped in silence, and
+`skills/lib/check_queue_shard.py` grades a queued question against these entries
+alone, so a dropped ruling cannot refuse the question it answered and the next
+pass asks it again. Nine of 106 entries failed that way on one project on
+2026-09-20, four of them written the day before, so the rate is live rather than
+historical.
+
+A write leaving the same number of bad entries or fewer passes, because a pass
+repairing an inherited mess has to be able to land a partial repair. So does a
+`rulings.md` outside a `.scratch` tree, every Bash command, a payload it cannot
+parse, a missing reader, and an `Edit` whose `old_string` does not appear exactly
+once, which fails on the Edit tool's own terms.
+
 ## git-shared-state-guard.py, on `Bash`
 
 It refuses the git commands that reach across sessions sharing one checkout. A
@@ -395,6 +425,11 @@ copied out of the pack on its own.
 `run-issues-typecheck-gate.py` ships `test_run_issues_typecheck_gate.py`, 31
 cases; its fixture trees are built in a temporary directory, so it needs no
 environment either.
+`rulings-write-guard.py` ships `test_rulings_write_guard.py`, 14 cases; it drives
+the hook beside it as the harness does, a JSON payload on stdin and an exit code
+out, and it needs `skills/lib/rulings.py` reachable at
+`~/.claude/skills/lib/rulings.py`, which is where the hook itself looks for the
+reader.
 
 Only `coderules-gate.py` ships no test, because it has none in the tree it came
 from. It carries a drill in its docstring instead: pipe a JSON payload on stdin

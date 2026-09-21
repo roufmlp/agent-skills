@@ -1213,7 +1213,7 @@ def harden_before_the_run(plan: Plan, issues: dict, counts: dict, held=()) -> li
     own fan-out and then by number.
 
     SECOND, every minted issue whose `Origin:` issue has a fan-out above zero. An
-    issue carrying `Origin: 05/batch-be624c` changes what issue 05 built, and
+    issue carrying `Origin: 05/batch-<id4>` changes what issue 05 built, and
     everything downstream of 05 calls that code, so it inherits 05's fan-out as its
     rank; severity from its `Rows:` line breaks the tie inside one rank, and the
     number breaks that. A minted issue whose origin has fan-out zero is left out.
@@ -1280,7 +1280,7 @@ def render_held(issues: dict, ledger_rows, width: int, queued=QUEUED_RELEASED) -
     """The issues a run owns, one line per run and row status.
 
     Fifteen issues held by one run printed fifteen copies of
-    `done in run batch-d41839 (NOT merged)`. The human asked for less text on
+    `done in run batch-<id5> (NOT merged)`. The human asked for less text on
     2026-09-15, and the run and its state are the only things that vary.
     """
     held = [r for r in held_by(ledger_rows, queued).values()
@@ -1317,7 +1317,7 @@ def render_waiting_runs(plan: Plan, width: int) -> list:
     moves them.
 
     THE HEADING CARRIES THE LEGEND AND THE ROWS CARRY NUMBERS. Every blocker
-    used to repeat `(done on the branch of run batch-d41839, not in main)`,
+    used to repeat `(done on the branch of run batch-<id5>, not in main)`,
     which is the same 52 characters on every line under a heading that already
     names the run. The human asked for it on 2026-09-15. A blocker the run has NOT
     finished keeps its bracket, because that one is not released by the merge

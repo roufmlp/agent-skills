@@ -8,6 +8,19 @@ the cap was prose and prose does not refuse. This exits non-zero instead.
     attempts:  three, then blocked. Refuses the fourth.
     resets:    two, then the criteria are frozen. Refuses the third.
 
+**A criteria reset refunds the attempt it consumed.** The human ruled it on
+2026-09-20. The reason is what a reset means: the pass found the CRITERIA at
+fault, so the attempt that failed was never a fair test of the implementer.
+Charging it makes a run pay for its own bad brief. So the cap reads SPENT
+attempts -- `attempts - resets` -- and not the marker number. One reset
+therefore buys a fourth attempt and two buy a fifth, though the reset ceiling
+above usually bites first. A refund can never exceed the attempts actually
+taken, so a reset written before any attempt buys nothing.
+
+One measured run is why this is code. An issue took one reset, hit the old cap
+three hours after the ruling, and blocked a second issue behind it, because the
+ruling was prose and prose does not refund.
+
 **It counts an explicit `attempt N` marker, and nothing else.** The ledger's
 stamps column is prose in at least two formats, and the older `implement …` /
 `retry 1 …` vocabulary cannot be counted: `retry 00:18` is a clock and
@@ -76,6 +89,8 @@ class Decision:
     attempt: int
     resets: int
     reason: str = ""
+    # Attempts charged against the cap: taken, less those a reset refunded.
+    spent: int = 0
 
 
 def _cells(line):
@@ -144,6 +159,9 @@ def decide(ledger_text, issue):
     attempts = count_markers(row, "attempt")
     resets = count_markers(row, "criteria reset")
     this_attempt = attempts + 1
+    # A reset refunds the attempt it consumed, never more than were taken.
+    refunded = min(resets, attempts)
+    spent = attempts - refunded
 
     if attempts == 0 and LEGACY.search(row):
         return Decision(
@@ -172,20 +190,27 @@ def decide(ledger_text, issue):
             ),
         )
 
-    if attempts >= MAX_ATTEMPTS:
+    if spent >= MAX_ATTEMPTS:
+        refund_note = (
+            f", of which {refunded} {'was' if refunded == 1 else 'were'} "
+            f"refunded by a criteria reset, so {spent} "
+            f"{'is' if spent == 1 else 'are'} spent"
+        ) if refunded else ""
         return Decision(
             allowed=False,
             attempt=this_attempt,
             resets=resets,
             reason=(
-                f"Refused: issue {issue} has {attempts} attempts recorded and "
-                f"the cap is {MAX_ATTEMPTS}. This would be attempt "
-                f"{this_attempt}. Ledger it `blocked` and work out what a "
-                f"fourth attempt would need that the first three did not have."
+                f"Refused: issue {issue} has {attempts} attempts recorded"
+                f"{refund_note} and the cap is {MAX_ATTEMPTS}. This would be "
+                f"attempt {this_attempt}. Ledger it `blocked` and work out "
+                f"what another attempt would need that the earlier ones did "
+                f"not have."
             ),
         )
 
-    return Decision(allowed=True, attempt=this_attempt, resets=resets)
+    return Decision(allowed=True, attempt=this_attempt, resets=resets,
+                    spent=spent)
 
 
 def main(argv=None):
@@ -204,8 +229,10 @@ def main(argv=None):
     decision = decide(text, args.issue)
     if decision.allowed:
         print(
-            f"attempt {decision.attempt} of {MAX_ATTEMPTS} "
-            f"(criteria resets: {decision.resets} of {MAX_RESETS})"
+            f"attempt {decision.attempt}, "
+            f"{decision.spent} of {MAX_ATTEMPTS} spent "
+            f"(criteria resets: {decision.resets} of {MAX_RESETS}, "
+            f"each refunding one attempt)"
         )
         return 0
     print(decision.reason, file=sys.stderr)

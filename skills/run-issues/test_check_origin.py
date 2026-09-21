@@ -103,7 +103,7 @@ def test_the_row_id_is_read_from_the_id_column_not_the_first_column():
     assert found[0].row_id == "a-07"
 
 
-# The file promotion mints. `operator/medium` naming no blocker is parked, the
+# The file promotion mints. `tester/medium` naming no blocker is parked, the
 # rule of issue 03 of the tracker-tooling set, ruled by the human, 2026-09-13.
 ISSUE_HEADER = (
     "Status: parked\n"
@@ -111,11 +111,11 @@ ISSUE_HEADER = (
     "Direct-road: no\n"
     "Owed: unsorted\n"
     "Origin: 149e/batch-170a59\n"
-    "Rows: rv149e-1 operator/medium\n"
+    "Rows: rv149e-1 tester/medium\n"
     "\n"
     "# 561 — the fetch timer charges every read for its own parse\n"
     "\n"
-    "Category: performance. Severity: medium. Audience: operator.\n"
+    "Category: performance. Severity: medium. Audience: tester.\n"
     "\n"
     "## Blocked by\n"
     "\n"
@@ -124,7 +124,7 @@ ISSUE_HEADER = (
 
 PARKED_LINES = "Status: parked\nParked: 2026-09-13\n"
 HIGH = (ISSUE_HEADER.replace(PARKED_LINES, "Status: needs-harden\n")
-        .replace("operator/medium", "operator/high"))
+        .replace("tester/medium", "tester/high"))
 
 
 def issue_faults(text):
@@ -166,22 +166,22 @@ def test_a_minted_issue_with_no_rows_line_is_refused():
     # the prose of every file batch-d67136 minted -- "Promoted from register row
     # `rv01-6` ... Audience operator, severity medium" -- and this gives it a
     # cell, the same move `Origin:` made.
-    text = ISSUE_HEADER.replace("Rows: rv149e-1 operator/medium\n", "")
+    text = ISSUE_HEADER.replace("Rows: rv149e-1 tester/medium\n", "")
     found = issue_faults(text)
     assert len(found) == 1
     assert "`Rows:` line" in found[0].reason
 
 
 def test_a_rows_line_below_the_title_does_not_satisfy_the_check():
-    text = (ISSUE_HEADER.replace("Rows: rv149e-1 operator/medium\n", "")
-            + "\nRows: rv149e-1 operator/medium\n")
+    text = (ISSUE_HEADER.replace("Rows: rv149e-1 tester/medium\n", "")
+            + "\nRows: rv149e-1 tester/medium\n")
     found = issue_faults(text)
     assert len(found) == 1
     assert "`Rows:` line" in found[0].reason
 
 
 def test_a_rows_line_that_does_not_parse_is_refused():
-    text = ISSUE_HEADER.replace("Rows: rv149e-1 operator/medium",
+    text = ISSUE_HEADER.replace("Rows: rv149e-1 tester/medium",
                                 "Rows: the three date picker rows")
     found = issue_faults(text)
     assert len(found) == 1
@@ -190,9 +190,9 @@ def test_a_rows_line_that_does_not_parse_is_refused():
 
 def test_three_rows_agreeing_on_audience_and_severity_pass():
     text = ISSUE_HEADER.replace(
-        "Rows: rv149e-1 operator/medium",
-        "Rows: rv149e-1 operator/medium; rv149e-2 operator/medium; "
-        "vg149e-1 operator/medium")
+        "Rows: rv149e-1 tester/medium",
+        "Rows: rv149e-1 tester/medium; rv149e-2 tester/medium; "
+        "vg149e-1 tester/medium")
     assert issue_faults(text) == []
 
 
@@ -200,9 +200,9 @@ def test_a_fourth_row_breaks_the_ceiling():
     # Clause 1. A merge rule with no ceiling is how three real defects become
     # one unreviewable ticket.
     text = ISSUE_HEADER.replace(
-        "Rows: rv149e-1 operator/medium",
-        "Rows: a-1 operator/medium; a-2 operator/medium; a-3 operator/medium; "
-        "a-4 operator/medium")
+        "Rows: rv149e-1 tester/medium",
+        "Rows: a-1 tester/medium; a-2 tester/medium; a-3 tester/medium; "
+        "a-4 tester/medium")
     found = issue_faults(text)
     assert len(found) == 1
     assert "4" in found[0].reason and "3" in found[0].reason
@@ -212,8 +212,8 @@ def test_rows_disagreeing_on_severity_are_refused():
     # Clause 3. This is what protects the floor: merging a `low` into a
     # `medium` smuggles a row past the operator floor set on 2026-08-09.
     text = ISSUE_HEADER.replace(
-        "Rows: rv149e-1 operator/medium",
-        "Rows: a-1 operator/medium; a-2 operator/low")
+        "Rows: rv149e-1 tester/medium",
+        "Rows: a-1 tester/medium; a-2 tester/low")
     found = issue_faults(text)
     assert len(found) == 1
     assert "severity" in found[0].reason
@@ -221,7 +221,7 @@ def test_rows_disagreeing_on_severity_are_refused():
 
 def test_rows_disagreeing_on_audience_are_refused():
     text = ISSUE_HEADER.replace(
-        "Rows: rv149e-1 operator/medium",
+        "Rows: rv149e-1 tester/medium",
         "Rows: a-1 operator/medium; a-2 tester/medium")
     found = issue_faults(text)
     assert len(found) == 1
@@ -233,8 +233,8 @@ def test_a_merged_file_may_not_be_a_direct_road_candidate():
     # direct road must not take.
     text = ISSUE_HEADER.replace(
         "Direct-road: no", "Direct-road: candidate").replace(
-        "Rows: rv149e-1 operator/medium",
-        "Rows: a-1 operator/medium; a-2 operator/medium")
+        "Rows: rv149e-1 tester/medium",
+        "Rows: a-1 tester/medium; a-2 tester/medium")
     found = issue_faults(text)
     assert len(found) == 1
     assert "Direct-road" in found[0].reason
@@ -250,8 +250,8 @@ def test_every_offence_in_one_issue_file_is_reported_not_only_the_first():
     # both grade a file somebody is about to repair by hand.
     text = ISSUE_HEADER.replace(
         "Origin: 149e/batch-170a59", "Origin: nonsense").replace(
-        "Rows: rv149e-1 operator/medium",
-        "Rows: a-1 operator/medium; a-2 operator/low")
+        "Rows: rv149e-1 tester/medium",
+        "Rows: a-1 tester/medium; a-2 tester/low")
     found = issue_faults(text)
     assert len(found) == 2
 
@@ -288,12 +288,12 @@ def test_a_high_row_written_parked_is_refused():
 
 
 def test_a_critical_row_is_needs_harden_too():
-    text = HIGH.replace("operator/high", "tester/critical")
+    text = HIGH.replace("tester/high", "tester/critical")
     assert issue_faults(text) == []
 
 
 def test_a_low_row_is_parked_like_a_medium_one():
-    text = ISSUE_HEADER.replace("operator/medium", "operator/low")
+    text = ISSUE_HEADER.replace("tester/medium", "tester/low")
     assert issue_faults(text) == []
 
 
@@ -340,7 +340,7 @@ def test_the_status_rule_is_silent_where_the_rows_line_cannot_be_read():
     """One cause, one fault. The `Rows:` refusal already names the repair, and a
     second line guessing at a severity nobody declared teaches the reader to
     skim."""
-    text = ISSUE_HEADER.replace("Rows: rv149e-1 operator/medium",
+    text = ISSUE_HEADER.replace("Rows: rv149e-1 tester/medium",
                                 "Rows: the three date picker rows")
     found = issue_faults(text)
     assert len(found) == 1
@@ -353,8 +353,8 @@ def test_the_status_rule_is_silent_where_the_rows_disagree_on_severity():
     file carrying a `high` row, and a parked high finding is offered by
     nothing until the thirty-day sweep."""
     text = (ISSUE_HEADER.replace(PARKED_LINES, "Status: needs-harden\n")
-            .replace("Rows: rv149e-1 operator/medium",
-                     "Rows: a-1 operator/medium; a-2 operator/high"))
+            .replace("Rows: rv149e-1 tester/medium",
+                     "Rows: a-1 tester/medium; a-2 tester/high"))
     found = issue_faults(text)
     assert len(found) == 1
     assert "different severity" in found[0].reason
@@ -377,6 +377,130 @@ def test_a_file_with_no_status_line_is_refused():
     found = issue_faults(text)
     assert len(found) == 1
     assert "`Status:`" in found[0].reason
+
+
+# --- the audience clause ----------------------------------------------------
+#
+# Ruled by the human on 2026-09-19, on one tracker's measurement: 50 parked
+# issues and every one of them `operator`/`medium`. Among them a list page
+# showing none of the design files it exists to show, a raise form that never
+# names the customer it just created, and two primary buttons painting dark ink
+# on dark green. The rule above read severity and a blocker and never the
+# audience, so it could not tell a screen from a build check. An `operator` row
+# now goes to needs-harden whatever its severity; only `tester` and `agent` rows
+# park.
+#
+# The fault this section closes was measured on 2026-09-21: all nine issues
+# promotion minted from one run exited 1 on this one point and nothing else, and
+# about 50 issues in that tracker carried a hand-written `Un-parked: 2026-09-19`
+# repair line.
+
+OPERATOR = ISSUE_HEADER.replace("tester/medium", "operator/medium").replace(
+    "Audience: tester.", "Audience: operator.")
+
+
+def test_an_operator_row_naming_no_blocker_is_needs_harden():
+    text = OPERATOR.replace(PARKED_LINES, "Status: needs-harden\n")
+    assert issue_faults(text) == []
+
+
+def test_an_operator_row_written_parked_is_refused():
+    """The measured fault: the nine files one run's promotion minted."""
+    found = issue_faults(OPERATOR)
+    assert len(found) == 1
+    assert "operator" in found[0].reason
+    assert "needs-harden" in found[0].reason
+
+
+def test_an_operator_row_at_low_is_needs_harden_too():
+    """The clause reads the audience before the severity, so the floor the
+    severity rule sets never reaches an `operator` row."""
+    text = OPERATOR.replace(PARKED_LINES, "Status: needs-harden\n").replace(
+        "operator/medium", "operator/low")
+    assert issue_faults(text) == []
+
+
+def test_an_operator_row_at_low_written_parked_is_refused():
+    text = OPERATOR.replace("operator/medium", "operator/low")
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "operator" in found[0].reason
+
+
+def test_an_agent_row_parks_like_a_tester_one():
+    text = ISSUE_HEADER.replace("tester/medium", "agent/medium")
+    assert issue_faults(text) == []
+
+
+def test_an_agent_row_written_needs_harden_is_refused():
+    text = ISSUE_HEADER.replace("tester/medium", "agent/medium").replace(
+        PARKED_LINES, "Status: needs-harden\n")
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "parked" in found[0].reason
+
+
+def test_an_operator_row_that_names_a_blocker_is_needs_harden():
+    text = (OPERATOR.replace(PARKED_LINES, "Status: needs-harden\n")
+            .replace("- Unknown until hardened", "- 149e-rights-engine"))
+    assert issue_faults(text) == []
+
+
+def test_a_high_operator_row_is_needs_harden_like_any_other_high_one():
+    text = HIGH.replace("tester/high", "operator/high")
+    assert issue_faults(text) == []
+
+
+def test_an_operator_row_at_high_is_refused_on_its_severity_not_its_audience():
+    """Both are true of an `operator`/`high` file, and the message names one.
+    It names the rule that has been there since 2026-09-13, because that is the
+    one a reader repairing the file already knows."""
+    text = HIGH.replace("tester/high", "operator/high").replace(
+        "Status: needs-harden\n", PARKED_LINES)
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "high" in found[0].reason
+    assert "operator" not in found[0].reason
+
+
+def test_the_status_rule_is_silent_where_the_rows_disagree_on_audience():
+    """One cause, one fault, the same rule this file states for a severity the
+    rows disagree about. `_rows_faults` already refuses the merge and names the
+    repair, and the audience clause cannot be graded on a file that declares
+    two audiences without picking one of them for the writer."""
+    text = ISSUE_HEADER.replace(
+        "Rows: rv149e-1 tester/medium",
+        "Rows: a-1 operator/medium; a-2 tester/medium")
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "audience" in found[0].reason
+
+
+def test_an_audience_the_clause_cannot_place_is_refused():
+    """The clause is an allowlist of the audiences that may park, so a word it
+    cannot recognise lands in the refused pile rather than passing silently.
+    Promotion writes one of three words and a fourth is a mislabelled row."""
+    text = ISSUE_HEADER.replace("tester/medium", "reviewer/medium")
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "reviewer" in found[0].reason
+
+
+def test_an_audience_the_clause_cannot_place_is_refused_at_needs_harden_too():
+    """It refuses the word, not the status. A file whose audience nothing can
+    place is a file the parked rule was never graded on, whichever status it
+    happens to carry."""
+    text = ISSUE_HEADER.replace("tester/medium", "reviewer/medium").replace(
+        PARKED_LINES, "Status: needs-harden\n")
+    found = issue_faults(text)
+    assert len(found) == 1
+    assert "reviewer" in found[0].reason
+
+
+def test_the_audience_may_carry_its_own_case_like_every_field_beside_it():
+    text = OPERATOR.replace(PARKED_LINES, "Status: needs-harden\n").replace(
+        "operator/medium", "Operator/medium")
+    assert issue_faults(text) == []
 
 
 # --- the minted sweep -------------------------------------------------------

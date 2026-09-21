@@ -287,7 +287,11 @@ def test_the_sweep_counts_how_each_row_said_why():
     text = (ORIGIN_HEADER
             + orow("a-01", "open", "1/b", "a stated reason in prose")
             + orow("a-02", "open", "1/b", "open — `bugs/a-02.md`"))
-    assert told(text, "b") == {"prose": 1, "citation": 1, "bare": 0, "empty": 0}
+    # `unplaced` joined the four on 2026-09-21: a row whose table declares no
+    # `owner-notes` column said nothing in a cell that was never there, and
+    # counting it as `empty` was the false reading itself.
+    assert told(text, "b") == {"prose": 1, "citation": 1, "bare": 0,
+                               "empty": 0, "unplaced": 0}
 
 
 def test_a_row_with_an_empty_status_is_reported_once_not_twice():
@@ -583,6 +587,222 @@ def test_a_fault_says_whether_its_table_declares_an_origin_column():
 def test_the_row_reader_tells_a_missing_origin_column_from_an_empty_cell():
     assert [r.origin for r in mod.rows(HEADER + row("a-01", "open", "x"))] == [None]
     assert [r.origin for r in mod.rows(ORIGIN_HEADER + orow("a-01", "open", "", "x"))] == ["``"]
+
+
+# ---------------------------------------------------------------------------
+# NAME THE COLUMN YOU COULD NOT FIND. The human ruled it on 2026-09-21.
+#
+# The reader looked for `owner-notes`, did not find it, put "" in the cell and
+# carried on. MEASURED 2026-09-21 on a throwaway shard whose last column read
+# `Owner notes`: without `--sweep` it exited 0 over a row whose note ended in
+# the bare word `open` against a status of `verified`, printing "every status
+# cell ... agreeing with its own owner-notes" having compared nothing; with
+# `--sweep` it refused and blamed the ROW, "owner-notes is empty", so the
+# writer rewrites a note that was already right.
+#
+# Five shards of run `batch-246a7d` hit it, the fifth after the runner had
+# written the habit into the ledger's Carry-forward. It is live beyond the
+# throwaway too: two gate shards, `v11.md` and `v21.md`, head their tables
+# `... | status | issue/run | note |`, and on 2026-09-21 the checker graded 25
+# of their rows without reading one note.
+#
+# IT DOES NOT LEARN A SECOND SPELLING. The human refused that in the ruling
+# itself: a reader that takes both hides the misspelling from the writer who
+# typed it.
+# ---------------------------------------------------------------------------
+
+MISSPELT_HEADER = (
+    "| id | origin | severity | status | Owner notes |\n"
+    "|---|---|---|---|---|\n"
+)
+
+
+def mrow(rid, status, notes, origin="09/batch-246a7d"):
+    return f"| `{rid}` | {origin} | medium | {status} | {notes} |\n"
+
+
+# The shard of the ruling, byte for byte in shape: one row whose note ends in
+# the bare word `open` while the status cell reads `verified`.
+MEASURED = MISSPELT_HEADER + mrow(
+    "rgzz9-01", "verified",
+    "the fix landed, but the gate still reads open")
+
+
+def test_the_measured_shard_is_refused_rather_than_passed_silently():
+    """Fault 1 of the ruling. This exited 0 on 2026-09-21."""
+    found = faults(MEASURED)
+    assert len(found) == 1
+    assert found[0].line == 1          # the header, not the row
+
+
+def test_the_refusal_names_the_column_it_looked_for():
+    reason = faults(MEASURED)[0].reason
+    assert "owner-notes" in reason
+
+
+def test_the_refusal_prints_the_header_as_the_writer_typed_it():
+    """Naming `owner-notes` alone leaves the writer hunting. The header is
+    quoted back, so `Owner notes` is visible sitting in it."""
+    assert "Owner notes" in faults(MEASURED)[0].reason
+
+
+def test_the_sweep_does_not_blame_the_row_for_a_column_the_header_never_had():
+    """Fault 2 of the ruling. The note was already right; only the header was
+    wrong, and no rewriting of any cell could have cleared it."""
+    found, _, _ = mod.scoped_faults(MEASURED, ("batch-246a7d",))
+    assert len(found) == 1
+    assert "is empty" not in found[0].reason
+    assert "says nothing about why" not in found[0].reason
+
+
+def test_a_second_spelling_is_not_quietly_accepted():
+    """The fix the ruling refused. `Owner notes` must not work as a synonym, or
+    the misspelling survives and nobody ever learns of it."""
+    text = MISSPELT_HEADER + mrow("a-01", "open", "open; a stated reason")
+    assert faults(text) != []
+
+
+def test_a_missing_id_column_is_named_the_same_way():
+    """The reader's other silent fallback: no `id` column and it reads column
+    zero. Measured 2026-09-21 across every register and shard on disk, two
+    header rows declare `status` with no `id`, both of the promotion-summary
+    shape `row | issue | audience/severity | status`, and the only one carrying
+    data rows is already refused today on its `parked` status words."""
+    text = (
+        "| row | issue | audience/severity | status |\n"
+        "|---|---|---|---|\n"
+        "| rn-7f5b53-01 | 156 | operator/medium | open |\n"
+    )
+    found = faults(text)
+    assert len(found) == 1
+    assert "`id`" in found[0].reason
+
+
+def test_both_missing_columns_are_named_in_one_offence():
+    text = (
+        "| row | issue | audience/severity | status |\n"
+        "|---|---|---|---|\n"
+        "| rn-7f5b53-01 | 156 | operator/medium | open |\n"
+    )
+    reason = faults(text)[0].reason
+    assert "`id`" in reason and "`owner-notes`" in reason
+
+
+def test_one_offence_per_table_never_one_per_row():
+    """The repair is one header edit. Thirteen copies of it make one repair
+    look like thirteen, which is the rule this file already applies when a row
+    offends both graders. One live shard printed thirteen on 2026-09-21."""
+    text = MISSPELT_HEADER + "".join(
+        mrow(f"a-{n:02d}", "open", "a stated reason") for n in range(13))
+    assert len(faults(text)) == 1
+
+
+def test_two_bad_tables_in_one_file_are_two_offences():
+    """One per table, so a file with two of them is repaired in one pass."""
+    text = MEASURED + "\nsome prose between the tables\n\n" + MISSPELT_HEADER + mrow(
+        "b-01", "open", "a stated reason")
+    assert len(faults(text)) == 2
+
+
+def test_a_bad_header_over_no_rows_is_not_an_offence():
+    """Measured 2026-09-21: ten header rows on disk declare `status` with no
+    `owner-notes`, and every one of them heads an EMPTY table -- a gate's
+    finding table filed with nothing in it. Refusing those would red the
+    register and four shards for nothing. The reader refuses a column it could
+    not place for a row it is grading, not a header in the abstract."""
+    assert faults(MISSPELT_HEADER) == []
+    assert graded(MISSPELT_HEADER) == 0
+
+
+def test_the_status_word_is_still_graded_under_a_bad_header():
+    """The `status` column WAS placed, so the rule that reads it still runs.
+    Only the rules reading the column that was not placed go quiet."""
+    found = faults(MISSPELT_HEADER + mrow("a-01", "nearly", "a reason"))
+    assert len(found) == 2
+    assert any("nearly" in f.reason for f in found)
+
+
+def test_no_rule_that_reads_the_note_runs_when_the_note_was_never_placed():
+    """The transposition rule reads both cells. Under a header it could not
+    place it must be silent, or it fires a reason that cannot be true."""
+    found = faults(MEASURED)
+    assert not any("transposition" in f.reason for f in found)
+
+
+def test_a_row_under_a_bad_header_still_counts_as_graded():
+    """The denominator the empty-input refusal reads. These rows were read;
+    calling the file unparseable on top of naming its header would be a second,
+    wrong reason for one fault."""
+    assert graded(MEASURED) == 1
+
+
+def test_the_row_reader_tells_an_unplaced_note_column_from_an_empty_cell():
+    """`None` and `""` are different repairs, exactly as they already are for
+    `origin`: an empty cell is filled, a missing column is renamed."""
+    assert [r.notes for r in mod.rows(MEASURED)] == [None]
+    assert [r.notes for r in mod.rows(HEADER + row("a-01", "open", ""))] == [""]
+
+
+def test_the_header_fault_says_whether_its_table_declares_an_origin_column():
+    """The hook names the two-step road off `has_origin`, because
+    `origin-row-guard.py` refuses every write to a table without the column.
+    A header fault carries the fact for the same reason a row fault does."""
+    assert faults(MEASURED)[0].has_origin is True
+    without = (
+        "| id | severity | status | Owner notes |\n"
+        "|---|---|---|---|\n"
+        "| `a-01` | medium | open | a reason |\n"
+    )
+    assert faults(without)[0].has_origin is False
+
+
+def test_an_origin_column_is_still_optional():
+    """`HEADER`, this drill's own corpus, declares none, and `vg149g.md` holds
+    live rows in a table that predates the column. Its absence is a designed
+    state carried by `has_origin`, not a column the reader could not place."""
+    assert faults(HEADER + row("a-01", "open", "a stated reason")) == []
+
+
+def test_the_live_gate_shard_shape_is_refused_once(tmp_path, capsys):
+    """The live gate shard that graded 25 rows without reading one note:
+    `note` for `owner-notes` and `issue/run` for `origin`. One offence, naming
+    `owner-notes`, and none of the thirteen false row refusals it printed under
+    `--sweep` on 2026-09-21."""
+    text = (
+        "| id | finding | owner | severity | status | issue/run | note |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| rc11-1 | a 10 MB download inside the transaction | operator | high "
+        "| open | 11/batch-d41839 | ground 1 |\n"
+        "| rc11-2 | the exemption is file-scoped | operator | medium "
+        "| open | 11/batch-d41839 | ground 2 |\n"
+    )
+    path = tmp_path / "v11.md"
+    path.write_text(text)
+    assert mod.main([str(path), "--sweep", "11"]) == 1
+    out = capsys.readouterr().out
+    assert out.count("owner-notes` column") == 1
+    assert "is empty, so the row says nothing about why" not in out
+
+
+def test_the_pass_sentence_cannot_be_printed_over_an_unplaced_note_column(
+        tmp_path, capsys):
+    """The sentence claims every status cell agrees with its own owner-notes.
+    It is now true by construction: a file holding a row whose note cell the
+    reader never found exits 1 before it is reached."""
+    path = tmp_path / "shard.md"
+    path.write_text(MEASURED)
+    assert mod.main([str(path)]) == 1
+    assert "agreeing with its own owner-notes" not in capsys.readouterr().out
+
+
+def test_a_clean_file_still_says_the_sentence(tmp_path, capsys):
+    """The control. A guard driven only on what it must refuse is a guard that
+    could be refusing everything."""
+    path = tmp_path / "shard.md"
+    path.write_text(ORIGIN_HEADER
+                    + orow("a-01", "open", "1/batch-246a7d", "a stated reason"))
+    assert mod.main([str(path)]) == 0
+    assert "agreeing with its own owner-notes" in capsys.readouterr().out
 
 
 if __name__ == "__main__":

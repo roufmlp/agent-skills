@@ -73,6 +73,21 @@ a refusal. Calibrated against the two examples ruling 12 itself names --
 `batch-170a59`'s two rows left `open` with stated reasons pass, and that run's
 `vg149g-01` and `vg149g-02`, which read `open` with nothing at all, do not.
 
+THE THIRD RULE: NAME THE COLUMN YOU COULD NOT FIND. Ruled by the human on
+2026-09-21.
+
+Both rules above read `owner-notes`. This reader used to look for that exact
+name, find nothing when a header spelled it otherwise, put "" in the cell and
+carry on -- so every rule that reads a note graded a blank and believed it.
+`table_fault` holds the measurement and the ruling in full. In one line: a
+column this reader needs and cannot place is refused BY NAME, once per table,
+with the header quoted back; no rule that reads an unplaced column runs at all;
+and no second spelling is ever accepted, because a reader that takes both hides
+the misspelling from the writer who typed it.
+
+What must be placed is `id` and `owner-notes`, in `REQUIRED`. `origin` is not
+one of them, and `REQUIRED`'s own comment says why.
+
 Usage:
     python3 check_register_status.py <register.md>
     python3 check_register_status.py <register.md> --quiet   # offences only
@@ -151,6 +166,26 @@ HISTORY = (
 # still can. Found on `vg149g.md` by the session verifying ticket 36.
 Fault = namedtuple("Fault", "row_id reason line has_origin", defaults=(True,))
 
+# The columns this reader MUST place before it may grade a row. `status` is
+# what makes a table a register table at all, so its absence means the table is
+# not one and nothing is read. `id` and `owner-notes` are read by rules below,
+# so a table declaring neither is one this reader cannot grade -- and until
+# 2026-09-21 it graded it anyway, silently.
+#
+# `origin` is DELIBERATELY not here. Its absence is a designed state, not a
+# column the reader failed to place: `Fault.has_origin` carries it, the sweep
+# gate names the two-step road off it, `origin-row-guard.py` refuses every
+# write to such a table, and this file's own drill corpus declares none. Adding
+# it would refuse the live rows of `vg149g.md` for a fact three other places
+# already state.
+REQUIRED = ("id", "owner-notes")
+
+# The header a row sits under: where it is, what it says, and which of
+# `REQUIRED` this reader could not place in it. Carried on every `Row` so that
+# no grader can read a cell without knowing whether the column behind it was
+# ever found.
+Header = namedtuple("Header", "line cells unplaced has_origin")
+
 _BOLD = re.compile(r"\*+")
 _TRAILING = re.compile(r"^([a-z-]+)\b.*$")
 _LAST = re.compile(r"\b([a-z-]+)\s*$")
@@ -220,7 +255,11 @@ def _is_separator(cells):
 # `origin` is None when the table declares no such column, and "" when the
 # column is there and the cell is empty. The two are different repairs: an
 # empty cell is filled, a missing column is added to the header first.
-Row = namedtuple("Row", "row_id status notes origin line")
+#
+# **`notes` reads the same way since 2026-09-21.** It used to be "" for both, so
+# a header spelling the column anything but `owner-notes` handed every rule a
+# blank cell and every rule believed it. See `table_fault` for what that cost.
+Row = namedtuple("Row", "row_id status notes origin line header")
 
 
 def rows(text):
@@ -233,17 +272,29 @@ def rows(text):
     same reason.
     """
     status_at = notes_at = id_at = origin_at = None
+    header = None
     for number, line in enumerate(text.splitlines(), start=1):
         if not line.lstrip().startswith("|"):
             status_at = notes_at = id_at = origin_at = None
+            header = None
             continue
         cells = _cells(line)
         lower = [c.lower() for c in cells]
         if "status" in lower:
             status_at = lower.index("status")
             notes_at = lower.index("owner-notes") if "owner-notes" in lower else None
+            # The `id` fallback to column zero is KEPT, so a row under a header
+            # this reader refuses still prints under a recognisable name rather
+            # than as `(no id)`. It is recorded as unplaced all the same: a
+            # fallback nobody is told about is how this whole class started.
             id_at = lower.index("id") if "id" in lower else 0
             origin_at = lower.index("origin") if "origin" in lower else None
+            header = Header(
+                line=number,
+                cells=tuple(cells),
+                unplaced=tuple(name for name in REQUIRED if name not in lower),
+                has_origin=origin_at is not None,
+            )
             continue
         if status_at is None or _is_separator(cells):
             continue
@@ -253,10 +304,12 @@ def rows(text):
             row_id=cells[id_at].strip("` ") if id_at < len(cells) else "(no id)",
             status=normalise(cells[status_at]),
             notes=(cells[notes_at] if notes_at is not None
-                   and notes_at < len(cells) else ""),
+                   and notes_at < len(cells) else
+                   None if notes_at is None else ""),
             origin=(None if origin_at is None
                     else cells[origin_at] if origin_at < len(cells) else ""),
             line=number,
+            header=header,
         )
 
 
@@ -278,12 +331,72 @@ CLAIMS_DONE = ("fixed", "verified")
 _CODE = re.compile(r"`[^`]*`")
 
 
+def table_fault(header):
+    """The offence on a table whose header this reader cannot fully place, or None.
+
+    **Ruled by the human on 2026-09-21.** The reader looked for `owner-notes`; a
+    header spelling it `Owner notes` gave it nothing; it put "" in the cell and
+    carried on. MEASURED that day on a throwaway shard of that shape, one row
+    reading `verified` in the status cell against a note ending in the bare word
+    `open`: WITHOUT `--sweep` it exited 0 and printed "every status cell reading
+    a legal word and agreeing with its own owner-notes", having compared
+    nothing; WITH `--sweep` it refused and blamed the ROW -- "owner-notes is
+    empty, so the row says nothing about why" -- so the writer rewrites a note
+    that was already right, and no rewriting of any cell can clear it. Five
+    shards of one run hit it, the fifth AFTER the runner had written the habit
+    into the ledger's Carry-forward, which makes it a habit rather than four
+    accidents.
+
+    It was live beyond the throwaway. On 2026-09-21 two shards of another run
+    headed their tables `id | finding | owner | severity | status | issue/run |
+    note`, and this reader graded 25 of their rows without reading one note:
+    green without `--sweep`, and 25 false "owner-notes is empty" refusals with
+    it.
+
+    IT DOES NOT LEARN A SECOND SPELLING, and that is the ruling itself. A
+    reader that takes both hides the misspelling from the writer who typed it,
+    and the next shard is spelled a third way. So the header is quoted back and
+    the column is named, and the repair is one word in one line.
+
+    ONE OFFENCE PER TABLE, never one per row. The repair is a single header
+    edit; thirteen copies of it make one repair look like thirteen, which is
+    the rule `main` already applies to a row that offends both graders.
+
+    A BAD HEADER OVER NO ROWS IS NOT AN OFFENCE. Measured across every register
+    and shard on disk on 2026-09-21: ten header rows declare `status` with no
+    `owner-notes`, and every one of them heads an EMPTY table -- a gate's
+    finding table filed with nothing in it. Refusing those would red the
+    register and four shards over nothing, so this is reached from a row being
+    graded and never from a header on its own.
+    """
+    if not header or not header.unplaced:
+        return None
+    named = " and ".join(f"`{name}`" for name in header.unplaced)
+    noun = "columns" if len(header.unplaced) > 1 else "column"
+    return Fault(
+        "(header)",
+        f"this table declares no {named} {noun}, so every rule that reads one "
+        f"went quiet over its rows instead of grading them. The header reads: "
+        f"{' | '.join(header.cells)}. Rename the column in the header. Nothing "
+        f"here accepts a second spelling, because a reader that takes both "
+        f"hides the misspelling from the writer who typed it (ruled 2026-09-21)",
+        header.line,
+        header.has_origin)
+
+
 def said(row):
     """What the writer put in owner-notes beyond the bare status word.
 
     `"empty"`, `"bare"`, `"citation"` or `"prose"`. The first two are the row
     nobody decided, and they are the only two this refuses.
+
+    `"unplaced"` is the fifth and it is not one of those. It means the header
+    declared no `owner-notes` column, so there was no cell to read and nothing
+    true can be said about what the writer put in it. `table_fault` carries
+    that offence; every rule here goes quiet.
     """
+    if row.notes is None:
+        return "unplaced"
     raw = _BOLD.sub("", row.notes or "").strip()
     if not raw:
         return "empty"
@@ -382,17 +495,36 @@ def sweep_faults(text, tokens):
     """
     found = []
     swept = 0
-    told = {"prose": 0, "citation": 0, "bare": 0, "empty": 0}
+    told = {"prose": 0, "citation": 0, "bare": 0, "empty": 0, "unplaced": 0}
+    refused_tables = set()
     for row in rows(text):
         if not in_scope(row, tokens):
             continue
         swept += 1
         how = said(row)
         told[how] += 1
+        fault = table_fault_once(row, refused_tables)
+        if fault:
+            found.append(fault)
         fault = sweep_fault(row, how)
         if fault:
             found.append(fault)
     return found, swept, told
+
+
+def table_fault_once(row, seen):
+    """`table_fault` for this row's table, the FIRST time a grader reaches it.
+
+    `seen` is the grader's own set of header lines already refused. One header
+    edit is one offence; a table of thirteen rows that printed it thirteen
+    times would make one repair look like thirteen, and one live shard did
+    exactly that under `--sweep` on 2026-09-21.
+    """
+    header = row.header
+    if not header or not header.unplaced or header.line in seen:
+        return None
+    seen.add(header.line)
+    return table_fault(header)
 
 
 def sweep_fault(row, how):
@@ -404,6 +536,11 @@ def sweep_fault(row, how):
     if not row.status:
         return Fault(row.row_id, "the status cell is empty, so the sweep never "
                      "decided this row", row.line, row.origin is not None)
+    if how == "unplaced":
+        # No `owner-notes` column, so there is no cell to grade for
+        # completeness. `table_fault` names the column; saying anything about
+        # the note here is the false refusal the 2026-09-21 ruling closed.
+        return None
     if how == "citation" and row.status in CLAIMS_DONE:
         return Fault(
             row.row_id,
@@ -444,7 +581,10 @@ def shape_fault(row):
             row.row_id,
             f"the status cell reads {row.status!r}, which the status "
             f"machine does not know", row.line, has_origin)
-    if row.status in LEGAL:
+    # The transposition rule reads BOTH cells, so it cannot run on a table
+    # whose notes column this reader never found: it would compare the status
+    # against a blank and pass every row (ruled 2026-09-21).
+    if row.status in LEGAL and row.notes is not None:
         for word, where in ((normalise(row.notes), "opens with"),
                             (normalise_tail(row.notes), "ends with")):
             if word in LEGAL and word != row.status:
@@ -477,13 +617,21 @@ def scoped_faults(text, tokens):
     """
     found = []
     swept = 0
-    told = {"prose": 0, "citation": 0, "bare": 0, "empty": 0}
+    told = {"prose": 0, "citation": 0, "bare": 0, "empty": 0, "unplaced": 0}
+    refused_tables = set()
     for row in rows(text):
         if not in_scope(row, tokens):
             continue
         swept += 1
         how = said(row)
         told[how] += 1
+        # The table's own offence is not the row's, so it does not consume the
+        # one-fault-per-row rule below: a row can carry a status word the
+        # machine does not know AND sit under a header this reader cannot
+        # place, and those are two repairs in two places.
+        fault = table_fault_once(row, refused_tables)
+        if fault:
+            found.append(fault)
         fault = shape_fault(row) or sweep_fault(row, how)
         if fault:
             found.append(fault)
@@ -502,8 +650,12 @@ def faults(text):
     """
     found = []
     graded = 0
+    refused_tables = set()
     for row in rows(text):
         graded += 1
+        fault = table_fault_once(row, refused_tables)
+        if fault:
+            found.append(fault)
         fault = shape_fault(row)
         if fault:
             found.append(fault)
@@ -551,7 +703,12 @@ def main(argv=None):
     for fault in found:
         print(f"{args.register}:{fault.line}: {fault.row_id}: {fault.reason}")
     if found:
-        print(f"{len(found)} row(s) refused. Repair the cells and run this again.")
+        # "row(s)" until 2026-09-21, when a header became something this file
+        # can refuse. Counting a header edit as a row refused, and then telling
+        # the writer to repair the cells, sends them back to the cells -- which
+        # is the wrong half of that ruling restated in the summary line.
+        print(f"{len(found)} offence(s) refused. Repair what each line names "
+              f"and run this again.")
         return 1
 
     # The guard goes AFTER the offences, so a file that produced faults is never

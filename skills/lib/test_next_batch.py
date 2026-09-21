@@ -12,10 +12,13 @@ rather than print an order it cannot honour.
 Run: python3 test_next_batch.py
 """
 
+import ast
+import inspect
 import os
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import unittest
 from pathlib import Path
@@ -1245,6 +1248,32 @@ class HardenTheBatchBeforeTheRun(unittest.TestCase):
         self.assertIn("Nothing here says the batch is the right size",
                       "\n".join(notes))
         self.assertEqual(issues["40"].marks, [])
+
+    def test_an_empty_batch_returns_the_same_three_values(self):
+        """Nothing to grade is the commonest road of all, and it returned two."""
+        ok, refusals, notes = next_batch.size_check(self.root, [])
+        self.assertTrue(ok)
+        self.assertEqual(refusals, [])
+        self.assertEqual(notes, [])
+
+    def test_every_road_out_of_size_check_returns_three_values(self):
+        """Read the whole function, not the roads somebody remembered.
+
+        Two of the six returns were two-tuples and four were three-tuples, and
+        the two drills here covered neither of the two. Listing the roads to
+        check is how that happens again, so this reads them all out of the
+        source and refuses any that does not hand back three.
+        """
+        source = textwrap.dedent(inspect.getsource(next_batch.size_check))
+        tree = ast.parse(source)
+        returns = [node for node in ast.walk(tree)
+                   if isinstance(node, ast.Return) and node.value is not None]
+        self.assertGreaterEqual(len(returns), 6, "the function lost its roads")
+        wrong = [ast.unparse(node) for node in returns
+                 if not (isinstance(node.value, ast.Tuple)
+                         and len(node.value.elts) == 3)]
+        self.assertEqual([], wrong, "these return something other than three "
+                                    "values: " + "; ".join(wrong))
 
 
 class LessText(unittest.TestCase):

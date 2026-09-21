@@ -82,18 +82,36 @@ ITEM_ID = re.compile(r"`(q-[A-Za-z0-9][A-Za-z0-9._-]*)`")
 ANSWER_TOKEN = re.compile(r"(?<![\w-])(q-[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9])(?![\w-])")
 SECTION = re.compile(r"^## ", re.MULTILINE)
 
+# A register row id, one shape read by both patterns below, because a row that
+# retires is a row the two of them agree on.
+#
+# It MAY open with a digit. `/run-issues` names a row after the issue it came
+# from, so the review gate of issue 03 stamps `03-review-01`, and a split issue
+# keeps its parent's number with a letter after it (`03b-review-01`). Both
+# patterns used to demand a leading letter: promotion resolved such a row, wrote
+# its id into `closed.md`, and the board went on rendering it for ever. MEASURED
+# 2026-09-21 on one tracker's register — THIRTEEN table rows carrying TEN
+# distinct digit-leading ids, and all ten already sitting in a `closed.md` shard.
+#
+# It must still HOLD a letter, which is what the lookahead is for. An id of
+# digits alone would make a bare number an id, and promotion writes numbers in
+# the prose above its ids; a register table whose first cell is a count would
+# then disappear the day one matched. That is the fault `CLOSED_LINE` records
+# below for the word `ID`, one character wider.
+_ROW_ID = r"(?=[A-Za-z0-9._-]*[A-Za-z])[A-Za-z0-9][A-Za-z0-9._-]*"
+
 # A register row:
 # `| ID | summary | audience | severity | status | origin | owner-notes |`.
 # The `origin` column arrived with ticket 37 ruling 7 on 2026-09-06; rows
 # written before it have one cell fewer, and this pattern reads only the first.
 # The id is the first cell, and only the first cell makes a line that row.
-ROW_ID = re.compile(r"^\|\s*`?([A-Za-z][A-Za-z0-9._-]*)`?\s*\|")
+ROW_ID = re.compile(r"^\|\s*`?(" + _ROW_ID + r")`?\s*\|")
 # A closed id in `closed.md`: one id ALONE on its line, backticked or not. A
 # register row id has no shape of its own the way a queue id's `q-` does, so a
 # token matcher here reads every word promotion writes as an id. Measured
 # 2026-09-05: "One ID per line." yields `ID`, and `ID` is the register's own
 # table header, so every header row in the file disappeared.
-CLOSED_LINE = re.compile(r"^\s*[-*]?\s*`?([A-Za-z][A-Za-z0-9._-]*)`?\s*$")
+CLOSED_LINE = re.compile(r"^\s*[-*]?\s*`?(" + _ROW_ID + r")`?\s*$")
 
 
 @dataclass(frozen=True)

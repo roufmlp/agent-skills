@@ -545,6 +545,73 @@ class ClosedRowTest(TreeFixture):
         self.assertFalse(QUEUE.hides_closed)
 
 
+class DigitLeadingRowIdTest(TreeFixture):
+    """A row id may open with a digit, and both id patterns must read it.
+
+    `/run-issues` names a row after the issue it came from, so the review gate
+    of issue 03 stamps `03-review-01`. Both patterns used to require a leading
+    letter, so promotion resolved such a row, wrote the id into `closed.md`,
+    and the board went on rendering it for ever. MEASURED 2026-09-21 on one
+    tracker's live register: THIRTEEN table rows carried one of TEN distinct
+    digit-leading ids, and every one of the ten sat in a `closed.md` shard.
+    (Promotion had reported seventeen and the runner ten; ten is the number of
+    distinct ids and thirteen the number of rendered rows, which is what the
+    board actually carries.)
+
+    The id must still hold a letter. Widening to digits alone would make a bare
+    number an id, and a register table whose first cell is a count would vanish
+    the day promotion wrote that number on a line of its own — the same fault
+    `ClosedIdShapeTest` records for the word `ID`.
+    """
+
+    def test_a_closed_row_whose_id_opens_with_a_digit_leaves_the_register(self):
+        self.shard(self.main, HISTORY,
+                   "| 03-review-01 | promoted | operator | medium | open | b.md |\n"
+                   "| 03-review-02 | still open | operator | medium | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "03-review-01\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertNotIn("| 03-review-01 |", out)
+        self.assertIn("| 03-review-02 |", out)
+
+    def test_the_letter_after_the_number_reads_too(self):
+        """The instance carried `03b-review-01` beside `03-review-01`: a split
+        issue keeps its parent's number and takes a letter suffix."""
+        self.shard(self.main, HISTORY,
+                   "| 03b-review-04 | promoted | operator | medium | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "`03b-review-04`\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertNotIn("03b-review-04", out)
+
+    def test_a_first_cell_of_only_digits_is_not_an_id(self):
+        """A count in a table's first cell must survive a closed line that
+        happens to read the same number."""
+        self.shard(self.main, HISTORY,
+                   "| 17 | rows promoted | operator |\n"
+                   "| rg1-01 | a live row | operator |\n")
+        self.shard(self.tree_a, CLOSED, "17\nrg1-01\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("| 17 | rows promoted", out)
+        self.assertNotIn("rg1-01", out)
+
+    def test_a_bare_number_in_the_closed_shard_closes_nothing(self):
+        """Promotion writes prose above its ids, and prose carries numbers."""
+        self.shard(self.main, HISTORY,
+                   "| 2026 | the year column | operator |\n")
+        self.shard(self.tree_a, CLOSED,
+                   "Closed by promotion, run batch-<id7>. 2026\n"
+                   "2026\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("| 2026 | the year column", out)
+
+
 class UnknownAnsweredIdTest(TreeFixture):
     def test_an_answered_id_matching_no_item_is_named_rather_than_ignored(self):
         """A typo in the brief's shard silently answers nothing. Say so."""

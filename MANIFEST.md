@@ -217,14 +217,23 @@ database, three `scripts/*.mjs` files this pack does not ship, and one home-dire
 env path in full. There is no scrub that leaves a skill file behind, only a rewrite. A
 project's own steering file points readers at it, which is where it belongs.
 
-**Three files arrived from a live hardening pass while this sync was running, and they
-are withheld for that reason alone.** `skills/lib/check_rulings_reach.py` and, in the
-hooks block below, `hooks/rulings-write-guard.py` with its drill, were written between
-02:21 and 02:27 on 2026-09-20, after this sync had read its trees and while its workers
-were mid-file. They look publishable and the rulings reader they guard went out in this
-same sync. Publishing a file whose live copy is minutes old, from a pass that had not
-closed, means reading a moving target; the next sync reads them settled. Recorded here
-because leaving them undecided is what the coverage check refuses.
+**Two of the three files held back on 2026-09-20 went out on 2026-09-21, and the third
+stays.** `hooks/rulings-write-guard.py` and its drill were minutes old at that sync and
+nothing else was wrong with them, so this one published both. Five lines of the hook
+named a person, three of them inside refusal text a reader sees, which is the scrub H2
+already demands; one line named a product, and the drill named it once more. Both were
+read end to end, and the hook was driven on a payload it must pass, one it must refuse
+and one it cannot parse.
+
+**`check_rulings_reach.py` stays withheld, and the reason has changed.** It is no longer
+the age of the file. The heading it searches for carries a person's name, and it is a
+literal in the code and in both of its refusals, so the name is what the tool matches on
+rather than something the prose says. That is the `memory_dir.py` case again: renaming it
+changes what the script finds, and nothing here defines a heading for a new name to match.
+It also ships no drill of its own. A later sync that takes the heading as an argument
+publishes it, and writing that argument is authoring. `skills/harden-issues/SKILL.md`
+carries the duty the script guards, and says in as many words that this pack ships no
+refusal for it.
 
 ```withheld
 ~/.claude/skills/run-issues/test_run_isolation.py
@@ -300,6 +309,8 @@ than the four that govern everything else here.
 | `hooks/test_gate_commit_guard.py` | `~/.claude/hooks/test_gate_commit_guard.py` (21 cases on command strings, plus one pinning the guarded role list against `agents/`) |
 | `hooks/machine-wide-kill-guard.py` | `~/.claude/hooks/machine-wide-kill-guard.py` (refuses a kill that selects processes by pattern rather than by pid) |
 | `hooks/test_machine_wide_kill_guard.py` | `~/.claude/hooks/test_machine_wide_kill_guard.py` (19 cases on command strings alone; carries no corpus and skips nothing) |
+| `hooks/rulings-write-guard.py` | `~/.claude/hooks/rulings-write-guard.py` (refuses a write that would leave an entry `rulings.py` cannot read, and a write that empties a rulings file holding entries) |
+| `hooks/test_rulings_write_guard.py` | `~/.claude/hooks/test_rulings_write_guard.py` (14 cases, the malformed entry copied from the real one; rewritten under rule 3 to drive the hook beside it rather than one in the reader's `~/.claude/hooks`) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**
@@ -480,8 +491,6 @@ have, which is worse than having no hook:
 ~/.claude/hooks/worktree-base-drift.py
 ~/.claude/hooks/test_worktree_base_drift.py
 ~/.claude/hooks/test_settings_env.py
-~/.claude/hooks/rulings-write-guard.py
-~/.claude/hooks/test_rulings_write_guard.py
 ~/.claude/hooks/TOOL-SET-PROBE.md
 ```
 
