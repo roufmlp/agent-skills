@@ -45,6 +45,11 @@ from pathlib import Path
 
 HARDEN = Path(__file__).resolve().parent
 SKILLS = HARDEN.parent
+# `agents/` is NOT in this repository and has no worktree copy, so it is reached
+# from the home directory and never by climbing from `__file__`.
+# `lib/check_claude_home.py` refuses the climb, and its docstring holds the five
+# suites that went red in a worktree before it did.
+AGENTS = Path.home() / ".claude" / "agents"
 
 SKILL = HARDEN / "SKILL.md"
 DECISIONS = HARDEN / "decisions.md"
@@ -88,8 +93,18 @@ SKILL_MARKS = [
     "is the guard that makes it stick",
     # Ticket 33 ruling 5, 2026-09-07: one never-attack rule for every caller.
     # The rule is the row test; the blanket rule it replaced is the story.
-    "skip any issue whose row in any `runs/<batch-id>/run.md`",
+    # Reworded on the human's ruling of 2026-09-13. The anchor used to read "skip any
+    # issue whose row in any `runs/<batch-id>/run.md` in the same directory", and
+    # THAT SENTENCE CAUSED THE FAULT THE RULE EXISTS TO PREVENT: run state is
+    # committed, so in a worktree "the same directory" is a copy frozen at the
+    # fork point. The `h0913` pass read its own tree, could not see run
+    # `batch-19ff9f`, and rewrote issue 37 while that run held it. The rule is
+    # unchanged; where the caller reads it from is now a command, so the two
+    # anchors below pin the command and the directory ban that replaced it.
+    "skip any issue whose row in a LIVE run's `run.md` is past",
     "in any run, whoever is calling",
+    "Run the command. Never read a directory.",
+    "find_live_ledger.py --list",
     "Run A's launch phase runs while run B is live",
     # Ticket 33 ruling 7: where a run's findings land.
     "A run's findings go to `runs/<batch-id>/harden/`",
@@ -290,6 +305,170 @@ class TheThirdEntryPointIsNamed(unittest.TestCase):
         """The pointer and the file are in different skills' directories, so
         nothing else joins them."""
         self.assertTrue((SKILLS / "run-issues" / "launch-harden.md").is_file())
+
+
+class TheEdgesAreWrittenInBothDirections(unittest.TestCase):
+    """Issue 02 of the tracker-tooling set, ruled by the human 2026-09-13.
+
+    Promotion mints an issue off a register row and cannot know what that issue
+    blocks: it never reads the code. This pass reads the code, so it is the one
+    place either direction of the edge can be written. Measured on one tracker
+    the same day: not one of the 22 needs-harden issues was named as a blocker by any
+    other issue, and issue 64, the tab bar, was needed by every screen in prose
+    only.
+
+    The two directions have two writers, because attackers run concurrently and
+    two of them appending a bullet to one third file lose a bullet between them:
+    an attacker writes the section on its OWN issue and reports the downstream
+    edges, and the single-threaded stages apply them. Both briefs must name the
+    write, which is what these checks hold.
+    """
+
+    def setUp(self):
+        self.skill = squash(read(SKILL))
+
+    def test_the_skill_names_the_two_direction_write(self):
+        self.assertIn("Both directions, before the stamp", self.skill)
+
+    def test_the_skill_names_the_checker_the_stamp_waits_on(self):
+        """A step with no command is a reminder, and the human's three-class test in
+        `~/.claude/CLAUDE.md` says a reminder does not work."""
+        self.assertIn("check_issue_links.py", self.skill)
+
+    def test_the_stamp_refuses_without_it(self):
+        """The refusal is the whole point: an unwritten edge is invisible, and
+        the stamp is what puts the issue in the next run's scope."""
+        self.assertIn("Exit 1 is no stamp", self.skill)
+
+    def test_the_minted_bullet_is_named_as_what_it_replaces(self):
+        """`- Unknown until hardened` is what promotion writes, so this pass has
+        to know it is the thing it is answering rather than an edge."""
+        self.assertIn("Unknown until hardened", self.skill)
+
+    def test_the_attacker_writes_the_section_on_its_own_issue(self):
+        attacker = squash(read(AGENTS / "harden-issues-attacker.md"))
+        self.assertIn("Both directions, before the stamp", attacker)
+        self.assertIn("## Blocked by", attacker)
+
+    def test_the_attacker_reports_the_downstream_half_instead_of_writing_it(self):
+        """The prohibition names the system as well as the verb, which is this
+        skill's own rule: the findings file is the permitted place."""
+        attacker = squash(read(AGENTS / "harden-issues-attacker.md"))
+        self.assertIn("## Downstream edges", attacker)
+
+    def test_the_seam_applies_the_downstream_half(self):
+        """The seam agent runs once and alone, so it is the one stage that may
+        write a bullet into another issue's section without racing anybody."""
+        seam = squash(read(AGENTS / "harden-issues-seam.md"))
+        self.assertIn("Both directions, before the stamp", seam)
+        self.assertIn("## Downstream edges", seam)
+
+    def test_the_one_issue_pass_still_writes_both_directions(self):
+        """The seam is skipped where only one issue was attacked, so a pass that
+        left the downstream half to the seam alone would write nothing in the
+        commonest attended case."""
+        self.assertIn("no seam ran", self.skill)
+
+
+class PromotionMintsTheExplicitNull(unittest.TestCase):
+    """The third leg of the same ruling. A minted issue with no section at all
+    reads exactly like a hardened one whose edges are genuinely none, and the
+    difference is what a reader of the tracker needs."""
+
+    def test_the_promotion_brief_writes_the_bullet(self):
+        brief = squash(read(AGENTS / "promotion.md"))
+        self.assertIn("- Unknown until hardened", brief)
+
+    def test_the_brief_says_why_it_is_not_a_blocker(self):
+        brief = squash(read(AGENTS / "promotion.md"))
+        self.assertIn("next_batch.py", brief)
+
+
+class TheRulingsAreReadBeforeTheAttack(unittest.TestCase):
+    """Tracker-tooling issue 04, ruled by the human 2026-09-13.
+
+    In the last two attended passes the attackers asked for hardening on issues
+    the human had already cut and ruled. An attacker cannot comply with a ruling it
+    never read, and `~/.claude/CLAUDE.md` rules that asking it to remember will
+    not work. So the pass reads the rulings file, and the stamp carries the
+    count, which is what makes a pass that skipped the read visible afterwards.
+    """
+
+    def setUp(self):
+        self.skill = squash(read(SKILL))
+
+    def test_the_pass_reads_the_rulings_file(self):
+        self.assertIn(".scratch/rulings.md", self.skill)
+
+    def test_the_read_happens_before_the_attackers_are_spawned(self):
+        """After the attack it is a report. Before it, it is the thing that
+        stops the question being asked."""
+        self.assertLess(self.skill.index(".scratch/rulings.md"),
+                        self.skill.index("## Checks only the human can run"))
+
+    def test_both_stamps_carry_the_count_of_rulings_applied(self):
+        for stamp in ("Hardened: <date>", "Hardened (provisional): <date>"):
+            self.assertIn(stamp, self.skill)
+            line = self.skill[self.skill.index(stamp):]
+            self.assertIn("rulings applied", line.split(".")[0] + ".",
+                          f"`{stamp}` carries no rulings count")
+
+    def test_the_queue_check_is_named_with_its_third_refusal(self):
+        """The guard sits in `check_queue_shard.py`, which the pass already
+        runs. What is new is that a match is now a refusal, so the pass has to
+        know it can be sent back for a reason that is not a missing id."""
+        self.assertIn("already ruled", self.skill)
+
+
+class AParkedIssueIsNeverOfferedAndAlwaysReachable(unittest.TestCase):
+    """Issue 03 of the tracker-tooling set, ruled by the human 2026-09-13.
+
+    This pass takes a typed batch, so "never offers a parked issue" is a rule
+    about what it adds on its own: a parked issue joins a batch only where the
+    human typed it, and `sweep_parked.py` is what puts it in front of them. Hardening
+    it is also the way OUT of parked, because the stamp sets
+    `ready-for-agent` -- so the skill has to say both halves, or an editor
+    reading the first half alone would refuse the typed issue too.
+    """
+
+    def setUp(self):
+        self.skill = squash(read(SKILL))
+
+    def test_the_scope_sentence_names_parked(self):
+        start = self.skill.index("`needs-harden` and `ready-for-agent` are both in scope")
+        self.assertIn("parked", self.skill[start:start + 700])
+
+    def test_the_skill_names_the_sweep_that_offers_one(self):
+        self.assertIn("sweep_parked.py", self.skill)
+
+    def test_the_stamp_is_named_as_the_way_out_of_parked(self):
+        start = self.skill.index("sweep_parked.py")
+        window = self.skill[start - 400:start + 700]
+        self.assertIn("ready-for-agent", window)
+
+
+class OnePendingDefaultMark(unittest.TestCase):
+    """Tracker-tooling issue 43b, AC3, default `q-h0925b-43-1`. Rule 7 of issue
+    32 holds a `Level: full` issue stamped provisional out of a run while a
+    criterion carries a pending default, and `check_issue_ready.py` reads the
+    default by one mark. The skill writes that mark where it writes a default."""
+
+    FORM = "Default (`q-<pass>-<issue>-<n>`)"
+
+    def setUp(self):
+        text = read(SKILL)
+        start = text.index("**An open question never removes an issue from a run.**")
+        self.paragraph = text[start:text.index("\n\n", start)]
+        self.skill = squash(text)
+
+    def test_the_paragraph_that_writes_a_default_states_the_form(self):
+        self.assertIn(self.FORM, self.paragraph)
+
+    def test_the_provisional_scope_sentence_names_the_full_exception(self):
+        start = self.skill.index(
+            "A provisionally stamped issue is in scope for `/run-issues`' own `all`")
+        sentence = self.skill[start:self.skill.index(".", start)]
+        self.assertIn("Level: full", sentence)
 
 
 if __name__ == "__main__":

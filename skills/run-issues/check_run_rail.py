@@ -74,6 +74,10 @@ Refusals that exit 1, every one printed and every one naming its row:
     no-row              an issue on the `Shipped:` line has no row
     not-shipped         a row names an issue the `Shipped:` line does not
     floor-in-band       a row reads `floor` for an issue a band names
+    will-not-fit        the drawer cannot fit the headline or a card's
+                        sentence (`draw_run_rail.py`'s own arithmetic, run
+                        here when the vocabulary is present and nothing
+                        else was refused)
 
 Refusals that exit 2, because nothing could be graded:
 
@@ -913,6 +917,31 @@ def _check_forks(
         )
 
 
+def fit_refusals(briefing: str, stages_text: str) -> list[str]:
+    """The drawer's own refusal, run here, so a line it cannot fit is refused
+    by the check the finale runs before it and not by the drawing.
+
+    The perf audit of 2026-09-28 found `draw_run_rail.py` exiting 1 on its
+    first call in all four runs of that day, then 0 after the runner
+    shortened a line. This check had passed each briefing: it bounds a card
+    sentence at 60 characters and never measured the headline, while the
+    drawer measures both against the rail's real geometry. The arithmetic
+    stays in the drawer, and this calls it, so the two cannot drift.
+    """
+    import draw_run_rail  # here, not at the top: the drawer imports this file
+
+    columns = draw_run_rail.read_columns(stages_text)
+    if columns is None:
+        return []
+    try:
+        draw_run_rail.render(draw_run_rail.spec_from_briefing(briefing), columns)
+    except draw_run_rail.WillNotFit as error:
+        return [f"will-not-fit: {error}"]
+    except ValueError:
+        return []   # no rail block: `check` has already refused that
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Refuse a rail block the board could not transcribe."
@@ -950,6 +979,8 @@ def main() -> int:
             return 2
 
     result = check(briefing, stages)
+    if not result.refusals and located is not None:
+        result.refusals.extend(fit_refusals(briefing, located.read_text()))
     if not result.refusals:
         print(result.summary())
         print(

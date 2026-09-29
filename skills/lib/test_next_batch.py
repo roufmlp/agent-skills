@@ -29,6 +29,13 @@ sys.path.insert(0, str(HERE))
 
 import next_batch  # noqa: E402
 
+sys.path.insert(0, str(HERE.parent / "run-issues"))
+from check_issue_ready import HEADER_RULE_FROM, PENDING_RULE_FROM  # noqa: E402
+
+# Issue 43's `Light:` line, dated from the rule-date constant, never a typed
+# literal (`q-h0925-33-4`).
+LIGHT_LINE = f"Light: {HEADER_RULE_FROM} — not hardened, rule 5 of issue 32."
+
 
 # `blocked_by=NO_SECTION` writes a file with NO `## Blocked by` heading at all.
 # `blocked_by=None`, which nearly every test below uses, writes the section with
@@ -448,6 +455,43 @@ class Ledgers(unittest.TestCase):
         out = run(self.root, "--count", "2")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("/run-issues 08d 11b\n", out.stdout)
+
+    def test_a_bold_blocked_row_is_read_as_blocked(self):
+        """Emphasis is markdown, not vocabulary. Run `batch-<id7>` wrote
+        `**blocked**` for issues 151, 152 and 53, and on 2026-09-23 this tool
+        refused the whole tracker over the asterisks. A released row offers the
+        issue again, so 151 lands in the batch."""
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_issue(self.root, "151-guard", "ready-for-agent", blocked_by=None)
+        write_ledger(self.feature, "batch-<id7>", [("151", "**blocked**")], state="merged")
+        out = run(self.root, "--count", "2")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn("does not know", out.stdout + out.stderr)
+        batch = [l for l in out.stdout.splitlines() if l.startswith("/run-issues ")]
+        self.assertEqual(len(batch), 1, out.stdout)
+        self.assertIn("151", batch[0].split())
+
+    def test_a_backticked_in_progress_row_still_holds(self):
+        """The strip reaches the holding statuses too, so a formatted cell can
+        never turn an issue a run is building into one a new batch offers."""
+        write_issue(self.root, "37-db-type", "ready-for-agent", blocked_by=None)
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_ledger(self.feature, "batch-<id2>", [("37", "`in-progress`")])
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 40\n", out.stdout)
+        held = out.stdout.split("Held by a run")[1]
+        self.assertIn("37", held)
+
+    def test_a_bold_unknown_status_still_refuses(self):
+        """Only the emphasis goes. The word under it is still tested by exact
+        membership, so a status this tool does not know refuses as before."""
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_ledger(self.feature, "batch-<id6>", [("40", "**blocked-on-the-human**")])
+        out = run(self.root, "--count", "1")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("blocked-on-the-human", out.stdout + out.stderr)
+        self.assertIn("does not know", out.stdout + out.stderr)
 
     def test_blocked_and_blocked_criteria_stay_two_statuses(self):
         """Exact membership, not a prefix. A status this tool does not know must
@@ -1173,6 +1217,66 @@ class HardenTheBatchBeforeTheRun(unittest.TestCase):
         self.assertIn("no Hardened: stamp", out.stdout)
         self.assertIn("/harden-issues 40\n", out.stdout)
         self.assertIn("/run-issues 41\n", out.stdout)
+
+    def test_a_light_line_stamps_a_light_issue_and_nothing_else(self):
+        """Issue 43, AC3: rule 5 of issue 32 lets a `Level: light` issue skip
+        hardening, and its `Light:` line stands in for the stamp. A
+        `Level: full` issue with no stamp stays on the harden line as today.
+        Measured on 2026-09-25: this pair printed `/harden-issues 01 02`."""
+        write_issue(self.root, "01-light", "ready-for-agent", hardened=False,
+                    extra_header=f"{LIGHT_LINE}\nLevel: light")
+        write_issue(self.root, "02-full", "ready-for-agent", hardened=False,
+                    extra_header="Level: full")
+        out = run(self.root, "--count", "2")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 01\n", out.stdout)
+        self.assertIn("/harden-issues 02\n", out.stdout)
+        self.assertIn("  no Hardened: stamp: 02\n", out.stdout)
+
+    def test_a_light_line_on_a_full_issue_is_named_and_not_refused(self):
+        """Issue 43, AC2, default `q-h0925b-43-2`: issue 42's lift rewrites a
+        light issue to `Level: full` and leaves its `Light:` line. That pair
+        is read as unstamped, and the mark says why."""
+        write_issue(self.root, "01-lifted", "ready-for-agent", hardened=False,
+                    extra_header=f"{LIGHT_LINE}\nLevel: full")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/harden-issues 01\n", out.stdout)
+        mark = [line for line in out.stdout.splitlines() if "Light:" in line]
+        self.assertEqual(len(mark), 1, out.stdout)
+        self.assertIn("Level: full", mark[0])
+
+    def test_a_full_issue_with_a_pending_default_leaves_the_run_line(self):
+        """Issue 43b, default `q-h0925b-seam-3`: the criteria gate refuses a
+        `Level: full` issue stamped provisional whose criterion carries a
+        pending default, so a `/run-issues` line naming it is a launch refused
+        whole. The mark comes from `check_issue_ready.pending_defaults`."""
+        path = self.root / "01-full.md"
+        write_issue(self.root, "01-full", "ready-for-agent", hardened=False,
+                    extra_header=f"Hardened (provisional): {PENDING_RULE_FROM} — "
+                                 "1 default pending.\nLevel: full")
+        path.write_text(path.read_text().replace(
+            "- [ ] Criterion 1.", "- [ ] Criterion 1. Default (`q-h9-43b-1`): plain."))
+        write_issue(self.root, "02-clean", "ready-for-agent")
+        out = run(self.root, "--count", "2")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 02\n", out.stdout)
+        mark = [line for line in out.stdout.splitlines() if "rule 7" in line]
+        self.assertEqual(len(mark), 1, out.stdout)
+        self.assertIn("criterion 1", mark[0])
+
+    def test_a_light_issue_keeps_its_other_marks(self):
+        """Issue 43, must still be true: an open questions section still moves
+        a light issue to the harden line."""
+        write_issue(self.root, "01-light", "ready-for-agent", hardened=False,
+                    extra_header=f"{LIGHT_LINE}\nLevel: light")
+        path = self.root / "01-light.md"
+        path.write_text(path.read_text()
+                        + "\n## Questions open on this file\n\nOne must be "
+                          "ruled before this issue runs.\n")
+        out = run(self.root, "--count", "1")
+        self.assertIn("/harden-issues 01\n", out.stdout)
+        self.assertNotIn("no Hardened: stamp", out.stdout)
 
     def test_an_open_questions_section_is_named(self):
         write_issue(self.root, "40-ci", "ready-for-agent")

@@ -180,6 +180,9 @@ def quality_counts(ledger_text, spans=None, orphans=None):
             1 for one in rows if one.first_attempt == "pass"),
         "correction_rounds": sum(one.corrections for one in rows),
         "strikes": sum(one.strikes for one in rows),
+        # Ruled 2026-09-28, option A: run `batch-f43aaf` read `"strikes": 0`
+        # beside a ledger showing a strike a criteria reset had annulled.
+        "strikes_annulled": sum(one.annulled for one in rows),
         "escalations": sum(
             1 for one in rows
             if measures.ESCALATED in ((spans.get(one.issue) or {}).get("roles")
@@ -447,6 +450,44 @@ REDIRECT_PAIRS = frozenset({">", ">>", "<", "2>", "&>", "2>>"})
 REDIRECT_ALONE = frozenset({"2>&1", "1>&2", "&"})
 
 
+# Tracker-tooling issue 29. Words that run the word after them, as a suite-gate
+# hook (`~/.claude/hooks/run-issues-suite-gate.py`, where a setup has one) reads
+# them (`LAUNCHERS`, `skip_launchers`), plus the options of `env` and `timeout`
+# that take a value: `env -u DATABASE_URL npx vitest` runs vitest, and the hook's
+# reading stops at `DATABASE_URL`. The wrapper and the step clock run what
+# follows their `--`.
+LAUNCHERS = frozenset({"time", "nohup", "command", "exec", "env", "timeout",
+                       "caffeinate"})
+LAUNCHER_VALUE_OPTIONS = {"env": {"-u", "--unset", "-C", "--chdir", "-S"},
+                          "timeout": {"-s", "--signal", "-k", "--kill-after"}}
+PYTHONS = frozenset({"python", "python3"})
+RUNS_AFTER_DASHES = frozenset({"run_suite.py", "run_step.py"})
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _launched(argv):
+    """The words a shell actually runs, past assignments, launchers, the suite
+    wrapper and the step clock. Launched through none of them, `argv` as is."""
+    while argv:
+        name = os.path.basename(argv[0])
+        if ASSIGNMENT.match(argv[0]):
+            argv = argv[1:]
+        elif name in LAUNCHERS:
+            argv, takes_value = argv[1:], LAUNCHER_VALUE_OPTIONS.get(name, set())
+            while argv and (argv[0].startswith("-") or ASSIGNMENT.match(argv[0])):
+                argv = argv[2:] if argv[0] in takes_value else argv[1:]
+            if name == "timeout":
+                argv = argv[1:]             # the duration
+        elif name in PYTHONS:
+            script = next((word for word in argv[1:] if not word.startswith("-")), "")
+            if os.path.basename(script) not in RUNS_AFTER_DASHES:
+                return argv
+            argv = argv[argv.index("--") + 1:] if "--" in argv else []
+        else:
+            return argv
+    return argv
+
+
 def _suite_arguments(segment):
     """The arguments of a vitest or npm-test invocation, or None.
 
@@ -455,7 +496,7 @@ def _suite_arguments(segment):
     here, because `segments` strips heredocs before splitting.
     """
     try:
-        argv = shlex.split(segment)
+        argv = _launched(shlex.split(segment))
     except ValueError:
         return None
     if not argv:
@@ -525,6 +566,7 @@ def whole_suite_readings(directory):
     """
     seen = {False: set(), True: set()}
     unkeyed = {False: 0, True: 0}
+    refused = set()
     for transcript_file in sorted(pathlib.Path(directory).rglob("*.jsonl")):
         try:
             text = transcript_file.read_text(encoding="utf-8", errors="replace")
@@ -545,6 +587,10 @@ def whole_suite_readings(directory):
             for block in content:
                 if not isinstance(block, dict):
                     continue
+                if (block.get("type") == "tool_result"
+                        and WRAPPER_REFUSAL in _result_text(block)):
+                    refused.add(block.get("tool_use_id"))
+                    continue
                 if block.get("type") != "tool_use" or block.get("name") != "Bash":
                     continue
                 given = block.get("input")
@@ -563,8 +609,24 @@ def whole_suite_readings(directory):
                     # figure that quietly shrinks on a transcript shape we have
                     # not seen.
                     unkeyed[side] += 1
-    return (len(seen[False]) + unkeyed[False],
-            len(seen[True]) + unkeyed[True])
+    return (len(seen[False] - refused) + unkeyed[False],
+            len(seen[True] - refused) + unkeyed[True])
+
+
+# `run_suite.py`'s refusal of a repeat on a green tree. The suite never
+# started, so the call is not a reading (review of issue 29, 2026-09-24).
+WRAPPER_REFUSAL = "already ran green at stage"
+
+
+def _result_text(block):
+    """A tool result's text, whether the transcript wrote a string or a list."""
+    content = block.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(part.get("text", "") for part in content
+                        if isinstance(part, dict))
+    return ""
 
 
 def suites_figure(runner, subagents, issues):

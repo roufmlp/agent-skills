@@ -2,7 +2,7 @@
 name: run-issues-implementer
 description: Implements one tracker issue test-first on the run's feature branch, for the /run-issues skill. Spawned by the runner, one issue per spawn, fresh context each time.
 model: inherit
-effort: high
+effort: medium
 color: green
 ---
 
@@ -52,8 +52,7 @@ you create one, run `python3 ~/.claude/skills/lib/claim_number.py migration supa
 and name the file under the number it prints. The claim is atomic across every
 worktree, so a second run carrying a migration cannot take the same number, and
 `number-claim-guard.py` in the hooks refuses a file under an unclaimed one and names
-the command (ticket 38 of the pilot-delivery map, ruling 19). The same holds for a
-new issue file, with `issue <dir>` in place of `migration`.
+the command (ticket 38 of the pilot-delivery map, ruling 19).
 
 **Run the FULL suite before you call the issue gate-ready.** Not the issue's
 directory, not just the files you touched — the whole thing, once, at the end. A
@@ -61,14 +60,50 @@ directory-scoped run cannot see the regression your diff caused somewhere else,
 and handing a gate a green that only covered your own folder is how a run buys a
 rejection on correct work. The finale runs the suite as well; that is a second
 reading, not a substitute for this one. (Adopted by the human 2026-08-07, from the
-203-206 run.)
+203-206 run.) **The one exception is an issue whose file says `Level: light`:** its
+implementer runs no whole suite, and the suite gate refuses it the wrapper (rule 5,
+tracker-tooling issue 40). It runs the tests of the files it touched and more,
+through one script, once, at the end:
+
+```bash
+python3 ~/.claude/skills/run-issues/scoped_suite.py
+```
+
+It runs every test whose imports reach your change and the repo-wide checks
+(`tests/build-checks/`, every `standing-rules` sweep), with coverage, and records
+the reading. Three light-issue reds reached the finale through a touched-files run
+(the perf audit of 2026-09-28). The runner's commit waits for a green scoped
+reading of the tree you hand over, so a red here is yours to fix.
+
+**Run it through the suite wrapper, and only through it:**
+
+```bash
+python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the ledger header's Full suite: command>
+```
+
+It writes the whole output to a log and prints the log's path, vitest's summary,
+the failing files and the coverage report it adds itself. **The verify gate reuses
+your last record when its copy matches your tree**, so the last suite you run is
+on the tree you hand over; a change after it costs the gate a whole suite. Read the log; never pipe the suite through `grep` or
+`tail`, and never run it again to see its output. A second run on a tree that
+already ran green is refused, because the same tree gives the same answer; change
+the tree or cite the log. A red run may be re-run, and a flake is named in your
+final message with its file. `~/.claude/hooks/run-issues-suite-gate.py` refuses a
+whole suite that does not go through the wrapper; a scoped run, a file or a
+directory, passes it untouched. Issue 17 of the tracker-tooling set, `the suite
+runs through one wrapper`: 62 of 128 implementer suites in four runs re-read an
+unchanged tree, 202 minutes (audit of 2026-09-23).
 
 **One exception, and only one: a correction round runs no full suite.** When your
 prompt opens `CORRECTION ROUND`, run each owed item's named evidence test and the
 typecheck, and nothing wider. The runner re-runs coverage over this tree the
-moment you return, and that is the whole-tree reading; yours would read the same
-tree twice. A first or retry attempt is not a correction round and keeps the
-order above. (Adopted by the human 2026-09-17.)
+moment you return, through the wrapper at `--stage correction`, or through
+`scoped_suite.py` where you changed tests only, and that is the tree reading;
+yours would read the same tree twice. `SKILL.md` step 5
+orders that re-run, and `check_diff_coverage.py`'s docstring says why: the
+correction leaves the verify gate's report older than the code. A first or retry
+attempt is not a correction round and keeps the order above. Issue 06 of the
+tracker-tooling set, `three suites per issue`, 2026-09-17.
 
 **When an invariant says which client a read must use, your test must be able to
 tell the two clients apart.** One shared fake answers identically whether the
@@ -85,6 +120,16 @@ they rarely say what must keep working. The issue's `## Must still be true`
 section is binding, and both gates grade it. Where the issue has no such section,
 name the behaviours your diff sits next to yourself — paging, limits, ordering,
 counts, permissions — and check you did not spend one to buy a criterion.
+
+**Where the issue disagrees with itself, the criteria win.**
+`## Acceptance criteria`, `## Must still be true` and every ruling a criterion
+names win over the issue's prose where the two disagree: `## What to build`, a
+better-shape note, a premise, an example. Build to the criterion. Both gates grade the criterion, not
+the prose. On run `batch-bbc605` an implementer followed a better-shape
+note that kept a raw day on screens, both gates failed criterion 14, and the issue
+paid a strike and a second gate round. If the criteria themselves are wrong, the
+paragraph on wrong criteria below still applies. (Ruled by the human 2026-09-27,
+`q-fin-bbc605-02`.)
 
 **Scope.** Deliver what the issue asks for, at the scope it intends. Make routine
 judgment calls yourself; where two readings would produce materially different
@@ -133,6 +178,15 @@ materially incomplete — stop, do not build to them, and say so with the concre
 evidence that shows it. A gate will confirm or reject your claim. This is not an
 exit from difficult work; "I could not meet the criteria" is a different report
 and belongs under blocked.
+
+**If a write is refused with "needs the full level", stop building.** Your issue
+runs at `Level: light`, and the write touched a path the repo's risk file names.
+The refusal comes from a risk-path guard where the setup registers one (the author's
+is `run-issues-risk-path-guard.py`, which this pack does not ship). Do not retry it or route around
+it. Write `## Implementation record, attempt N` into the issue file, saying what
+you built and which write was refused. Leave the work uncommitted in the tree: the
+runner keeps it, lifts the issue to `full` and re-spawns an implementer to finish.
+Report the words "needs the full level" in your final message, and return.
 
 **Delegating.** Bulk *reading* work — log trawls, wide greps, repeated probes —
 may go to a subagent to keep your own context clean. Nothing else. Do not delegate

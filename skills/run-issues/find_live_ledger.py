@@ -24,7 +24,13 @@ state at once, so this script no longer returns "the" ledger. It has three modes
               already holds any of them (ruling 21). Whole-id match, leading
               zeros ignored, so `34` never matches `345` and `05` is `5`. Only
               runs are searched: a brief's prose carries numbers that are not
-              issue ids.
+              issue ids. A run also overlaps when an issue it holds and a
+              requested issue have `Touches:` paths that meet, or when either
+              carries no paths at all (issue 41). Both files are read from the
+              live run's own tracker, the `issues/` beside its `runs/`.
+              `Touches:` is read by `headers()` in `check_issue_ready.py`,
+              issue 33's one reader; a meet is `set_level.meet()` after
+              `set_level.normalise()`, issue 34's one definition.
 
 Every worktree carries its own copies. On 2026-08-16 that was twelve copies of
 which one was live. Run state is committed, so every worktree branched from that
@@ -77,6 +83,15 @@ import dataclasses
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(HERE.parent / "lib"))
+
+from check_issue_ready import headers  # noqa: E402  Issue 33's one reader.
+from next_batch import FILE_RE  # noqa: E402
+from set_level import NotARepository, meet, normalise, roots  # noqa: E402  Issue 34's.
 
 HEAD_LINES = 60
 GIT_TIMEOUT = 5  # seconds; a hung git must surface as a note, never as a silent kill
@@ -184,22 +199,45 @@ def _add(ids, found):
             ids.append(one)
 
 
+def _scope_line_ids(line):
+    """The ids a `Scope` line types, read from its colon to the first word that is
+    not an id. A ledger writes prose after the ids, and prose is never scope: run
+    batch-f43aaf listed its blockers there, and each one read as an issue the run
+    held. A full stop or semicolon on an id ends the list after that id, which the
+    old prose reader also got wrong, dropping `234c.` itself."""
+    value = line.split(":", 1)[1] if ":" in line else ""
+    ids = []
+    for raw in value.replace(",", " ").split():
+        word = raw.strip("*`_")
+        ends = word.endswith((".", ";"))
+        match = SCOPE_TOKEN.match(word.rstrip(".;").strip("*`_"))
+        expanded = _expand(match.group(1), match.group(2)) if match else []
+        if not expanded:
+            break
+        _add(ids, expanded)
+        if ends:
+            break
+    return ids
+
+
 def parse_scope_ids(text):
     """The issue ids a ledger holds, in order.
 
-    Two sources, read in this order: the title line (`# Run ledger — 533, 546
-    (run batch-x)`, ranges expanded) and the status table's `Issue`
-    column, which every ledger carries, plus any `Scope` line. The fenced batch id is cut before the
-    title is read, and only the first cell of a table row is an issue, so a
-    clock time or a note cell never reads as one.
+    Three sources, read in this order: the title line (`# Run ledger — 533, 546
+    (run batch-x)`, ranges expanded), any `Scope` line up to the end of its ids,
+    and the status table's `Issue` column, which every ledger carries. The fenced
+    batch id is cut before the title is read. Only the leading id of an `Issue`
+    cell counts, so a cell reading `221 — its title` names 221, and a clock time
+    or a note cell never reads as one.
     """
     ids = []
     lines = (text or "").splitlines()
-    prose = [lines[0]] if lines and lines[0].startswith("#") else []
-    prose += [line for line in lines[:HEAD_LINES] if line.startswith("Scope")]
-    for line in prose:
-        _add(ids, [i for s, e in ISSUE_OR_RANGE.findall(BATCH_MARK.sub(" ", line))
+    if lines and lines[0].startswith("#"):
+        _add(ids, [i for s, e in ISSUE_OR_RANGE.findall(BATCH_MARK.sub(" ", lines[0]))
                    for i in _expand(s, e)])
+    for line in lines[:HEAD_LINES]:
+        if line.startswith("Scope"):
+            _add(ids, _scope_line_ids(line))
     column = None
     for line in lines:
         stripped = line.strip()
@@ -213,8 +251,9 @@ def parse_scope_ids(text):
             continue
         if column < len(cells):
             cell = cells[column].strip("`* ")
-            if re.fullmatch(ISSUE_ATOM, cell):
-                _add(ids, [cell])
+            leading = re.match("(" + ISSUE_ATOM + r")(?:\s|$)", cell)
+            if leading:
+                _add(ids, [leading.group(1)])
     return ids
 
 
@@ -276,15 +315,76 @@ def _issue_key(issue):
     return f"{int(match.group(1))}{match.group(2)}"
 
 
+def _issue_files(run):
+    """`{issue key: path}` for the tracker beside a run's `runs/` directory."""
+    issues = Path(run.path).parents[2] / "issues"
+    files = {}
+    for path in sorted(issues.iterdir()) if issues.is_dir() else []:
+        found = FILE_RE.match(path.name)
+        if found and path.is_file():
+            files.setdefault(_issue_key(found.group(1)), path)
+    return files
+
+
+def _touches(files, issue):
+    """The backticked `Touches:` tokens of one issue; () where it has no file."""
+    path = files.get(_issue_key(issue))
+    if path is None:
+        return ()
+    try:
+        return headers(path.read_text(encoding="utf-8", errors="replace")).touches
+    except OSError:
+        return ()
+
+
+def _path_reason(held, held_paths, wanted, wanted_paths, spell):
+    """Why `held` and `wanted` meet by paths, or None when they do not."""
+    for issue, paths in ((wanted, wanted_paths), (held, held_paths)):
+        if not paths:
+            return f"{held} (meets {wanted}: {issue} carries no `Touches:` paths)"
+    for mine in held_paths:
+        for theirs in wanted_paths:
+            if meet(spell(mine), spell(theirs)):
+                return f"{held} (`{mine}` meets `{theirs}` of {wanted})"
+    return None
+
+
 def overlapping(candidates, issues):
     """`[(candidate, [held issue, ...]), ...]` for every live run holding any of `issues`.
-    Hunts hold none, and a brief's prose carries numbers that are not issue ids."""
-    wanted = {_issue_key(i) for i in issues if i.strip()}
-    if not wanted:
+    Hunts hold none, and a brief's prose carries numbers that are not issue ids.
+
+    A number hit's entry is the bare id. A path hit, or a no-paths hit, carries
+    its reason in the entry, so a caller joining `held` prints it (issue 41)."""
+    wanted = [i.strip() for i in issues if i.strip()]
+    keys = {_issue_key(i) for i in wanted}
+    if not keys:
         return []
     hits = []
     for c in runs(candidates):
-        held = [own for own in parse_scope_ids(c.scope_text) if _issue_key(own) in wanted]
+        files = None
+        spell = None
+        scope = parse_scope_ids(c.scope_text)
+        mine = {_issue_key(own) for own in scope}
+        others = [i for i in wanted if _issue_key(i) not in mine]
+        held = []
+        for own in scope:
+            if _issue_key(own) in keys:
+                held.append(own)
+                continue
+            if not others:
+                continue
+            if files is None:
+                files = _issue_files(c)
+                try:
+                    tree_root, main_root = roots(Path(c.tree))
+                except (NotARepository, OSError):
+                    tree_root = main_root = c.tree
+                spell = lambda item, t=tree_root, m=main_root: normalise(item, m, t)  # noqa: E731
+            own_paths = _touches(files, own)
+            for other in others:
+                reason = _path_reason(own, own_paths, other, _touches(files, other), spell)
+                if reason:
+                    held.append(reason)
         if held:
             hits.append((c, held))
     return hits
@@ -520,9 +620,9 @@ def main(argv=None):
                 f"REFUSED: live run {c.batch} already holds {', '.join(held)} "
                 f"({c.path}).", file=sys.stderr)
         print(
-            "Two implementers on one issue is the collision ticket 38, the "
-            "one-run-per-feature layout ticket, exists to remove. Drop those "
-            "issues from the range, or wait for that run.",
+            "Two implementers on one issue, or on one path, is the collision "
+            "ticket 38, the one-run-per-feature layout ticket, exists to remove. "
+            "Drop those issues from the range, or wait for that run.",
             file=sys.stderr)
         return 1
 

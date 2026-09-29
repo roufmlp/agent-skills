@@ -552,6 +552,64 @@ class ExitCodes(unittest.TestCase):
         self.assertIn("OK", text_out)
 
 
+def git_tree(files: dict[str, str]) -> pathlib.Path:
+    """`tree`, made a git repository with one commit."""
+    root = tree(files)
+    for args in (["init", "-q"], ["config", "user.email", "t@example.com"],
+                 ["config", "user.name", "t"], ["add", "-A"],
+                 ["commit", "-q", "-m", "one"]):
+        subprocess.run(["git", "-C", str(root), *args], check=True,
+                       capture_output=True)
+    return root
+
+
+class EachGradingIsStamped(unittest.TestCase):
+    """Run `batch-e35a25`, issue 227: the runner ran this check after it wrote
+    the correction brief, and its refusals bought a second correction spawn.
+    Each grading now leaves a stamp keyed on the tree it read, which
+    `correction_brief.py` refuses to compose without."""
+
+    def grade(self, root, hits):
+        (root / "coverage").mkdir(exist_ok=True)
+        (root / "coverage/coverage-final.json").write_text(
+            istanbul("src/a.ts", hits), encoding="utf-8")
+        age(root / "src/a.ts", 600)
+        path = root / "d.diff"
+        path.write_text(diff(("src/a.ts", 1, 1), ("src/a.test.ts", 1, 1)),
+                        encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            return guard.main(["--repo", str(root), "--diff-file", str(path),
+                               "--coverage",
+                               str(root / "coverage/coverage-final.json")])
+
+    def test_a_refusal_is_stamped_with_its_tree_and_its_items(self):
+        root = git_tree({"src/a.ts": "x\n", ".gitignore": "coverage/\n"})
+        self.assertEqual(self.grade(root, {1: 0}), 1)
+        stamp = guard.stamp_for(root)
+        self.assertIsNotNone(stamp)
+        self.assertEqual(stamp["exit"], 1)
+        self.assertTrue(stamp["items"])
+        self.assertIn("src/a.ts", " ".join(stamp["items"]))
+
+    def test_a_pass_is_stamped_with_no_items(self):
+        root = git_tree({"src/a.ts": "x\n", ".gitignore": "coverage/\n"})
+        self.assertEqual(self.grade(root, {1: 1}), 0)
+        stamp = guard.stamp_for(root)
+        self.assertEqual((stamp["exit"], stamp["items"]), (0, []))
+
+    def test_a_stamp_does_not_answer_for_a_changed_tree(self):
+        root = git_tree({"src/a.ts": "x\n", ".gitignore": "coverage/\n"})
+        self.grade(root, {1: 1})
+        (root / "src/a.ts").write_text("y\n", encoding="utf-8")
+        self.assertIsNone(guard.stamp_for(root))
+
+    def test_a_directory_outside_git_grades_and_stamps_nothing(self):
+        root = tree({"src/a.ts": "x\n"})
+        self.assertEqual(self.grade(root, {1: 1}), 0)
+        self.assertIsNone(guard.stamp_for(root))
+
+
 class EveryRefusalHasARemedy(unittest.TestCase):
     def test_no_refusal_can_print_without_one(self):
         kinds = {

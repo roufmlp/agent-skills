@@ -284,6 +284,18 @@ class InsideRunCounts(unittest.TestCase):
             "correction_rounds": None, "strikes": None, "escalations": None}))
         self.assertTrue(ok, why)
 
+    def test_the_annulled_strikes_are_a_sixth_count(self):
+        """Ruled by the human, 2026-09-28, option A: the strikes a criteria reset
+        annulled are recorded beside the strikes that stand."""
+        root = repo()
+        ok, why = tool.append_run(
+            root, run_record(quality=dict(self.counts(), strikes_annulled=1)))
+        self.assertTrue(ok, why)
+        self.assertEqual(
+            tool.read_runs(root).records[0]["quality"]["strikes_annulled"], 1)
+        self.assertIn("Strikes annulled", tool.render_view(
+            tool.read_runs(root).records))
+
     def test_an_unknown_count_name_is_refused(self):
         """The five names are the schema. A sixth spelling writes a figure
         into a column no view renders and no reader compares."""

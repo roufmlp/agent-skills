@@ -88,8 +88,11 @@ CLAUDE_CODE_SUFFIX = re.compile(r"\s*\(Claude Code\)\s*$")
 # Ruling 6's four counts, and the denominator that lets the view show a rate
 # beside each. All five are written `None` by this sitting -- see the module
 # docstring, and ruling 28.
+# The sixth, `strikes_annulled`, was added by the human on 2026-09-28 (option A):
+# run `batch-f43aaf` read `"strikes": 0` beside a ledger showing a strike that
+# a criteria reset had annulled, and the reset rule stands.
 QUALITY_FIELDS = ("issues_graded", "first_attempt_passes", "correction_rounds",
-                  "strikes", "escalations")
+                  "strikes", "escalations", "strikes_annulled")
 
 # The denominator ruling 6 puts beside the counts, so the view can show a rate.
 DENOMINATOR = "issues_graded"
@@ -238,7 +241,7 @@ def normalise_quality(offered) -> tuple:
     Four narrower ones replace it, and each refuses a shape rather than a
     value:
 
-      * the five names are the schema, so a sixth writes into a column no view
+      * the six names are the schema, so a seventh writes into a column no view
         renders and no reader compares;
       * a count is a non-negative whole number or null;
       * **a count may not be written without `issues_graded` beside it.**
@@ -262,15 +265,16 @@ def normalise_quality(offered) -> tuple:
         return blank, ""
     if not isinstance(offered, dict):
         return None, (f"REFUSED: `quality` is a {type(offered).__name__} and "
-                      "must be a mapping of the five count names to their "
+                      "must be a mapping of the six count names to their "
                       "values, or to null where nothing measured one.")
 
     unknown = sorted(set(offered) - set(QUALITY_FIELDS))
     if unknown:
         return None, (
             f"REFUSED: `quality` names {', '.join(unknown)}, which is not one "
-            f"of the five (ruling 6): {', '.join(QUALITY_FIELDS)}. A figure "
-            "under a sixth name is written into a column no view renders and "
+            f"of the six (ruling 6, and option A of 2026-09-28): "
+            f"{', '.join(QUALITY_FIELDS)}. A figure "
+            "under another name is written into a column no view renders and "
             "no reader compares.")
 
     found = dict(blank)
@@ -619,7 +623,8 @@ COST_COLUMNS = ("Batch", "Kind", "Taken", "Version", "Issues", "Hours",
 
 QUALITY_COLUMNS = ("Batch", "Orchestrator model", "Worker map", "Pipeline",
                    "Trial", "Issues graded", "First-attempt passes",
-                   "Correction rounds", "Strikes", "Escalations")
+                   "Correction rounds", "Strikes", "Escalations",
+                   "Strikes annulled")
 
 # Ruling 5's five, RECORDED rather than left to be divided. The human's aim, in their
 # own framing: one look tells them where to optimise, with no mental arithmetic.

@@ -284,6 +284,218 @@ class TestCheckDecidesWhetherAPathMayBeWritten(Fixture):
                 self.assertRegex(first, r"REFUSED\. (Claim|Write|Name) ")
 
 
+class TestTheRenameRoad(Fixture):
+    """The human's ruling `q-h0920-37` of 2026-09-20: a tracker file whose title has gone
+    false is RENAMED — keep the number, rewrite the title, rename the file with it.
+
+    Hardening pass `h0922b` was refused that rename on 2026-09-22. Issue 105 of one
+    tracker was claimed by `promotion batch-d41839` in the worktree
+    `run-issues-batch-d41839`; the file had since merged into another tree, and
+    `--check` reads a claim held by another tree as the collision it exists to stop.
+    The claim could not say "this number moved house", so `--rename` says it.
+
+    The sharp edge these cases hold: a cross-tree RENAME passes and a cross-tree MINT
+    is still refused, and the thing that tells them apart is the old file on disk.
+    """
+
+    def rename(self, old, new, cwd=None):
+        return run(["--rename", str(old), str(new)], cwd or self.main, self.store)
+
+    def check(self, path, cwd=None):
+        return run(["--check", str(path)], cwd or self.main, self.store)
+
+    def worktree(self, name="run-a"):
+        tree = self.main / ".claude" / "worktrees" / name
+        git("worktree", "add", "-q", "-b", f"claude/{name}", str(tree), cwd=self.main)
+        other = tree / ".scratch" / "pilot" / "issues"
+        other.mkdir(parents=True)
+        return tree, other
+
+    def store_record(self, number):
+        files = list(self.store.rglob(number))
+        self.assertEqual(len(files), 1, [str(p) for p in self.store.rglob("*")])
+        return dict(line.split("=", 1) for line in files[0].read_text().splitlines() if "=" in line)
+
+    def test_a_rename_in_the_claiming_tree_passes_and_the_check_passes_the_new_name(self):
+        number = self.claim("issue", self.issues, "--for", "to-issues", "--slug", "old-title")[1]
+        (self.issues / f"{number}-old-title.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / f"{number}-old-title.md",
+                                   self.issues / f"{number}-new-title.md")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.check(self.issues / f"{number}-new-title.md")[0], 0)
+
+    def test_the_number_never_changes_and_a_new_number_is_refused_as_a_mint(self):
+        self.claim("issue", self.issues, "--for", "a", "--slug", "old")
+        (self.issues / "01-old.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / "01-old.md", self.issues / "02-old.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+        self.assertIn("number", err)
+        self.assertEqual(self.check(self.issues / "02-old.md")[0], 1)
+
+    def test_a_rename_out_of_the_directory_or_across_kinds_is_refused(self):
+        self.claim("issue", self.issues, "--for", "a")
+        (self.issues / "01-old.md").write_text("x\n")
+        elsewhere = self.main / "docs" / "issues"
+        elsewhere.mkdir(parents=True)
+        for target in (elsewhere / "01-old.md", self.migrations / "0001_old.sql"):
+            with self.subTest(target=str(target)):
+                code, _, err = self.rename(self.issues / "01-old.md", target)
+                self.assertEqual(code, 1)
+                self.assertIn("REFUSED", err)
+
+    def test_a_rename_with_no_source_file_is_a_mint_wearing_a_disguise(self):
+        number = self.claim("issue", self.issues, "--for", "a", "--slug", "old")[1]
+        code, _, err = self.rename(self.issues / f"{number}-old.md",
+                                   self.issues / f"{number}-new.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+        self.assertIn(f"{number}-old.md", err)
+
+    def test_a_new_name_something_already_holds_is_refused(self):
+        number = self.claim("issue", self.issues, "--for", "a", "--slug", "old")[1]
+        (self.issues / f"{number}-old.md").write_text("x\n")
+        (self.issues / f"{number}-new.md").write_text("y\n")
+        code, _, err = self.rename(self.issues / f"{number}-old.md",
+                                   self.issues / f"{number}-new.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+        self.assertEqual((self.issues / f"{number}-new.md").read_text(), "y\n")
+
+    def test_renaming_a_file_to_its_own_name_is_refused(self):
+        self.claim("issue", self.issues, "--for", "a", "--slug", "old")
+        (self.issues / "01-old.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / "01-old.md", self.issues / "01-old.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+
+    def test_a_path_that_is_not_a_numbered_file_is_refused(self):
+        (self.issues / "notes.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / "notes.md", self.issues / "01-new.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+
+    def test_the_claim_record_is_updated_and_the_original_claimant_survives(self):
+        number = self.claim("issue", self.issues, "--for", "promotion batch-d41839",
+                            "--slug", "clash-shown-on-no-delivery-date-road")[1]
+        claimed_at = self.store_record(number)["at"]
+        (self.issues / f"{number}-clash-shown-on-no-delivery-date-road.md").write_text("x\n")
+        code, _, err = self.rename(
+            self.issues / f"{number}-clash-shown-on-no-delivery-date-road.md",
+            self.issues / f"{number}-line-page-shows-no-clash-on-a-cold-read.md")
+        self.assertEqual(code, 0, err)
+        record = self.store_record(number)  # exactly ONE store file: updated, not duplicated
+        self.assertEqual(record["slug"], "line-page-shows-no-clash-on-a-cold-read")
+        self.assertEqual(record["who"], "promotion batch-d41839")
+        self.assertEqual(record["at"], claimed_at)
+        self.assertEqual(record["renamed_from"],
+                         f"{number}-clash-shown-on-no-delivery-date-road.md")
+        self.assertIn("renamed_at", record)
+
+    def test_a_cross_tree_rename_is_allowed_and_names_both_trees(self):
+        tree, other = self.worktree()
+        number = run(["issue", str(other), "--for", "promotion batch-d41839", "--slug", "old"],
+                     tree, self.store)[1]
+        self.assertEqual(self.check(self.issues / f"{number}-old.md")[0], 1)  # a mint, today
+        (self.issues / f"{number}-old.md").write_text("x\n")  # the file merged into this tree
+        code, _, err = self.rename(self.issues / f"{number}-old.md",
+                                   self.issues / f"{number}-new.md")
+        self.assertEqual(code, 0, err)
+        record = self.store_record(number)
+        self.assertEqual(record["tree"], os.path.realpath(self.main))
+        self.assertEqual(record["claimed_tree"], os.path.realpath(tree))
+        self.assertEqual(record["who"], "promotion batch-d41839")
+        self.assertEqual(self.check(self.issues / f"{number}-new.md")[0], 0)
+
+    def test_a_cross_tree_mint_is_still_refused_after_a_rename_has_moved_another_number(self):
+        tree, other = self.worktree()
+        renamed = run(["issue", str(other), "--for", "promotion", "--slug", "old"], tree, self.store)[1]
+        minted = run(["issue", str(other), "--for", "promotion", "--slug", "fresh"], tree, self.store)[1]
+        (self.issues / f"{renamed}-old.md").write_text("x\n")
+        self.assertEqual(self.rename(self.issues / f"{renamed}-old.md",
+                                     self.issues / f"{renamed}-new.md")[0], 0)
+        code, _, err = self.check(self.issues / f"{minted}-mine.md")
+        self.assertEqual(code, 1)
+        self.assertIn(os.path.realpath(tree), err)
+        self.assertIn("Writing it here would be the collision", err)
+
+    def test_a_rename_cannot_borrow_another_trees_number_without_the_file(self):
+        tree, other = self.worktree()
+        number = run(["issue", str(other), "--for", "promotion", "--slug", "old"], tree, self.store)[1]
+        (other / f"{number}-old.md").write_text("x\n")  # the file is in the OTHER tree only
+        code, _, err = self.rename(self.issues / f"{number}-old.md",
+                                   self.issues / f"{number}-new.md")
+        self.assertEqual(code, 1)
+        self.assertIn("REFUSED", err)
+        self.assertEqual(self.store_record(number)["tree"], os.path.realpath(tree))
+        self.assertEqual(self.check(self.issues / f"{number}-new.md")[0], 1)
+
+    def test_a_second_rename_keeps_the_first_claimants_history(self):
+        tree, other = self.worktree()
+        number = run(["issue", str(other), "--for", "promotion", "--slug", "one"], tree, self.store)[1]
+        (self.issues / f"{number}-one.md").write_text("x\n")
+        self.rename(self.issues / f"{number}-one.md", self.issues / f"{number}-two.md")
+        os.rename(self.issues / f"{number}-one.md", self.issues / f"{number}-two.md")
+        self.rename(self.issues / f"{number}-two.md", self.issues / f"{number}-three.md")
+        record = self.store_record(number)
+        self.assertEqual(record["slug"], "three")
+        self.assertEqual(record["who"], "promotion")
+        self.assertEqual(record["claimed_tree"], os.path.realpath(tree))
+        self.assertEqual(record["renamed_from"], f"{number}-two.md")
+
+    def test_a_number_older_than_the_store_gains_a_record_because_its_file_exists(self):
+        (self.issues / "41-old.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / "41-old.md", self.issues / "41-new.md")
+        self.assertEqual(code, 0, err)
+        record = self.store_record("41")
+        self.assertEqual(record["slug"], "new")
+        self.assertEqual(record["tree"], os.path.realpath(self.main))
+        self.assertEqual(self.check(self.issues / "41-new.md")[0], 0)
+
+    def test_a_split_renames_on_its_parent_and_needs_no_claim(self):
+        (self.issues / "216-parent.md").write_text("x\n")
+        (self.issues / "216b-old.md").write_text("x\n")
+        code, _, err = self.rename(self.issues / "216b-old.md", self.issues / "216b-new.md")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.check(self.issues / "216b-new.md")[0], 0)
+        code, _, err = self.rename(self.issues / "216b-old.md", self.issues / "216c-new.md")
+        self.assertEqual(code, 1)
+
+    def test_a_migration_renames_the_same_way(self):
+        number = self.claim("migration", self.migrations, "--for", "implementer", "--slug", "old")[1]
+        (self.migrations / f"{number}_old.sql").write_text("select 1;\n")
+        code, _, err = self.rename(self.migrations / f"{number}_old.sql",
+                                   self.migrations / f"{number}_new.sql")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.store_record(number)["slug"], "new")
+
+    def test_the_rename_moves_no_file_itself(self):
+        self.claim("issue", self.issues, "--for", "a", "--slug", "old")
+        (self.issues / "01-old.md").write_text("x\n")
+        self.rename(self.issues / "01-old.md", self.issues / "01-new.md")
+        self.assertTrue((self.issues / "01-old.md").is_file())
+        self.assertFalse((self.issues / "01-new.md").exists())
+
+    def test_every_rename_refusal_leads_with_what_to_do(self):
+        self.claim("issue", self.issues, "--for", "a", "--slug", "old")
+        (self.issues / "01-old.md").write_text("x\n")
+        for old, new in ((self.issues / "01-old.md", self.issues / "02-old.md"),
+                         (self.issues / "09-gone.md", self.issues / "09-new.md"),
+                         (self.issues / "01-old.md", self.issues / "01-old.md")):
+            with self.subTest(new=new.name):
+                _, _, err = self.rename(old, new)
+                first = err.strip().splitlines()[0]
+                self.assertTrue(first.startswith("REFUSED. "), first)
+
+    def test_a_rename_outside_any_repository_is_refused_rather_than_silently_passed(self):
+        loose = Path(self.tmp.name) / "loose" / "issues"
+        loose.mkdir(parents=True)
+        (loose / "01-old.md").write_text("x\n")
+        code, _, _ = run(["--rename", str(loose / "01-old.md"), str(loose / "01-new.md")],
+                         self.tmp.name, self.store)
+        self.assertNotEqual(code, 0)
+
+
 class TestEveryMinterNamesTheClaimScript(unittest.TestCase):
     """Ruling 16: every minter calls the claim script. A minter is a skill or brief
     that writes a new issue file or a new migration, and the text is where the
@@ -298,8 +510,9 @@ class TestEveryMinterNamesTheClaimScript(unittest.TestCase):
     MINTERS = {
         "to-issues": SKILLS / "to-issues" / "SKILL.md",
         "promotion brief": CLAUDE / "agents" / "promotion.md",
-        "run-issues finale": SKILLS / "run-issues" / "finale.md",
-        "parallel-hunt": SKILLS / "parallel-hunt" / "SKILL.md",
+        # `parallel-hunt` left this list with issue 36 of the tracker-tooling
+        # set, and the `run-issues` finale with issue 39: neither spawns
+        # promotion any more, so neither mints anything.
         "daily-brief": SKILLS / "daily-brief" / "SKILL.md",
         "implementer": CLAUDE / "agents" / "run-issues-implementer.md",
         "escalated implementer": CLAUDE / "agents" / "run-issues-implementer-escalated.md",

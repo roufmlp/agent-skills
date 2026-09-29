@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Refuse a gate verdict that grades a DRILL-CARRYING criterion in silence.
 
-    python3 check_drill_coverage.py --issue <file> --section "## Review gate"
+    python3 check_drill_coverage.py --issue <file> --verdict <file> --section "## Review gate"
+
+The criteria come from `--issue` and the section from `--verdict`. Since issue
+24 of the tracker-tooling set (2026-09-23) a gate writes its verdict to the
+run's `verdicts/<issue>-attempt-<N>.md` and never into the issue file.
+Without `--verdict` the section is read from the issue file, as before.
 
 Ruled by the human on 2026-09-17, walking the decisions of run `batch-26c495`.
 It is the third of three gate rules taken that evening, and the only one of them
@@ -225,14 +230,16 @@ def answered(section_text):
     return verdict
 
 
-def grade(issue_text, section_heading):
-    """`(exit_code, lines)`."""
+def grade(issue_text, section_heading, verdict_text=None):
+    """`(exit_code, lines)`. The section is read from `verdict_text` when it is
+    given, and from the issue otherwise."""
     drills = criteria_with_drills(issue_text)
     if not drills:
         return 0, ["ok: the issue's acceptance criteria name no drill, so "
                    "there is nothing for this to grade."]
 
-    section = _named_section(issue_text, section_heading)
+    section = _named_section(
+        issue_text if verdict_text is None else verdict_text, section_heading)
     if section is None or not section.strip():
         return 2, [f"REFUSED: {section_heading!r} is absent or empty, so "
                    "nothing was graded. That is not a pass."]
@@ -292,6 +299,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Refuse a gate verdict silent on a criterion's own drill.")
     parser.add_argument("--issue", required=True)
+    parser.add_argument("--verdict",
+                        help="the run's verdict file for this attempt")
     parser.add_argument("--section", required=True,
                         help='e.g. "## Review gate, round 2"')
     args = parser.parse_args(argv)
@@ -301,7 +310,16 @@ def main(argv=None):
     except OSError as error:
         print(f"REFUSED: cannot read {args.issue}: {error}", file=sys.stderr)
         return 2
-    code, lines = grade(text, args.section)
+    verdict = None
+    if args.verdict:
+        try:
+            with open(args.verdict, encoding="utf-8") as handle:
+                verdict = handle.read()
+        except OSError as error:
+            print(f"REFUSED: cannot read {args.verdict}: {error}",
+                  file=sys.stderr)
+            return 2
+    code, lines = grade(text, args.section, verdict)
     stream = sys.stderr if code else sys.stdout
     for line in lines:
         print(line, file=stream)

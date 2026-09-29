@@ -1831,7 +1831,7 @@ hook, each with the ruling that bought it.
   the human in the daily-brief walk of 2026-09-08, built 2026-09-09 as
   `check_briefing_commands.py`, ticket 40 of the pilot-delivery map, sitting 4.** The
   finale had proposed "a gate runs any command it writes", which is a reminder; their own
-  three-class test says a reminder will not work, they were told so before they ruled, and he
+  three-class test says a reminder will not work, they were told so before they ruled, and they
   ruled adopt on the mechanical form. **A gate may always write `UNRUN` and pay nothing**,
   so the worst case is honest rather than expensive. The incident: eight commands in run
   `batch-207704`'s merge briefing do not do what their text says, every one written by a
@@ -1861,7 +1861,7 @@ reason in that script's docstring, a rule no script enforces puts its reason
 here, and `test_skill_structure.py` gains a line ceiling that refuses a commit
 growing `SKILL.md` or `finale.md` back. Ruling 14 set the ceiling after the move.
 The human set the `SKILL.md` figure on 2026-09-09: below 1200, with 600 as the target
-he would be happy with. His reason is run tokens, not tidiness: `SKILL.md` is
+they would be happy with. Their reason is run tokens, not tidiness: `SKILL.md` is
 read on every runner turn, and nothing a run does reads this file or a docstring.
 The stories below are what left `SKILL.md`; the ones that left `finale.md` follow
 under their own heading. Every rule they illustrated stayed where it was, and the
@@ -2121,6 +2121,67 @@ the hooks were measured the same day to still fire and still block in that mode.
 
 ---
 
+## The retry brief states the invariant, never the gate's remedy (2026-09-13)
+
+F3 of run `batch-d67136`, queued as `q-finale-d67136-2`. The rule is one line in
+`SKILL.md` step 7 and `retry_brief.py` refuses on it. This is the round it cost.
+
+Issue 01 spent all three of its attempts on one connection-string guard. Round
+1's verify gate rejected `postgresql://localhost:5432/d?host=db.example.com` and
+wrote TWO things. First the invariant, as an invariant, with its citation, at
+line 514 of the issue file:
+
+    | I-1 | **The loader refuses any host but this machine.** Implied by Target
+    database, "`DATABASE_URL` in `.env.local`; the loader refuses any other
+    host" | **FAIL** |
+
+Then, forty lines later, a remedy: "refuse a connection string whose search
+parameters contain `host`". The retry brief carried the remedy and dropped the
+invariant, and the implementer fixed exactly what it was told.
+
+Round 2 rejected on the same guard for a hostless string: `""` is in
+`LOCAL_HOSTS`, so `pg` takes the address from `PGHOST`. The invariant covers
+that and the remedy does not. The gate quoted the SAME phrase off the SAME line
+and marked I-1 `FAIL` a second time, at line 1392. Round 3 marked it `pass`.
+
+**The cost.** Round 2's review gate PASSED, so round 3 exists for that one
+reason: 187k tokens and 9.7 minutes for the implementer, 209k and 13 minutes for
+verify, 226k and 14 minutes for review. **622k tokens and 36.7 minutes.** The
+run journal annulled round 2's strike as runner error on exactly this ground.
+
+**Why it is not a line in `run-issues-implementer.md`.** That brief already ends
+with "do not trust its diagnosis. Re-derive from the issue and the code". The
+reminder is there, it is exact, and it failed; the file is 185 lines of
+reminders and the one that mattered most on this run did not hold. A second
+reminder is the class the human's three-class test refuses outright, so the fix is a
+refusal instead.
+
+**What the refusal is.** Every owed item quotes the issue's OWN text, and the
+issue's own text stops at its first gate verdict or implementation record. A
+proposed remedy lives inside a verdict, so it cannot satisfy the rule; the
+invariant it serves lives in the issue, so it can. A runner that cannot write the
+item without opening the issue has read the invariant by the time it writes one.
+The same rule now binds the not-yours list, which step 7 already called "checked,
+not asserted" and which until this script nothing checked.
+
+**The remedy is demoted, not banned.** It is passed after the item it belongs
+to with `--remedy`, and the brief prints it under a fixed label reading
+"one example a gate offered, which is not the specification". A gate's proposed
+fix is usually right and always useful; what it may not be is the owed item.
+
+**What it cannot do.** A runner may quote a real phrase and append the remedy to
+it, or quote an irrelevant phrase. Neither is catchable by any script. The
+quotation is the load-bearing part, and `correction_brief.py` beside it records
+the same division: the runner names the items, the script refuses a brief that
+would not work.
+
+**The published `SKILL.md` does not carry that line yet.** It is held at an earlier
+version, so step 7 here still states the not-yours rule in prose. `retry_brief.py`
+ships because `charge_round.py` imports it, and the line reaches step 7 when
+`SKILL.md` travels.
+
+---
+
 ## The coverage check moves before the correction round (2026-09-13)
 
 The human ruled fork `q-finale-be624c-03` of run `batch-be624c`. **The runner runs
@@ -2261,3 +2322,112 @@ the launch mode is part of the launch line and not an option.
 `SKILL.md` this pack ships at an earlier version, so they would report a move
 that has not happened here. `test_skill_structure.py` records the withholding
 beside the cases it kept, and the lists travel when `SKILL.md` travels.
+
+## Implementer, verify gate and attacker drop to `medium` (2026-09-25)
+
+The human's ruling. Three agent files now read `effort: medium`: the implementer, the
+verify gate and the hardening attacker. Review, critical review and the escalated
+implementer stay `high`. The finale stays `max`.
+
+**What it rests on.** One quick reading, taken the same day: a single text task
+with no tools, run with `claude -p --effort <rung>`, two runs per rung, all ten at
+once. Mean wall-clock and output tokens:
+
+| rung | seconds | output tokens |
+|---|---|---|
+| `low` | 17.6 | 1,240 |
+| `medium` | 22.6 | 2,110 |
+| `high` | 37.5 | 3,404 |
+| `xhigh` | 64.3 | 6,525 |
+| `max` | stopped at ~7 min, unfinished | — |
+
+It shows `medium` behaving as a distinct rung on this task, which the 2026-08
+interleaved reading did not. It is one task and two runs, so it is a direction,
+not the medium-rung validation experiment above, and it graded no answer's quality.
+
+**The verify gate was ruled against the recoverability test, knowingly.** A wrong
+verify pass has no catcher until the finale. The human was told this before they
+ruled and chose `medium`; review and critical review stay `high` behind it.
+
+**The judge, next batch:** the shape of the implementer's rejections, as in the
+xhigh A/B. Effort-shaped rejects argue `high` back in. For the verify gate, any
+fault the review gate or the finale catches that driving the acceptance path
+would have shown.
+
+**Why a human action is carried forward with its observed effect.** One human
+action taken mid-run, recorded by what it was meant to do, had already silently
+failed to land. Moved out of `SKILL.md`'s Carry-forward paragraph by
+tracker-tooling issue 42, to pay for the "needs the full level" step.
+
+## A reset's annulled strikes are counted beside the strikes that stand (2026-09-28)
+
+Run `batch-f43aaf` recorded `"strikes": 0` beside a ledger showing
+`charge=strike` on issue 221, gates 1. The strike was real: the review gate
+found an upload kept after a refused save, and attempt 2 fixed it in code.
+The criteria reset after gates 2 annulled it, as step 8 says, so the reader
+was right by the rule and the record still read as a cleaner run than it was.
+
+The human chose option A of four. The reset rule stands. `run_quality.py` counts
+the strikes a reset took back, and `run_costs.py` writes them as a sixth
+quality count, `strikes_annulled`, which `run_records.py` accepts and shows
+and `run_compare.py` compares. The options they turned down: count a strike
+through a reset, which charges a run for criteria it did not write; annul
+only the strikes on the rewritten item, which the ledger token cannot name;
+and leave the record as it was.
+
+## Fewer whole suites per issue (2026-09-29)
+
+The perf audit of 2026-09-28 (`.scratch/workflow-audit/perf-audit-2026-09-28/`
+in the project it measured, audit-pair1.md and audit-pair2.md) counted 4 to 9
+whole suites per full issue, about 100 minutes of suite time a run, and only 6
+of 58 recorded suites green. The human asked for five cuts, each one a refusal
+or an act and none a reminder.
+
+**The gate copy has history.** The old recipe rsynced the tree without
+`.git`, a choice measured at 87 MB of history against a 66 MB copy. It made 11
+git-reading tests red in all 8 verify suites of one pair of runs and 4 in the
+next, and each verify gate then built a `git clone --shared` copy and ran
+again. `make_copy.py` makes that clone once: it borrows the object store, so
+the 87 MB is not copied, and it lays the uncommitted work over it. Not
+`cp -al`: hard links carry a drill's write into the run tree, and a linked
+worktree's `.git` file would let git in the copy move the run tree's index.
+`run_suite.py --stage verify` refuses any copy `make_copy.py` did not make.
+
+**The verify gate reuses the implementer's record.** The verify suite was the
+tail of 9 of 12 gate pairs. At stage `verify` the wrapper looks up the
+implementer's newest `issue` record for the same tree hash, through the
+copy's `run-suite.source`, and answers with it, red or green. That needs a
+coverage report from the implementer's run, so the wrapper adds the coverage
+flags to every vitest or package-manager `test` command and keeps each report
+beside its log. It needs a stable hash too: `.scratch/` is left out, since the
+runner and the gates write the ledger and verdicts there after the suite, and
+a record keeps `tree_after` because one project's suite rewrites
+`tsconfig.json`. `run-issues-suite-gate.py` refuses the verify gate any whole
+suite outside the wrapper at `verify`.
+
+**A test-only correction takes the scoped road.** Seven runner correction
+suites, 36 minutes, followed corrections that changed tests only. The
+wrapper at stage `correction` diffs the tree against the implementer's last
+`issue` record and refuses the whole suite when every changed path is a test
+path, naming `scoped_suite.py`.
+
+**The scoped set reaches past the touched files.** Three light-issue reds
+reached the finale: 181 (`brief-route`, an importer), 254
+(`design-values`) and 234c (`standing-rules`), repo-wide checks. The audit's
+own estimate was 185 files, about 90 seconds. `scoped_suite.py` asks
+`vitest list --changed` for every test whose imports reach the change, adds
+the repo-wide filters, and records at stage `scoped`.
+`run-issues-sweep-gate.py` (withheld from this pack) refuses a light issue's commit until a green
+scoped reading of the tree it stages exists. That puts a second check on the
+sweep gate's one step, which its docstring allows once a fault recurs.
+
+**The harness suite runs by contract.** One project moved 32 harness and
+run-machinery files to `npm run test:harness` on 2026-09-28 (commit
+`c7f3e3df`), with `harnessSuite` in its `.claude/run-isolation.json`. Both suite
+scripts read it, refuse an entry of a form they cannot place, and run the
+command after the suite at every finale and wherever the uncommitted diff
+touches a `requiredWhen` path. The diff is measured against HEAD because the
+runner commits each issue after its gates; an implementer that commits its
+own work hides its paths from this check, and the finale's run catches them.
+The harness suite runs without coverage, so a changed line only a harness
+file executes is not graded.

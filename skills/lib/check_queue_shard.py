@@ -37,6 +37,15 @@ Three refusals, and one refusal-to-pass:
                 instead of asking for it a second time. See `rulings.py` for
                 the file and the matching rule, and for the one line that
                 passes an item past a match it has read and does not accept.
+
+                Two roads reach this refusal, and the shorter one is a
+                certainty. An item carrying a ruling entry's own question id
+                IS that question, whatever either heading's words say, and
+                that road takes no escape line: `rulings.ruled_by_id` holds it
+                and the measurement that bought it. The other road is the word
+                overlap, which answers the different question of whether this
+                is the same subject in other words; it keeps its thresholds
+                and it keeps the declaration escape.
     record      the rulings file governing this shard holds an entry
                 `rulings.py` could not parse. The shard is graded against the
                 entries that DID parse, so a dropped entry is a question this
@@ -49,8 +58,8 @@ Three refusals, and one refusal-to-pass:
                 Nothing was asserted, so nothing passes. Exit 2, the code the
                 rest of this directory uses for "nothing could be read".
 
-The last two need `rulings.py` beside this script. WHERE THIS PACK SHIPS
-WITHOUT IT THE RULINGS GUARD IS OFF and the two id refusals are unchanged; the
+The last two need `rulings.py` beside this script. The pack ships it; WHERE A
+COPY LEAVES IT OUT THE RULINGS GUARD IS OFF and the two id refusals are unchanged; the
 `--rulings` flag then refuses rather than pretending to check. The guard is
 silent in the same way where the reader is present and the project has no
 rulings file: a project that has never recorded a ruling is checked exactly as
@@ -74,10 +83,11 @@ from collect_shards import ITEM_ID, item_id, split_items  # noqa: E402
 
 try:
     from rulings import (QUESTION_REF, declared, entries_and_skips,  # noqa: E402
-                         entries_for, issue_of, matches, nearest, quoted_ids)
+                         entries_for, issue_of, matches, nearest, quoted_ids,
+                         ruled_by_id)
     RULINGS_READER = True
 except ImportError:  # pragma: no cover - a pack shipped without the reader
-    # `rulings.py` is an optional part of this pack, so the import is the
+    # `rulings.py` ships beside this script, but a copy may leave it out, so the import is the
     # conditional rather than a note telling a reader to remember. Without it
     # there are no entries, `ruled_refusal` returns nothing on every item, and
     # the id refusals above stand exactly as they did.
@@ -138,10 +148,35 @@ def issue_ref(head):
     return issue_of(found.group(1)) if found else ""
 
 
+def named_refusal(line, head, first, path):
+    """The refusal for an item carrying a ruling entry's own question id.
+
+    It says the match was on the ID, in those words, so the writer is not left
+    hunting the heading for which word triggered it — there is no such word,
+    and on the case this was built for the two headings share only "sign".
+
+    It names the follow-up road rather than the escape line, because the
+    escape does not apply here: see `rulings.ruled_by_id` for why an identical
+    id is not a judgement a writer can make.
+    """
+    return (f"{path}:{line}: already ruled, and the match is on the ID, not "
+            f"on the words: this item carries `{first.question}`, which is "
+            f"the question id of the entry of {first.date} — {first.subject} "
+            f"— ruled: {first.ruling} Carried by {first.home}. Apply it. "
+            f"`Rulings checked:` does not pass an item that carries the "
+            f"entry's own id; a genuine follow-up takes a NEW id: "
+            f"{head.strip()}")
+
+
 def ruled_refusal(line, head, item, entries, path):
     """The rulings refusal for one item, or empty where it has none.
 
-    Three ways past a match, and all three are the same line. An item that
+    Two roads, in this order. The id road is a certainty and runs first: an
+    item under an entry's own question id is that question by name, and no
+    line on the item passes it. The word road is the heuristic, and the three
+    ways past it below are its own.
+
+    Three ways past a WORD match, and all three are the same line. An item that
     quotes every matching entry has read them: it may say they do not answer
     it, or that it contradicts one, and either way it is a new question. An
     item that quotes none has not read them. An item that quotes some but not
@@ -155,6 +190,9 @@ def ruled_refusal(line, head, item, entries, path):
     """
     if not RULINGS_READER or not entries:
         return ""
+    named = ruled_by_id(head, entries)
+    if named:
+        return named_refusal(line, head, named[0], path)
     subject = subject_of(head)
     hits = matches(subject, entries, issue=issue_ref(head))
     if not hits:
@@ -253,7 +291,7 @@ def main(argv=None):
     if args.rulings:
         if not RULINGS_READER:
             print("REFUSED — --rulings needs `rulings.py` beside this script, "
-                  "which this pack does not ship. Drop the flag: the id "
+                  "and it is missing here. Drop the flag: the id "
                   "refusals still run.", file=sys.stderr)
             return WRONG
         with open(args.rulings, encoding="utf-8") as handle:

@@ -4,6 +4,7 @@
     python3 ~/.claude/skills/lib/claim_number.py issue <issues dir> [--for <who>] [--slug <slug>]
     python3 ~/.claude/skills/lib/claim_number.py migration <migrations dir> [--for <who>]
     python3 ~/.claude/skills/lib/claim_number.py --check <path-about-to-be-written>
+    python3 ~/.claude/skills/lib/claim_number.py --rename <old path> <new path>
     python3 ~/.claude/skills/lib/claim_number.py --list <dir>
 
 Ticket 38 of the pilot-delivery map, the one-run-per-feature layout ticket, sitting 5
@@ -41,14 +42,46 @@ WHAT NEEDS NO CLAIM. A file that already exists (an edit), and a split, which ta
 letter suffix on its parent's number (`216b`) and draws from a name exactly one issue
 owns (`docs/agents/issue-tracker.md`, settled 2026-08-03). `--check` passes both.
 
+RENAMING A FILE THAT ALREADY HOLDS ITS NUMBER. The human's ruling `q-h0920-37` of
+2026-09-20: a tracker file whose title has gone false is RENAMED — keep the number,
+rewrite the title, rename the file with it. Hardening pass `h0922b` was refused that
+on 2026-09-22. One tracker's issue 105 was claimed by `promotion batch-d41839` in the
+worktree `run-issues-batch-d41839`; the file had since merged into another tree, so
+`--check` read the new name as a number claimed elsewhere, which is the collision it
+exists to stop. `--rename <old> <new>` is the road that tells the two apart, and what
+tells them apart is the OLD FILE ON DISK: a file this tree already holds is a file
+this tree already owns, and re-spelling its title mints nothing. Five refusals, each
+one a check and not a convention:
+
+  1. the number and any split suffix are identical in both names — changing either is
+     a mint, and a mint claims a number;
+  2. both names are the same kind and sit in the same directory;
+  3. the old file exists, in the tree the rename is run from — a rename with no source
+     file is a mint wearing a disguise;
+  4. the new name is free — nothing is ever renamed over;
+  5. both names parse as numbered files at all.
+
+It UPDATES the one claim record rather than writing a second: `slug` becomes the new
+slug and `tree` becomes the tree the rename happened in, while `who` and `at` keep the
+original claimant and the original claim time, and `claimed_tree` records where the
+claim was first made. A later reader still sees that 105 was claimed by
+`promotion batch-d41839` on 2026-09-15 and renamed after. A second rename overwrites
+none of that history. A number older than the store gains a record here, which is not
+a mint because its file is already on disk.
+
+`--rename` moves no file. It makes the claim true and the caller then runs `git mv`,
+which `--check` now passes because the claim names this tree — so the rule keeps one
+home in `check()` and the rename road adds no second case to it. A CROSS-TREE MINT IS
+UNTOUCHED and stays refused; `test_claim_number.py` drives both halves of that.
+
 TWO FACTS, NOT RULES. A file written through a road no hook sees exists afterwards,
 and every later edit to it passes as an edit; the guard catches the minting write,
 not its history. And a number that predates this script has no claim, so if its file
 were deleted from every worktree the number could be issued again; closed issues stay
 on disk, so nothing does that today.
 
-Exit codes: 0 claimed or check passed; 1 check refused (reason on stderr); 2 bad usage
-or a directory outside any git repository.
+Exit codes: 0 claimed, check passed or rename recorded; 1 check or rename refused
+(reason on stderr); 2 bad usage or a directory outside any git repository.
 """
 
 import argparse
@@ -254,6 +287,142 @@ def _claim_command(kind: str, directory: str) -> str:
     return f"  python3 {SCRIPT} {kind} {directory} --for <who> --slug <slug>"
 
 
+def parse_numbered(path: str):
+    """(kind, directory, name, spelled number, suffix) for a numbered path, else None.
+
+    One reading of a path, shared by `--check` and `--rename`, so the two cannot
+    disagree about what a numbered file is.
+    """
+    normalised = os.path.normpath(os.path.abspath(path))
+    for kind, shape in CHECK_SHAPES:
+        match = shape.match(normalised)
+        if not match:
+            continue
+        parsed = KINDS[kind][0].match(match.group("name"))
+        if not parsed:
+            return None
+        return (kind, match.group("dir"), match.group("name"),
+                parsed.group("number"), parsed.group("suffix"))
+    return None
+
+
+def slug_of(name: str, spelled: str, suffix: str) -> str:
+    """The part of a file name after the number and its separator, without the suffix
+    extension: `105-line-page-...md` gives `line-page-...`."""
+    body = name[len(spelled) + len(suffix) + 1:]
+    return body[: body.rindex(".")] if "." in body else body
+
+
+def _record_lines(fields: dict) -> str:
+    """A claim record, the fixed keys first and in their original order, so a record
+    written before the rename road reads the same afterwards."""
+    order = ["tree", "who", "slug", "at", "claimed_tree", "renamed_from", "renamed_at"]
+    keys = order + sorted(key for key in fields if key and key not in order)
+    return "\n".join(f"{key}={_one_line(fields[key])}" for key in keys if key in fields) + "\n"
+
+
+def _write_record(holder: str, fields: dict) -> None:
+    """Replace a claim record in one step, so no reader sees a half-written one."""
+    temporary = f"{holder}.writing-{os.getpid()}"
+    with open(temporary, "w", encoding="utf-8") as handle:
+        handle.write(_record_lines(fields))
+    os.replace(temporary, holder)
+
+
+def _rename_refusal(reason: list) -> str:
+    return "\n".join(reason)
+
+
+def rename(old: str, new: str, env=None) -> str:
+    """The refusal for re-slugging `old` to `new`, or "" once the claim carries the
+    new name. Moves no file: the caller runs `git mv` and `--check` then passes it.
+
+    The human's ruling `q-h0920-37`. The whole docstring above states the five refusals;
+    each one is here and none of them is a convention.
+    """
+    old_abs = os.path.normpath(os.path.abspath(old))
+    new_abs = os.path.normpath(os.path.abspath(new))
+    old_parts, new_parts = parse_numbered(old_abs), parse_numbered(new_abs)
+    if not old_parts or not new_parts:
+        unreadable = old_abs if not old_parts else new_abs
+        return _rename_refusal([
+            "REFUSED. Give two numbered tracker paths and reissue:",
+            f"  python3 {SCRIPT} --rename <old path> <new path>",
+            "",
+            f"  cannot read as a numbered file: {unreadable}",
+            "",
+            "A rename road covers `<anything>/issues/NN-<slug>.md` and",
+            "`<anything>/supabase/migrations/NNNN_<slug>.sql`, and nothing else.",
+        ])
+    kind, directory, old_name, spelled, suffix = old_parts
+    new_kind, new_directory, new_name, new_spelled, new_suffix = new_parts
+    if new_kind != kind or new_directory != directory:
+        return _rename_refusal([
+            "REFUSED. Rename inside one directory, and reissue:",
+            f"  from: {directory}",
+            f"    to: {new_directory}",
+            "",
+            "A rename rewrites a title. Moving a numbered file to another directory or",
+            "another kind is a new file there, and a new file there claims a number.",
+        ])
+    if new_spelled != spelled or new_suffix != suffix:
+        return _rename_refusal([
+            f"REFUSED. Keep the number `{spelled}{suffix}`, or claim a fresh one and reissue:",
+            _claim_command(kind, directory),
+            "",
+            f"  you asked: {old_name} -> {new_name}",
+            "",
+            "Ruling `q-h0920-37` of 2026-09-20 renames a file whose TITLE has gone false and",
+            "keeps its number. A rename that changes the number is a mint, and a mint claims.",
+        ])
+    if new_name == old_name:
+        return _rename_refusal([
+            "REFUSED. Give a new name that differs from the old one, and reissue.",
+            "",
+            f"  both names are: {old_name}",
+        ])
+    if not os.path.isfile(old_abs):
+        return _rename_refusal([
+            "REFUSED. Claim the number and write the file, or correct the old path, and reissue:",
+            _claim_command(kind, directory),
+            "",
+            f"  no such file: {old_name} in {directory}",
+            "",
+            "A rename re-spells a file this tree already holds. With no file to rename this is",
+            "a mint wearing a disguise, and the claim exists to stop exactly that.",
+        ])
+    if os.path.exists(new_abs):
+        return _rename_refusal([
+            "REFUSED. Pick a name nothing holds, and reissue.",
+            "",
+            f"  already on disk: {new_name} in {directory}",
+            "",
+            "Nothing is renamed over. Two tracker files are two files, whatever they are called.",
+        ])
+    try:
+        tree, main, relative = locate(directory)
+    except (NotARepository, subprocess.SubprocessError, OSError):
+        raise NotARepository(directory)
+    if suffix:
+        return ""  # A split carries no claim; its file on disk is its own proof.
+    store = store_dir(kind, main, relative, env)
+    holder = os.path.join(store, spelled)
+    fields = read_claim(holder) if os.path.isfile(holder) else {}
+    if fields:
+        # Written once, by the FIRST rename. A later rename overwrites no history.
+        fields.setdefault("claimed_tree", fields.get("tree", ""))
+    else:
+        # A number older than the store. Its file is on disk, so recording it is not a mint.
+        fields = {"who": "", "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")}
+    fields["tree"] = tree
+    fields["slug"] = slug_of(new_name, new_spelled, new_suffix)
+    fields["renamed_from"] = old_name
+    fields["renamed_at"] = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    os.makedirs(store, exist_ok=True)
+    _write_record(holder, fields)
+    return ""
+
+
 def check(path: str, env=None) -> str:
     """The refusal for writing `path`, or "" when the write may go ahead.
 
@@ -263,6 +432,10 @@ def check(path: str, env=None) -> str:
     number nobody claimed, a split with no parent anywhere, a number claimed in
     another worktree, and a claimed number written at another width. Every refusal
     leads with what to do, because a run reissues one call and never halts.
+
+    A RENAME NEEDS NO CASE HERE, and deliberately. `--rename` moves the claim to the
+    tree holding the file, so the last clause below then passes the new name on the
+    rule it already holds. One home for the rule; the road makes the claim true.
     """
     normalised = os.path.normpath(os.path.abspath(path))
     for kind, shape in CHECK_SHAPES:
@@ -340,9 +513,17 @@ def main(argv=None) -> int:
     parser.add_argument("--slug", default="", help="the slug the file will carry, for the record")
     parser.add_argument("--list", metavar="DIR", help="print every claim for a directory")
     parser.add_argument("--check", metavar="PATH", help="exit 0 when PATH may be written, 1 with a reason when not")
+    parser.add_argument("--rename", nargs=2, metavar=("OLD", "NEW"),
+                        help="re-slug a numbered file that exists, keeping its number (ruling q-h0920-37)")
     args = parser.parse_args(argv)
 
     try:
+        if args.rename:
+            reason = rename(args.rename[0], args.rename[1])
+            if reason:
+                print(reason, file=sys.stderr)
+                return 1
+            return 0
         if args.list:
             for name, fields in list_claims(args.list):
                 print(f"{name}  " + "  ".join(f"{k}={v}" for k, v in fields.items()))

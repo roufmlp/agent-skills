@@ -136,6 +136,8 @@ and no test is still refused.
 from __future__ import annotations
 
 import argparse
+import datetime
+import importlib.util
 import json
 import pathlib
 import re
@@ -683,6 +685,83 @@ def render(problems: list[Problem], facts: dict) -> str:
     return "\n".join(lines).rstrip()
 
 
+# One JSON line per grading, in the work tree's own git directory, where `git
+# status` never sees it. Run `batch-e35a25`, issue 227: the runner ran this
+# check after it wrote the correction brief, and its refusals bought a second
+# correction spawn. `SKILL.md` step 5 ordered it in a sentence. The stamp is
+# what `correction_brief.py` refuses to compose without.
+STAMPS = "run-issues-coverage.jsonl"
+
+
+def _tree_hash(repo: pathlib.Path) -> str:
+    """`run_suite.tree_hash`, the one reading of "this tree" the suite
+    wrapper already keys on. Loaded here, on use: nothing else needs it."""
+    spec = importlib.util.spec_from_file_location(
+        "check_diff_coverage_run_suite",
+        pathlib.Path(__file__).resolve().parent / "run_suite.py")
+    module = sys.modules.get(spec.name)
+    if module is None:
+        module = importlib.util.module_from_spec(spec)
+        # Registered before it runs: `run_suite`'s dataclass looks its own
+        # module up by name while the class is built.
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    return module.tree_hash(repo)
+
+
+def _stamp_file(repo: pathlib.Path) -> pathlib.Path | None:
+    """The stamp file of the work tree at `repo`, or None outside git."""
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+            check=True, capture_output=True, text=True).stdout.strip()
+        path = subprocess.run(
+            ["git", "-C", top, "rev-parse", "--git-path", STAMPS],
+            check=True, capture_output=True, text=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    path = pathlib.Path(path)
+    return path if path.is_absolute() else pathlib.Path(top) / path
+
+
+def stamp_items(problems: list[Problem]) -> list[str]:
+    """Each refusal as one line, the form a correction brief lists it in."""
+    return [" ".join([f"REFUSED {problem.kind}: {problem.detail}",
+                      *(line.strip() for line in problem.lines)])
+            for problem in problems]
+
+
+def write_stamp(repo: pathlib.Path, code: int, items: list[str]) -> None:
+    """Append this grading to the tree's stamps. Outside git there is no
+    tree to key it on, and nothing is written."""
+    path = _stamp_file(repo)
+    if path is None:
+        return
+    record = {"tree": _tree_hash(pathlib.Path(repo).resolve()), "exit": code,
+              "at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              "items": items}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record) + "\n")
+
+
+def stamp_for(repo: pathlib.Path) -> dict | None:
+    """The newest stamp for the tree at `repo` as it stands now, or None."""
+    path = _stamp_file(repo)
+    if path is None or not path.exists():
+        return None
+    tree = _tree_hash(pathlib.Path(repo).resolve())
+    for line in reversed(path.read_text(encoding="utf-8",
+                                        errors="replace").splitlines()):
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict) and record.get("tree") == tree:
+            return record
+    return None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Refuse a diff whose changed code no test executes."
@@ -741,12 +820,11 @@ def main(argv=None) -> int:
         pathlib.Path(args.report_root) if args.report_root else None,
     )
     output = render(problems, facts)
-    if not problems:
-        print(output)
-        return 0
-    print(output, file=sys.stderr)
     ungradeable = {"empty-diff", "no-report", "unreadable-report", "stale-report"}
-    return 2 if problems[0].kind in ungradeable else 1
+    code = 0 if not problems else 2 if problems[0].kind in ungradeable else 1
+    write_stamp(repo, code, stamp_items(problems))
+    print(output, file=sys.stderr if problems else sys.stdout)
+    return code
 
 
 if __name__ == "__main__":

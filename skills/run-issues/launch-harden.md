@@ -176,7 +176,7 @@ the rule `harden-issues/SKILL.md` sets for every caller.
 
 ## Step 5 — what the phase settles, and what it drops
 
-**Only three things drop an issue from this run:**
+**Only four things drop an issue from this run:**
 
 - An `[irreversible]` question. It takes no default by rule, so the issue leaves
   the scope and waits for the human.
@@ -188,9 +188,14 @@ the rule `harden-issues/SKILL.md` sets for every caller.
   true of it.
 - A premise check whose answer only the human can fetch. It is not defaultable at
   any tier, so the issue leaves the scope unstamped.
+- A `Level: full` issue whose criterion carries a pending default: rule 7 of
+  issue 32 (issue 43b). Step 7's `check_issue_ready.py` would refuse it and block
+  the whole launch, so it leaves the scope here, stamped `Hardened (provisional):`
+  like the rest, and waits for the human's ruling.
 
 **Every other fork takes its recommended default**, is written into the file as
-a default rather than a decision, and is queued to this run's own decisions
+a default rather than a decision, as ``Default (`q-<pass>-<issue>-<n>`)`` inside
+the criterion it changes, and is queued to this run's own decisions
 shard. The issue is stamped `Hardened (provisional):` and stays in the run.
 (Rulings 3, 4 and 11.)
 

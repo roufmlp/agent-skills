@@ -268,6 +268,112 @@ class TestRuling13TheStashRuleInEveryCheckout(unittest.TestCase):
         self.assertNotIn("shares one git index", err)
 
 
+def merge_fixture(name):
+    """A main checkout holding a conflicted merge, resolved and staged.
+
+    `c.txt` conflicts and is resolved by hand; `e.txt` arrives clean from the
+    merged branch; `d.txt` is untouched by either side, so staging it puts a
+    path in the index that the merge does not bring.
+    """
+    home = os.path.join(ROOT, name)
+    os.makedirs(home)
+    git("init", "-q", "-b", "main", cwd=home)
+    Path(home, "c.txt").write_text("base\n")
+    Path(home, "d.txt").write_text("d\n")
+    git("add", "c.txt", "d.txt", cwd=home)
+    git("commit", "-q", "-m", "base", cwd=home)
+    git("checkout", "-q", "-b", "other", cwd=home)
+    Path(home, "c.txt").write_text("theirs\n")
+    Path(home, "e.txt").write_text("e\n")
+    git("add", "c.txt", "e.txt", cwd=home)
+    git("commit", "-q", "-m", "theirs", cwd=home)
+    git("checkout", "-q", "main", cwd=home)
+    Path(home, "c.txt").write_text("ours\n")
+    git("add", "c.txt", cwd=home)
+    git("commit", "-q", "-m", "ours", cwd=home)
+    done = subprocess.run(["git", "merge", "-q", "other"], cwd=home,
+                          capture_output=True, text=True)
+    assert done.returncode != 0, "the fixture needs a conflicted merge"
+    Path(home, "c.txt").write_text("resolved\n")
+    git("add", "c.txt", cwd=home)
+    return home
+
+
+MERGING = merge_fixture("merging")
+MERGING_WITH_STRAY = merge_fixture("merging-with-stray")
+Path(MERGING_WITH_STRAY, "d.txt").write_text("another session's edit\n")
+git("add", "d.txt", cwd=MERGING_WITH_STRAY)
+
+
+def run_hook_out(command, cwd):
+    """Like `run_hook`, with stdout too: a merge commit that passes says on
+    stdout which paths it carries."""
+    payload = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
+    done = subprocess.run(
+        [sys.executable, str(GUARD)],
+        input=json.dumps(payload), capture_output=True, text=True)
+    return done.returncode, done.stdout, done.stderr
+
+
+class TestConcludingAMergeInTheMainCheckout(unittest.TestCase):
+    """A conflicted merge cannot be concluded by a commit that names paths:
+    git refuses "a partial commit during a merge". One measured session had to
+    conclude such a merge with plumbing, past this guard. A merge
+    commit passes when every staged path is one the merge brings, and says
+    which paths it carries. Anything else staged keeps ruling 7's refusal."""
+
+    def test_a_bare_commit_concluding_a_clean_merge_passes(self):
+        code, _, _ = run_hook_out("git commit --no-edit", MERGING)
+        self.assertEqual(code, 0)
+
+    def test_a_commit_with_a_message_concluding_the_merge_passes(self):
+        code, _, _ = run_hook_out("git commit -m 'Merge other'", MERGING)
+        self.assertEqual(code, 0)
+
+    def test_merge_continue_concluding_a_clean_merge_passes(self):
+        code, _, _ = run_hook_out("git merge --continue", MERGING)
+        self.assertEqual(code, 0)
+
+    def test_the_passing_merge_commit_names_the_paths_it_carries(self):
+        _, out, _ = run_hook_out("git commit --no-edit", MERGING)
+        context = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("c.txt", context)
+        self.assertIn("e.txt", context)
+        self.assertNotIn("d.txt", context)
+
+    def test_a_merge_commit_carrying_a_stray_staged_path_is_refused(self):
+        code, _, err = run_hook_out("git commit --no-edit", MERGING_WITH_STRAY)
+        self.assertEqual(code, 2)
+        self.assertIn("d.txt", err)
+
+    def test_merge_continue_carrying_a_stray_staged_path_is_refused(self):
+        code, _, err = run_hook_out("git merge --continue", MERGING_WITH_STRAY)
+        self.assertEqual(code, 2)
+        self.assertIn("d.txt", err)
+
+    def test_the_stray_refusal_names_the_unstage_road(self):
+        _, _, err = run_hook_out("git commit --no-edit", MERGING_WITH_STRAY)
+        self.assertIn("git restore --staged", err)
+
+    def test_commit_all_during_a_merge_is_still_refused(self):
+        code, _, _ = run_hook_out("git commit -a --no-edit", MERGING)
+        self.assertEqual(code, 2)
+
+    def test_amend_during_a_merge_is_still_refused(self):
+        code, _, _ = run_hook_out("git commit --amend --no-edit", MERGING)
+        self.assertEqual(code, 2)
+
+    def test_a_bare_commit_with_no_merge_in_progress_is_still_refused(self):
+        code, out, _ = run_hook_out("git commit -m 'a message naming one change'", MAIN)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+
+    def test_merge_continue_with_no_merge_in_progress_passes_to_git(self):
+        """git answers "There is no merge in progress" itself."""
+        code, _, _ = run_hook_out("git merge --continue", MAIN)
+        self.assertEqual(code, 0)
+
+
 class TestTheScopeIsTheSharedCheckoutOnly(unittest.TestCase):
     """A linked worktree has a private index, so nothing there is touched."""
 

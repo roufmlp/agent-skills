@@ -91,6 +91,9 @@ You ruled on 2026-09-01 that issue **509** closes it after you walk this batch.
 # read off the drawing script's `r45c8b1` spec; the
 # seven band chips take a stage inside their band's span, never `floor`, and
 # `Lit:` does not name `catalogue` because 485 is a chip and not a card.
+# Row 488 read "... refuse a viewer's direct write" until 2026-09-28. That
+# sentence wraps into four lines and the drawer refused it, so this fixture
+# passed the check and could not be drawn: the gap the fit check closes.
 RAIL_ONLY = """## The run on the rail
 
 Headline: The database now refuses a viewer's direct write on every table this batch
@@ -102,7 +105,7 @@ Lit: workspace, quotation, needs-you, zoho
 | 485b  | catalogue | harness | Catalogue guards now truly run                       |
 | 486   | quotation | guard   | Customer tables refuse a viewer's write              |
 | 487   | quote     | guard   | Supplier and invite tables refuse a viewer's write   |
-| 488   | award     | guard   | Deal and money tables refuse a viewer's direct write |
+| 488   | award     | guard   | Deal and money tables refuse a viewer's write        |
 | 489   | workspace | guard   | Workspace and ops tables refuse a viewer's write     |
 | 485   | catalogue | guard   | Catalogue tables refuse a viewer's write             |
 | 519   | workspace | fix     | The four seat readers agree, and so does the type    |
@@ -828,6 +831,59 @@ class TheCommandTheFinaleRuns(unittest.TestCase):
         self.assertIn("16 shipped, 16 rail rows", done.stdout)
         self.assertIn("4 stages lit", done.stdout)
         self.assertIn("graded", done.stdout)
+
+    # The perf audit of 2026-09-28: `draw_run_rail.py` exited 1 on its first
+    # call in all four runs of that day and 0 after the runner shortened a
+    # line. This check passed each briefing first: it bounded a card sentence
+    # at 60 characters and never measured the headline, so the drawer was the
+    # first thing to measure either. Both sentences below were refused by the
+    # drawer in a real finale.
+    DRAWER = str(pathlib.Path(__file__).resolve().parent / "draw_run_rail.py")
+    WIDE_HEADLINE = (
+        "Headline: The product now runs end to end, from a mock-up request to a "
+        "closed delivery, and every screen it added is guarded by the rights "
+        "engine rather than by a read rule. The money edit surface is still open.")
+
+    def both(self, briefing):
+        """This check's exit and the drawer's, on one briefing."""
+        checked = self.run_it(briefing)
+        with tempfile.TemporaryDirectory() as room:
+            path = pathlib.Path(room) / "merge-briefing.md"
+            stages = pathlib.Path(room) / "run-picture-stages.md"
+            path.write_text(briefing)
+            stages.write_text(STAGES)
+            drawn = subprocess.run(
+                [sys.executable, self.DRAWER, "--briefing", str(path),
+                 "--stages", str(stages)], capture_output=True, text=True)
+        return checked, drawn
+
+    def test_a_headline_the_drawer_cannot_fit_is_refused_here_first(self):
+        wide = BRIEFING.replace(
+            "Headline: The database now refuses a viewer's direct write on every "
+            "table this batch\ntouched. The money road is still open.",
+            self.WIDE_HEADLINE)
+        self.assertNotEqual(wide, BRIEFING)
+        checked, drawn = self.both(wide)
+        self.assertEqual(drawn.returncode, 1, drawn.stderr)
+        self.assertEqual(checked.returncode, 1, checked.stdout)
+        self.assertIn("REFUSED will-not-fit: headline", checked.stderr)
+
+    def test_a_short_sentence_that_wraps_to_four_lines_is_refused_here_first(self):
+        """57 characters: under the 60-character bound, and four lines drawn."""
+        sentence = "A sign-in answer takes as long with an account as without"
+        self.assertLess(len(sentence), guard.SENTENCE_LIMIT)
+        old = "Admin is told a customer waits to be verified"
+        self.assertIn(old, BRIEFING)
+        long = BRIEFING.replace(old, sentence)
+        checked, drawn = self.both(long)
+        self.assertEqual(drawn.returncode, 1, drawn.stderr)
+        self.assertEqual(checked.returncode, 1, checked.stdout)
+        self.assertIn("REFUSED will-not-fit: 516", checked.stderr)
+
+    def test_the_real_shape_passes_both_the_check_and_the_drawer(self):
+        checked, drawn = self.both(BRIEFING)
+        self.assertEqual((checked.returncode, drawn.returncode), (0, 0),
+                         checked.stderr + drawn.stderr)
 
     def test_a_bad_stage_exits_one_and_names_it(self):
         bad = BRIEFING.replace("| 516   | needs-you |", "| 516   | warehouse |")

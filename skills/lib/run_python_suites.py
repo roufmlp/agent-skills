@@ -268,6 +268,21 @@ def discover(roots):
     return Walk(sorted(found), sorted(skipped))
 
 
+# Tracker-tooling issue 40. A suite gate hook, where the reader has one, loads
+# `issue_level.py` from here when it is set, so a walk handed a skills tree
+# drills that tree's reader. Setting it costs nothing where no hook reads it.
+SKILL_DIR_ENV = "RUN_ISSUES_SKILL_DIR"
+
+
+def skill_dir_for(roots):
+    """The `run-issues/` of the first root that holds one, or None."""
+    for root in roots:
+        candidate = os.path.join(os.path.abspath(root), "run-issues")
+        if os.path.isdir(candidate):
+            return candidate
+    return None
+
+
 def run_one(path, timeout=600):
     """Run one file the way the ritual runs it: `python3 <basename>` from its
     own directory. The suites import siblings by relative path, so the working
@@ -335,6 +350,9 @@ def main(argv=None):
         print(f"run_python_suites: {err}", file=sys.stderr)
         return 2
     paths = walk.paths
+    skill_dir = skill_dir_for(roots)
+    if skill_dir and not os.environ.get(SKILL_DIR_ENV):
+        os.environ[SKILL_DIR_ENV] = skill_dir
     aside = ""
     if walk.skipped:
         aside = ("  Left alone, each its own checkout and so not part of this "

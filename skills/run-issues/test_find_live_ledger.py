@@ -336,11 +336,37 @@ class ParseScopeIds(unittest.TestCase):
                          ["12", "13"])
 
 
+def write_issue(tree, number, touches, feature="example-feature"):
+    """An issue file in the tracker beside a run's `runs/` directory. `touches`
+    is the whole `Touches:` line after the label; None writes no line at all."""
+    issues = os.path.join(tree, ".scratch", feature, "issues")
+    os.makedirs(issues, exist_ok=True)
+    line = "" if touches is None else f"Touches: {touches}\n"
+    with open(os.path.join(issues, f"{number}-an-issue.md"), "w") as handle:
+        handle.write(f"Status: ready-for-agent\n{line}Level: light\n\n# {number}\n")
+
+
+def tracker_cand(owner_line, scope, batch, touches):
+    """A live run in a real directory, its tracker holding one file per
+    `touches` entry (issue 41, AC4): every issue gets disjoint paths."""
+    tree = tempfile.mkdtemp()
+    for number, line in touches.items():
+        write_issue(tree, number, line)
+    return Candidate(
+        path=f"{tree}/.scratch/example-feature/runs/{batch}/run.md",
+        tree=tree,
+        worktree_line=f"Worktree: `{WT}/run-a`",
+        owner_line=owner_line,
+        scope_text=scope,
+        is_main=True,
+        batch=batch,
+    )
+
+
 class Overlapping(unittest.TestCase):
     def test_names_the_run_holding_each_requested_issue(self):
-        a = main_cand(f"Worktree: `{WT}/run-a`", "Owner: sess-a",
-                      scope="# Run ledger — 533, 546, 557b (run `batch-aaaaaa`)",
-                      batch="batch-aaaaaa")
+        a = tracker_cand("Owner: sess-a", "# Run ledger — 533, 546, 557b (run `batch-aaaaaa`)",
+                         "batch-aaaaaa", {n: f"`src/{n}.ts`" for n in ("533", "546", "557b", "999")})
         hits = overlapping([a], ["546", "999"])
         self.assertEqual([(c.batch, ids) for c, ids in hits], [("batch-aaaaaa", ["546"])])
 
@@ -351,13 +377,13 @@ class Overlapping(unittest.TestCase):
 
     def test_matching_is_whole_id_not_substring(self):
         """`34` must not match `345`, and `345` must not match `34`."""
-        a = main_cand(f"Worktree: `{WT}/run-a`", "Owner: sess-a",
-                      scope="# Run ledger — 345 (run `batch-aaaaaa`)", batch="batch-aaaaaa")
+        a = tracker_cand("Owner: sess-a", "# Run ledger — 345 (run `batch-aaaaaa`)",
+                         "batch-aaaaaa", {"345": "`src/345.ts`", "34": "`src/34.ts`"})
         self.assertEqual(overlapping([a], ["34"]), [])
 
     def test_a_leading_zero_is_the_same_issue(self):
-        a = main_cand(f"Worktree: `{WT}/run-a`", "Owner: sess-a",
-                      scope="# Run ledger — 05, 07 (run `batch-aaaaaa`)", batch="batch-aaaaaa")
+        a = tracker_cand("Owner: sess-a", "# Run ledger — 05, 07 (run `batch-aaaaaa`)",
+                         "batch-aaaaaa", {"05": "`src/05.ts`", "07": "`src/07.ts`"})
         self.assertEqual([ids for _, ids in overlapping([a], ["5"])], [["05"]])
 
 
@@ -399,6 +425,8 @@ class CollectFromARealCheckout(unittest.TestCase):
 
     def test_the_cli_refuses_an_overlapping_issue_range(self):
         import find_live_ledger
+        for number in ("12", "13", "40"):
+            write_issue(self.root, number, f"`src/{number}.ts`")
         done = subprocess.run(
             [sys.executable, find_live_ledger.__file__, "--overlap", "13,40",
              "--repo", self.root], capture_output=True, text=True)
@@ -409,6 +437,8 @@ class CollectFromARealCheckout(unittest.TestCase):
 
     def test_the_cli_lets_a_disjoint_issue_range_through(self):
         import find_live_ledger
+        for number in ("12", "13", "40"):
+            write_issue(self.root, number, f"`src/{number}.ts`")
         done = subprocess.run(
             [sys.executable, find_live_ledger.__file__, "--overlap", "40",
              "--repo", self.root], capture_output=True, text=True)
@@ -426,6 +456,172 @@ class CollectFromARealCheckout(unittest.TestCase):
             cwd=tempfile.gettempdir(), capture_output=True, text=True)
         self.assertEqual(elsewhere.returncode, 1)
         self.assertIn("batch-aaaaaa", elsewhere.stderr)
+
+
+class OverlapByPaths(unittest.TestCase):
+    """Issue 41: two runs meet when their issues' `Touches:` paths meet, not
+    only when they hold one number. Built the way `CollectFromARealCheckout`
+    builds its tree; the issue files sit in the live run's own tracker."""
+
+    def setUp(self):
+        self.root = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q", self.root], check=True)
+        run_dir = os.path.join(self.root, ".scratch", "example-feature", "runs", "batch-aaaaaa")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run.md"), "w") as h:
+            h.write("# Run ledger — 12 (run `batch-aaaaaa`)\n\nOwner: sess-a\n"
+                    f"Worktree: `{self.root}`\n")
+
+    def overlap(self, scope):
+        import find_live_ledger
+        return subprocess.run(
+            [sys.executable, find_live_ledger.__file__, "--overlap", scope, "--repo", self.root],
+            capture_output=True, text=True)
+
+    def test_a_glob_meeting_a_file_is_an_overlap_naming_both_issues_and_paths(self):
+        """AC1."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        write_issue(self.root, "14", "`src/lib/orders.ts`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        for word in ("batch-aaaaaa", "12", "14", "src/lib/**", "src/lib/orders.ts"):
+            self.assertIn(word, done.stderr)
+
+    def test_disjoint_paths_are_let_through(self):
+        """AC2."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        write_issue(self.root, "14", "`src/app/page.tsx`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_the_meet_rules(self):
+        """AC2: equal, a glob, a directory form on either side; `~` expanded and a
+        relative path read against the main checkout. `*` does not cross `/`."""
+        root = os.path.realpath(self.root)
+        cases = [
+            ("`~/.claude/skills/lib/`", "`~/.claude/skills/lib/x.py`", 1),
+            ("`~/.claude/skills/lib/x.py`", "`~/.claude/skills/lib/`", 1),
+            ("`src/lib/orders.ts`", "`src/lib/orders.ts`", 1),
+            ("`src/lib/orders.ts`", f"`{root}/src/lib/orders.ts`", 1),
+            ("`~/.claude/skills/lib/x.py`", f"`{os.path.expanduser('~')}/.claude/skills/lib/x.py`", 1),
+            ("`src/lib/*`", "`src/lib/a/b.ts`", 0),
+            ("`src/lib/*`", "`src/lib/a.ts`", 1),
+            ("`~/.claude/skills/lib/`", "`~/.claude/skills/libx/y.py`", 0),
+        ]
+        for held, candidate, code in cases:
+            with self.subTest(held=held, candidate=candidate):
+                write_issue(self.root, "12", held)
+                write_issue(self.root, "14", candidate)
+                self.assertEqual(self.overlap("14").returncode, code)
+
+    def test_a_relative_path_in_a_linked_worktree_run_is_read_against_the_main_root(self):
+        """AC2 in the shape live runs have: the run's tree is a linked worktree
+        under `<main>/.claude/worktrees/`, so its root and the main root differ."""
+        main = os.path.realpath(tempfile.mkdtemp())
+        git = ["git", "-C", main, "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q", main], check=True)
+        subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "root"], check=True)
+        tree = os.path.join(main, ".claude", "worktrees", "run-a")
+        subprocess.run(git + ["worktree", "add", "-q", "-b", "run-a", tree], check=True)
+        run_dir = os.path.join(tree, ".scratch", "example-feature", "runs", "batch-aaaaaa")
+        os.makedirs(run_dir)
+        with open(os.path.join(run_dir, "run.md"), "w") as h:
+            h.write("# Run ledger — 12 (run `batch-aaaaaa`)\n\nOwner: sess-a\n"
+                    f"Worktree: `{tree}`\n")
+        write_issue(tree, "12", "`src/lib/a.ts`")
+        write_issue(tree, "14", f"`{main}/src/lib/a.ts`")
+        import find_live_ledger
+        with self.subTest("relative against the main root, from a linked worktree"):
+            done = subprocess.run(
+                [sys.executable, find_live_ledger.__file__, "--overlap", "14", "--repo", main],
+                capture_output=True, text=True)
+            self.assertEqual(done.returncode, 1, done.stderr)
+            self.assertIn("batch-aaaaaa", done.stderr)
+
+    def test_an_issue_with_no_touches_line_overlaps_and_says_why(self):
+        """AC3, the candidate side."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        write_issue(self.root, "14", None)
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("14", done.stderr)
+        self.assertIn("14 carries no `Touches:` paths", done.stderr)
+
+    def test_a_held_issue_with_no_touches_line_overlaps_too(self):
+        """AC3, the other way round."""
+        write_issue(self.root, "12", None)
+        write_issue(self.root, "14", "`src/lib/orders.ts`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("12 carries no `Touches:` paths", done.stderr)
+
+    def test_every_no_paths_shape_overlaps(self):
+        """AC3: no line, `Touches: none`, prose with no backticked path, and a
+        number with no issue file in the live run's tracker."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        for label, line in (("no line", None), ("none", "none"),
+                            ("no token", "the order screens")):
+            with self.subTest(label):
+                write_issue(self.root, "14", line)
+                done = self.overlap("14")
+                self.assertEqual(done.returncode, 1)
+                self.assertIn("14 carries no `Touches:` paths", done.stderr)
+        with self.subTest("no file"):
+            done = self.overlap("77")
+            self.assertEqual(done.returncode, 1)
+            self.assertIn("77 carries no `Touches:` paths", done.stderr)
+
+    def test_the_forms_that_carry_paths_are_read(self):
+        """AC3 `Forms:`: file paths, a directory, prose around a backticked
+        directory, and a value wrapped onto a second line. Each meets, and
+        each against a disjoint file is let through, so the token was read."""
+        forms = {
+            "files": "`~/.claude/skills/run-issues/run_suite.py`, `~/.claude/skills/lib/x.py`",
+            "directory": "`~/.claude/skills/lib/`",
+            "prose": "a new script and its test under `~/.claude/skills/lib/`",
+            "wrapped": "`~/.claude/hooks/`, `~/.claude/skills/run-issues/`,\n  `~/.claude/skills/lib/`",
+        }
+        write_issue(self.root, "12", "`~/.claude/skills/lib/x.py`")
+        for label, line in forms.items():
+            with self.subTest(label):
+                write_issue(self.root, "14", line)
+                self.assertEqual(self.overlap("14").returncode, 1)
+        write_issue(self.root, "12", "`~/.claude/skills/other/y.py`")
+        for label, line in forms.items():
+            with self.subTest(label + " disjoint"):
+                write_issue(self.root, "14", line)
+                self.assertEqual(self.overlap("14").returncode, 0)
+
+    def test_the_same_number_is_refused_whatever_the_paths_say(self):
+        """Must still be true: a number hit stands, and its entry is the bare id."""
+        write_issue(self.root, "12", "`src/a.ts`")
+        hits = overlapping(collect_candidates(self.root), ["12"])
+        self.assertEqual([held for _, held in hits], [["12"]])
+
+    def test_a_path_hit_keeps_the_pair_shape_and_carries_its_reason(self):
+        """Must still be true: `(candidate, held)` pairs; the reason is in the entry."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        write_issue(self.root, "14", "`src/lib/orders.ts`")
+        hits = overlapping(collect_candidates(self.root), ["14"])
+        self.assertEqual(len(hits), 1)
+        candidate, held = hits[0]
+        self.assertEqual(candidate.batch, "batch-aaaaaa")
+        self.assertEqual(len(held), 1)
+        self.assertTrue(held[0].startswith("12 "), held)
+        self.assertIn("src/lib/orders.ts", held[0])
+
+    def test_a_requested_issue_the_run_holds_is_one_bare_entry(self):
+        """The run's own issues are not compared with each other by paths."""
+        a = tracker_cand("Owner: sess-a", "# Run ledger — 12, 13 (run `batch-aaaaaa`)",
+                         "batch-aaaaaa", {"12": "`src/lib/**`", "13": "`src/lib/a.ts`"})
+        self.assertEqual([held for _, held in overlapping([a], ["13"])], [["13"]])
+
+    def test_issue_files_come_from_the_live_runs_own_tracker(self):
+        """Default, question 1: the `issues/` beside the run's `runs/`, not another feature's."""
+        write_issue(self.root, "12", "`src/lib/**`")
+        write_issue(self.root, "14", "`src/app/page.tsx`")
+        write_issue(self.root, "14", "`src/lib/orders.ts`", feature="another-feature")
+        self.assertEqual(self.overlap("14").returncode, 0)
 
 
 class TreeOf(unittest.TestCase):
@@ -499,6 +695,66 @@ class ParseScopeIdsReadsTheTable(unittest.TestCase):
 
     def test_a_note_cell_number_is_not_an_issue(self):
         self.assertNotIn("45", parse_scope_ids(self.TABLE))
+
+
+class AScopeLineEndsWhereItsIdsEnd(unittest.TestCase):
+    """Run batch-f43aaf, 2026-09-28. Its ledger wrote its blockers on the
+    `Scope as typed:` line, the reader took every number on that line as an issue the
+    run holds, and the overlap guard refused a second batch that shared no file with
+    it: issue 3 and issue 226, both done, carry no `Touches:` line, so each "met"
+    everything. A Scope line holds the typed ids first and prose after them.
+
+    Forms: the `Scope` lines of every ledger under `<checkouts>/*/.scratch/*/runs/*/run.md`
+    Measured by: `grep -h "^Scope" <checkouts>/*/.scratch/*/runs/*/run.md | sort -u`, 2026-09-28,
+    34 ledgers: ids separated by spaces or commas, optionally in `**`, then a sentence
+    end, a `(N issues)` count or the end of the line.
+    Outside the list: a Scope line whose ids follow prose is a new form, and the title
+    and the status table still name the issues.
+    """
+
+    def test_blockers_after_the_typed_ids_are_not_held(self):
+        line = ("Scope as typed: 221 254 234c. 3 issues, run in that order. Every blocker "
+                "(221: 226, 226b, 226c, 220, 227d, 225; 254: 226, 226b; 234c: 234, 223b, "
+                "223c, 235b, 235c, 128, 247) reads `Status: done` and is on main.")
+        self.assertEqual(parse_scope_ids(line), ["221", "254", "234c"])
+
+    def test_every_measured_form_reads_its_ids_and_nothing_after(self):
+        cases = {
+            "Scope as typed: 176 177 79 230 183. 5 issues, run in that order. 230 is "
+            "blocked by 176.": ["176", "177", "79", "230", "183"],
+            "Scope as typed: 169 99 92 (3 issues).": ["169", "99", "92"],
+            "Scope as typed: 21c, 22b, 27b, 34, 35, 110. REORDERED at the human's instruction":
+                ["21c", "22b", "27b", "34", "35", "110"],
+            "Scope as typed: 148 139 139c 150. NOT reordered — see 12 below.":
+                ["148", "139", "139c", "150"],
+            "Scope, in the order given: 112, 122, 129   (3 issues)": ["112", "122", "129"],
+            "Scope, in the order this run takes them: 22b, 34   (2 issues)": ["22b", "34"],
+            "Scope: 901 902 903": ["901", "902", "903"],
+            "Scope, as given: **348, 345, 288**.": ["348", "345", "288"],
+            "Scope: 316-318 then 400": ["316", "317", "318"],
+        }
+        for line, ids in cases.items():
+            with self.subTest(line=line):
+                self.assertEqual(parse_scope_ids(line), ids)
+
+    def test_a_status_cell_that_carries_a_title_still_names_its_issue(self):
+        """batch-f43aaf's table writes `221 — a line's money moves have no screen`."""
+        table = ("| # | Issue | Status | Row |\n|---|---|---|---|\n"
+                 "| 1 | 221 — a line's money moves have no screen | in-progress | 3 |\n"
+                 "| 2 | 234c — reports presets and paging | queued | |\n")
+        self.assertEqual(parse_scope_ids(table), ["221", "234c"])
+
+    def test_a_disjoint_issue_passes_beside_blockers_with_no_touches(self):
+        scope = ("# Run ledger — `batch-f43aaf`\n\nScope as typed: 221 254. 2 issues. "
+                 "Every blocker (221: 3, 226) reads `Status: done`.\n")
+        a = tracker_cand("Owner: sess-a", scope, "batch-f43aaf", {
+            "221": "`src/app/lines/actions.ts`", "254": "`src/app/users/address.ts`",
+            "3": None, "226": None, "181": "`src/lib/storage/object-usage.ts`",
+            "227b": "`src/app/lines/actions.ts`"})
+        self.assertEqual(overlapping([a], ["181"]), [])
+        held = [ids for _, ids in overlapping([a], ["227b"])]
+        self.assertEqual(len(held), 1)
+        self.assertIn("src/app/lines/actions.ts", held[0][0])
 
 
 class ParseScopeArgument(unittest.TestCase):

@@ -493,5 +493,46 @@ class EndToEnd(unittest.TestCase):
         self.assertEqual(0, code, printed)
 
 
+class TheSkillsTreeItWasHanded(unittest.TestCase):
+    """Tracker-tooling issue 40. `hooks/run-issues-suite-gate.py`, where the
+    reader has it, loads `run-issues/issue_level.py` from `RUN_ISSUES_SKILL_DIR`
+    when it is set, and from the main checkout when it is not. A walk handed a
+    skills tree names that tree's `run-issues/` to every file it runs, so the
+    hook's drill reads the tree under test, not a main checkout the branch has
+    not reached. Nothing here needs the hook: the cases drive the walk alone."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = os.path.realpath(self.tmp.name)
+        os.makedirs(os.path.join(self.root, "run-issues"))
+        self.saved = os.environ.pop(mod.SKILL_DIR_ENV, None)
+
+    def tearDown(self):
+        os.environ.pop(mod.SKILL_DIR_ENV, None)
+        if self.saved is not None:
+            os.environ[mod.SKILL_DIR_ENV] = self.saved
+        self.tmp.cleanup()
+
+    def test_the_first_root_holding_run_issues_is_named(self):
+        with tempfile.TemporaryDirectory() as hooks:
+            self.assertEqual(mod.skill_dir_for([hooks, self.root]),
+                             os.path.join(self.root, "run-issues"))
+            self.assertIsNone(mod.skill_dir_for([hooks]))
+
+    def test_every_file_it_runs_sees_the_name(self):
+        expected = os.path.join(self.root, "run-issues")
+        with open(os.path.join(self.root, "test_env.py"), "w") as handle:
+            handle.write(
+                "import os, unittest\n\n\n"
+                "class T(unittest.TestCase):\n"
+                "    def test_env(self):\n"
+                f"        self.assertEqual(os.environ.get('{mod.SKILL_DIR_ENV}'), "
+                f"{expected!r})\n\n\n"
+                "if __name__ == '__main__':\n    unittest.main()\n")
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as err:
+            code = mod.main([self.root])
+        self.assertEqual(code, 0, err.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

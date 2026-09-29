@@ -255,6 +255,12 @@ def matches(subject, entries, issue=""):
 
     `issue` is the issue number the asking item sits on. Where it equals the
     entry's own, the threshold drops from `FAR` to `NEAR`.
+
+    This is the HEURISTIC half of the comparison, and it answers one question:
+    is this the same question in different words. `ruled_by_id` is the
+    certainty that sits beside it and answers the other one: does this item
+    carry the entry's own name. Neither replaces the other, and only this half
+    can be passed by a writer's declaration -- see `ruled_by_id` for why.
     """
     words = content_words(subject)
     out = []
@@ -386,6 +392,44 @@ def heading_ids(head):
     either one is an entry for this item.
     """
     return set(ANSWER_TOKEN.findall(head)) | set(QUESTION_REF.findall(head))
+
+
+def ruled_by_id(head, entries):
+    """Every ruling entry recorded under an id this heading itself carries.
+
+    The word overlap in `matches` is the right tool for "is this the same
+    question in different words", and the wrong tool when the two carry the
+    same NAME. MEASURED 2026-09-22: a queue item headed
+    ``## `q-h0922b-124-1` [irreversible] — a failed push cleanup fails the
+    sign-in`` was graded against an entry headed ``## 2026-09-22
+    `q-h0922b-124-1` — which road stops a refused subscription clear from
+    refusing the sign-in``. The ids are identical. The subjects name one thing
+    in different words -- "cleanup" against "clear", "fails" against
+    "refusing" -- so they share ONE content word against a threshold of three,
+    nothing fired, and `check_queue_shard.py` exited 0 over a question the human
+    had already ruled.
+
+    So this is a second road, not a looser threshold on the first. It ignores
+    `NEAR` and `FAR` entirely, because an id in common is not evidence of a
+    match -- it is the match.
+
+    **A hit here is not escapable by the item's `Rulings checked:` line, and
+    that is the whole reason the two roads are separate functions.** The
+    declaration exists for a writer who read a near-miss entry and judged it a
+    different question; that is a judgement, and a judgement can be right.
+    Carrying the entry's own id is not a judgement about anything. A writer
+    with a genuine follow-up takes a NEW id, which is the road
+    `check_queue_shard.py` names in its refusal.
+
+    Both halves of an item's name count, by way of `heading_ids`: the `q-` id
+    the shard retires on, and the `05-Q2` reference the brief and the
+    attackers speak in. An entry written under either one is an entry for this
+    item. The comparison is case-folded, so an id retyped in another case is
+    still the same id rather than a free escape.
+    """
+    wanted = {one.strip().casefold() for one in heading_ids(head) if one.strip()}
+    return [entry for entry in entries
+            if entry.question.strip().casefold() in wanted]
 
 
 def check_answered(answered, queue, entries):

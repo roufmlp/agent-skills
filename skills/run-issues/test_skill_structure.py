@@ -21,6 +21,7 @@ real file drifted.
 Run: python3 test_skill_structure.py
 """
 
+import importlib.util
 import re
 import unittest
 from pathlib import Path
@@ -53,7 +54,6 @@ FINALE_MARKS = [
     "A published checksum expires the moment the file moves.",
     "Main moved while you worked. Read it before you write a question.",
     "Sweep the register for rows their own issue already fixed.",
-    "The thresholds live in `~/.claude/agents/promotion.md` and nowhere else.",
     "**Regenerate the action board**",
     "**The post-deploy smoke walk**, owned by `/daily-brief`.",
     "**Recommend follow-ups; start none.**",
@@ -82,8 +82,9 @@ LAUNCH_HARDEN_MARKS = [
     # Ruling 3 -- the split.
     "A split this phase can complete is cut here",
     "A split that changes a migration's direction is a drop",
-    # Rulings 4 and 11 -- the three drop classes, and the closed list.
-    "Only three things drop an issue from this run",
+    # Rulings 4 and 11 -- the drop classes, and the closed list. Four since
+    # issue 43b, default `q-h0925b-seam-1`: rule 7 of issue 32.
+    "Only four things drop an issue from this run",
     "Every other fork takes its recommended default",
     # Ruling 10 -- the commit.
     "Harden at launch: NN, NN",
@@ -189,7 +190,6 @@ EFFORT_ROLES = [
     "run-issues-review-gate",
     "run-issues-review-gate-critical",
     "run-issues-finale",
-    "promotion",
 ]
 
 
@@ -583,7 +583,12 @@ class TestTheBridgeCseChangesSurvive(unittest.TestCase):
     def test_the_git_exclusion_carries_its_fix_and_not_only_its_warning(self):
         """The `.git` exclusion is deliberate and measured (87 MB against a 66 MB
         copy). What makes it safe is that the two affected cases skip and the
-        script refuses by name. An editor who deletes the fix meets the reason."""
+        script refuses by name. An editor who deletes the fix meets the reason.
+
+        HELD at its published form. The live drill replaced it with a case
+        grading `make_copy.py` in `SKILL.md`, which reversed the exclusion on
+        2026-09-29; the `SKILL.md` this pack ships still states the exclusion,
+        and this case grades what it states. The replacement travels with it."""
         skill = read(SKILL)
         self.assertIn("REFUSED no-git-repository", skill)
         self.assertIn("check-issue-citations.test.ts", skill)
@@ -837,10 +842,21 @@ class TheDailyBriefShowsWhatTheRunCost(unittest.TestCase):
         self.assertIn("still not a trend", self.section_one())
 
     def test_the_block_stays_inside_section_one(self):
-        """The brief has thirty minutes and this must not become a fifth
-        section."""
+        """The brief has thirty minutes, and the cost reading is one block of
+        section one rather than a section of its own.
+
+        NARROWED 2026-09-13, issue 03 of the tracker-tooling set. This used to
+        refuse the heading `### 1c.` whatever stood under it, which is a fence
+        around a heading rather than around the rule. The human then ruled that the
+        parked sweep gets its own section, and the brief's own budget rule
+        ("Keep it to thirty minutes") is what holds the length — the heading
+        never was. What this now refuses is the thing it was built to refuse:
+        the cost reading leaving section one.
+        """
         text = read(SKILLS / "daily-brief" / "SKILL.md")
-        self.assertNotIn("### 1c.", text)
+        start = text.index("### 1. Merge reads")
+        self.assertIn("run_compare.py last", text[start:text.index("### 1b.")])
+        self.assertNotIn("### 1c. Cost", text)
 
 
 class AnIssueCarriesTheOneLineItsCardWillDraw(unittest.TestCase):
@@ -1060,7 +1076,6 @@ class TheBriefingSaysWhereEachIssueLanded(unittest.TestCase):
         )
 
 
-
 class TheHolesAndTheQuestionsLandOnTheRail(unittest.TestCase):
     """Issue 554. The rail drew shipped issues only. Two more things belong on
     it — an issue the run left open, and a question waiting on the human — and one
@@ -1157,7 +1172,6 @@ class TheHolesAndTheQuestionsLandOnTheRail(unittest.TestCase):
                 text = read(path)
                 for key in ("needs-you", "catalogue"):
                     self.assertNotIn(f"`{key}`", text.split("## The run on the rail")[0])
-
 
 
 class TheFinaleStatesTheBandAndItsFloor(unittest.TestCase):
@@ -1365,15 +1379,21 @@ class TicketThirtySevenSittingThree(unittest.TestCase):
         example = "attempt 1; gates 1: verify=pass review=reject"
         self.assertTrue(run_quality.GATE_ROUND.search(example))
 
-    def test_the_skill_says_nothing_refuses_a_row_without_the_marker(self):
+    def test_a_row_written_before_the_marker_is_never_refused(self):
         """Ruling 3 loses no history: sixteen ledgers hold 143 rows written
-        before it existed, and the prose reader stays for them."""
-        self.assertIn("Nothing refuses a row without it", self.skill)
+        before it existed. Tracker-tooling issue 15 refuses a rejected round
+        with no charge, and only on a row that carries a gate token at all."""
+        import check_attempt_cap
+        self.assertEqual(check_attempt_cap.charge_faults(
+            "attempt 1 — verify pass, review REJECT; criteria reset"), [])
 
-    def test_the_skill_says_the_strike_stays_derived(self):
-        """Ruling 28 is explicit that minting the token does not make a strike
-        countable: two roads cancel one in prose and write no marker."""
-        self.assertIn("A strike is still DERIVED", self.skill)
+    def test_the_strike_stays_derived_where_no_charge_was_written(self):
+        """Ruling 28 kept the strike derived because two roads cancelled one in
+        prose and wrote no marker. Issue 15 gave those roads `charge=none`;
+        a row that carries no charge is still read the old way."""
+        import run_quality
+        self.assertIsNone(run_quality.charged_strikes(
+            "attempt 1; gates 1: verify=pass review=reject"))
 
 
 class PromotionWritesTheOriginKey(unittest.TestCase):
@@ -1444,6 +1464,30 @@ class PromotionWritesTheOriginKey(unittest.TestCase):
         people learn to ignore."""
         self.assertIn("never over the issue directory", self.rule())
 
+
+class RuleSevenReachesTheLaunchPhase(unittest.TestCase):
+    """Tracker-tooling issue 43b, seam pass h0925b. The launch phase stamps
+    at step 5 and the criteria gate runs at step 7, where "Exit 1 blocks the
+    launch". So a `Level: full` issue rule 7 refuses is dropped at step 5
+    (default `q-h0925b-seam-1`), and the agents that write a default are told
+    the one mark the gate reads (default `q-h0925b-seam-2`)."""
+
+    FORM = "Default (`q-<pass>-<issue>-<n>`)"
+
+    def test_step_5_names_rule_7_among_its_drops(self):
+        text = " ".join(read(LAUNCH_HARDEN).split())
+        start = text.index("## Step 5")
+        step = text[start:text.index("## Step 6", start)]
+        self.assertIn("rule 7", step)
+        self.assertIn("Level: full", step)
+        self.assertIn(self.FORM, step)
+
+    def test_each_brief_that_writes_a_default_states_the_form(self):
+        agents = Path.home() / ".claude" / "agents"
+        for path in (LAUNCH_HARDEN, agents / "harden-issues-attacker.md",
+                     agents / "harden-issues-seam.md"):
+            with self.subTest(path.name):
+                self.assertGreaterEqual(path.read_text().count(self.FORM), 1)
 
 class TheLaunchHardenPhaseIsOffTheCommonPath(unittest.TestCase):
     """Ticket 33 of the pilot-delivery map, sitting 2. Rulings 9, 16 and 18.
@@ -1949,7 +1993,6 @@ class EveryBulletThatReadsAnIssueFileNamesItsTree(unittest.TestCase):
         self.assertIn("run's own worktree", bullet)
 
 
-
 # --- Ticket 36 sitting 5: the details leave by destination (2026-09-09) ----
 #
 # Ruling 9 of ticket 36 (2026-09-07), on the human's own road: a rule a script
@@ -2186,16 +2229,10 @@ class TheDetailsLeftByDestination(unittest.TestCase):
         self.assertEqual(stories & anchors, set())
 
 
-
-
-
-
-
-
 # --------------------------------------------------------------------------
 # WITHHELD from this drill, and this is a decision rather than an oversight.
 #
-# Three groups of cases in the live drill grade the TEXT of `SKILL.md`. The
+# Two groups of cases in the live drill grade the TEXT of `SKILL.md`. The
 # `SKILL.md` this pack ships is deliberately behind the live one, so those cases
 # would grade sentences that are not here and turn the pack red for every
 # reader. They travel with `SKILL.md` when it travels, and not before.
@@ -2206,19 +2243,18 @@ class TheDetailsLeftByDestination(unittest.TestCase):
 #    script docstrings: one list asserts the rule each move LEFT BEHIND is still
 #    in `SKILL.md`, the other asserts the story is now ABSENT from it. Both
 #    halves read the file that did not move.
-# 2. `COVERAGE_ON_FAILURE`, `SUITE_HEADS`, `command_texts`, `produces_coverage`
-#    and the class `EveryCoverageRunKeepsItsReportOnFailure`. Its own guard case
-#    -- "if the extractor stopped finding commands the assertion below would
-#    pass over an empty list and report green" -- goes red here, which is that
-#    guard doing its job: the published `SKILL.md` states no coverage-producing
-#    suite command for it to grade.
-# 3. Two cases of `ParkedIsBelowTheBatchLine`, noted again above the class.
+# 2. Two cases of `ParkedIsBelowTheBatchLine`, noted again above the class.
 #    A third case of it was widened rather than held; its docstring says why.
 #
-# A fourth group is withheld for a different reason. The class
-# `TheRetryBriefStatesTheInvariant` grades a script MANIFEST.md holds back until
-# the sync that takes `SKILL.md` whole. A drill for a script the pack does not
-# ship has nothing to grade; MANIFEST.md's withheld block is the record.
+# Two groups held here before the sync of 2026-09-29 travel now. The class
+# `EveryCoverageRunKeepsItsReportOnFailure` lost the guard that went red on the
+# published `SKILL.md`: its guard now grades `run_suite.py`, which ships. And
+# `TheRetryBriefStatesTheInvariant` grades a script that ships, because
+# `charge_round.py` imports it; three of its six cases still read `SKILL.md`'s
+# step 7 and are held above that class.
+#
+# From the same sync on, every class that holds a case says so directly above
+# itself, with the case named and the sentence it would have read.
 # --------------------------------------------------------------------------
 
 
@@ -2365,6 +2401,54 @@ class ParkedIsBelowTheBatchLine(unittest.TestCase):
         self.assertNotIn("issue file at `Status: needs-harden`", finale)
 
 
+# HELD from this class: `test_step_seven_names_the_script`,
+# `test_the_rule_is_stated_for_both_lists` and
+# `test_the_skill_keeps_the_rule_and_points_at_the_round_it_cost`. All three
+# read the line in step 7 of `SKILL.md` that names `retry_brief.py`, and the
+# `SKILL.md` this pack ships predates it. The three below grade the script and
+# `decisions.md`, both of which ship.
+class TheRetryBriefStatesTheInvariant(unittest.TestCase):
+    """F3 of run `batch-d67136`, queued as `q-finale-d67136-2`.
+
+    Issue 01 spent all three of its attempts on one connection-string guard.
+    The round-1 verify verdict named the invariant AS an invariant, with its
+    citation — `I-1 | The loader refuses any host but this machine | FAIL`, at
+    line 514 of the issue file — and forty lines later proposed a remedy. The
+    retry brief carried the remedy and dropped the invariant, so the implementer
+    fixed exactly what it was told, and round 2 rejected on the same guard for a
+    string the invariant covers and the remedy does not. Round 2's review gate
+    PASSED, so round 3 — 622k tokens, 36.7 minutes — exists for that one reason.
+
+    The fix is NOT a line in `run-issues-implementer.md`. That brief already
+    ends with "do not trust its diagnosis. Re-derive from the issue and the
+    code", the reminder is exact, and it failed. A second reminder is the class
+    the human's three-class test refuses outright. `retry_brief.py` refuses instead,
+    and this pins the step to it.
+    """
+
+    RETRY = RUN_ISSUES / "retry_brief.py"
+
+    def test_the_script_it_names_is_on_disk(self):
+        self.assertTrue(self.RETRY.exists())
+
+    def test_the_story_landed_in_decisions_and_not_in_the_skill(self):
+        """Ruling 9. `SKILL.md` sat one line under its ceiling, so the rule
+        anchor stays there and the round it cost goes to `decisions.md`. An
+        editor who pastes the story back breaks the ceiling that forced it out."""
+        decisions, skill = read(DECISIONS), read(SKILL)
+        for mark in ("622k tokens and 36.7 minutes", "q-finale-d67136-2"):
+            with self.subTest(mark=mark):
+                self.assertIn(mark, decisions)
+                self.assertNotIn(mark, skill)
+
+    def test_the_remedy_is_demoted_and_not_banned(self):
+        """A gate's proposed fix is often right and always useful. What it may
+        not be is the owed item. An editor who reads this as a ban will drop
+        `--remedy`, and the next brief will carry the remedy in the owed text."""
+        decisions = read(DECISIONS)
+        self.assertIn("--remedy", decisions)
+        self.assertIn("one example", decisions)
+
 
 # --------------------------------------------------------------------------
 # A whole-tree reading is bought only where the tree has changed since the last
@@ -2482,7 +2566,10 @@ class NoGateBuysAnUnmovedTreeReading(unittest.TestCase):
 
     def test_the_verify_gates_whole_suite_is_untouched(self):
         """`Must still be true`: ruling Q4 gave the verify gate the suite. An
-        edit that reads as trimming it is a breach of Q4, not a saving."""
+        edit that reads as trimming it is a breach of Q4, not a saving. Since
+        2026-09-29 the gate's wrapper call may answer with the implementer's
+        record for the same tree (the perf audit of 2026-09-28, fix 2); the
+        reading is still the gate's to name."""
         brief = read(AGENTS / "run-issues-verify-gate.md")
         self.assertIn("RUN THE WHOLE SUITE IN THAT COPY, WITH COVERAGE", brief)
 
@@ -2492,6 +2579,476 @@ CORRECTION_EXEMPTION = (
     "correction round runs no full suite",
     "A correction spawn does not run the full suite",
 )
+
+# `--coverage.reportOnFailure`; without it one timed-out file destroys the whole
+# report and the runner regenerates it, which happened five times in
+# `batch-7f5b53`.
+#
+# Graded by the property "invokes vitest or npm test AND asks for coverage",
+# never by a count. Today exactly one command in SKILL.md matches, and a test
+# that asserted "the one command" would pass a file that had lost it.
+
+COVERAGE_ON_FAILURE = "--coverage.reportOnFailure"
+
+
+SUITE_HEADS = ("npx vitest run", "vitest run", "npm test", "npm run test")
+
+
+def command_texts(path):
+    """Every shell command SKILL.md states, fenced blocks and inline spans.
+
+    Markdown here is hard-wrapped, so a command routinely sits across two lines
+    with its flags split. Each candidate is squashed before it is read, or the
+    flag on the second line reads as absent.
+
+    Inline spans are NOT found by pairing backticks across the file. SKILL.md
+    holds 904 of them, and bold-inside-code plus fenced markers make sequential
+    pairing drift until the spans it returns are prose. Each suite invocation is
+    located directly instead and read to the next backtick, which is what closes
+    every command this document states.
+    """
+    raw = read(path)
+    found, inside, buffer = [], False, []
+    for line in raw.splitlines():
+        if line.lstrip().startswith("```"):
+            if inside:
+                found.append(" ".join(buffer))
+                buffer = []
+            inside = not inside
+            continue
+        if inside:
+            buffer.append(line.strip())
+    flat = squash(raw)
+    for head in SUITE_HEADS:
+        at = flat.find(head)
+        while at != -1:
+            stop = flat.find("`", at)
+            found.append(flat[at:stop if stop != -1 else at + 200])
+            at = flat.find(head, at + 1)
+    return [squash(one) for one in found if one.strip()]
+
+
+def produces_coverage(command):
+    """A command that RUNS a suite and asks that suite for coverage.
+
+    `check_diff_coverage.py --coverage <path>` CONSUMES a report and is not one
+    of these: it invokes no suite, so it never reaches the first test.
+    """
+    runs_a_suite = ("vitest run" in command or "npm test" in command
+                    or "npm run test" in command)
+    return runs_a_suite and "coverage" in command
+
+
+class EveryCoverageRunKeepsItsReportOnFailure(unittest.TestCase):
+    """Criterion 2 of issue 06, `three suites per issue`."""
+
+    def test_the_wrapper_adds_the_flag_to_every_suite_it_can_read(self):
+        """Guard, since the perf audit of 2026-09-28. SKILL.md states no
+        coverage command any more: `run_suite.py` adds the coverage flags to
+        the Full suite command itself, so the property below may read an
+        empty list, and this case is what holds the flag."""
+        spec = importlib.util.spec_from_file_location(
+            "run_suite", Path(__file__).resolve().parent / "run_suite.py")
+        run_suite = importlib.util.module_from_spec(spec)
+        # Registered first: its dataclass looks its own module up by name.
+        __import__("sys").modules.setdefault("run_suite", run_suite)
+        spec.loader.exec_module(run_suite)
+        for command in (["npm", "test"], ["npx", "vitest", "run"],
+                        ["npm", "run", "test", "--", "--silent"]):
+            with self.subTest(command=command):
+                ran, _ = run_suite.with_coverage(command, Path("/r"))
+                self.assertIn(COVERAGE_ON_FAILURE + "=true", ran)
+
+    def test_every_coverage_producing_command_carries_the_flag(self):
+        for command in command_texts(SKILL):
+            if not produces_coverage(command):
+                continue
+            self.assertIn(
+                COVERAGE_ON_FAILURE, command,
+                f"this command produces a coverage report without "
+                f"{COVERAGE_ON_FAILURE}, so one timeout destroys it:\n  {command}",
+            )
+
+    def test_a_consumer_of_a_report_is_not_asked_for_the_flag(self):
+        """`check_diff_coverage.py --coverage <path>` reads a report. A test
+        that demanded the flag there would refuse a correct file."""
+        consumers = [one for one in command_texts(SKILL)
+                     if "check_diff_coverage.py" in one]
+        self.assertTrue(consumers, "SKILL.md no longer states the check command")
+        for one in consumers:
+            self.assertFalse(
+                produces_coverage(one),
+                f"the check command is being read as a producer:\n  {one}",
+            )
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 13, fix F10 of the audit of 2026-09-23. A gate rejects
+# only on a criterion or an invariant the issue holds. Eleven rejections across
+# six runs graded beyond the criteria, and the verify gate's brief licensed it
+# in so many words.
+
+def gate_briefs():
+    """The verify gate and every review gate, derived rather than named."""
+    return [AGENTS / "run-issues-verify-gate.md"] + review_gate_briefs()
+
+
+# HELD from this class: `test_step_seven_says_an_owed_item_names_what_it_fails`,
+# which reads "names the criterion or invariant it fails" beside `retry_brief.py`
+# in step 7 of `SKILL.md`. The `SKILL.md` this pack ships carries neither.
+class TheGatesRejectOnlyOnTheCriteria(unittest.TestCase):
+
+    def test_no_gate_brief_licenses_implied_criteria(self):
+        for path in gate_briefs():
+            brief = squash(read(path)).lower()
+            for licence in ("implies rather than spells out",
+                            "criteria the issue implies"):
+                with self.subTest(brief=path.name, licence=licence):
+                    self.assertNotIn(licence, brief)
+
+    def test_every_gate_brief_names_the_rejection_rule(self):
+        for path in gate_briefs():
+            with self.subTest(brief=path.name):
+                self.assertIn("Every REJECT ground names a criterion or an "
+                              "invariant", squash(read(path)))
+
+    def test_every_gate_brief_says_where_a_finding_beyond_them_goes(self):
+        for path in gate_briefs():
+            with self.subTest(brief=path.name):
+                self.assertIn("Beyond the criteria:", read(path))
+
+    def test_unrequired_scope_is_no_longer_a_rejection_by_itself(self):
+        for path in review_gate_briefs():
+            with self.subTest(brief=path.name):
+                self.assertNotIn("Unrequired scope is a rejection",
+                                 squash(read(path)))
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 14, fix F11 of the audit of 2026-09-23. A script
+# decides split against strike; the runner no longer chooses between two rules.
+
+# HELD from this class: `test_no_split_takes_the_stricter_verdict`,
+# `test_the_script_the_skill_names_is_on_disk` and
+# `test_the_standards_split_paragraph_hands_the_decision_to_the_script`. The
+# `SKILL.md` this pack ships still takes "the stricter verdict" and does not
+# name `charge_round.py`, which ships beside it all the same. The gate briefs'
+# `Grades:` line ships, and the case below grades it.
+class TheSplitIsTheScripts(unittest.TestCase):
+
+    def test_every_gate_brief_ends_its_verdict_with_a_grades_line(self):
+        for path in gate_briefs():
+            brief = squash(read(path))
+            with self.subTest(brief=path.name):
+                self.assertIn("Grades: C1=pass", brief)
+                for word in ("`pass`", "`fail`", "`owed`", "`fault`"):
+                    self.assertIn(word, brief)
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 15, fix F12 of the audit of 2026-09-23. A round states
+# what it charged, and a check refuses a row that does not.
+
+# HELD whole: the class `TheLedgerStatesEachCharge`, four cases. Each reads a
+# sentence of `SKILL.md`'s step 1 or commit step -- `charge=<strike|correction|none>`,
+# "criteria reset after gates <N>", `check_attempt_cap.py --charges`, and the
+# absence of "Nothing refuses a row without it". The `SKILL.md` this pack ships
+# predates the charge and still carries that last sentence. The scripts the rule
+# lives in ship, and `TicketThirtySevenSittingThree` grades them.
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 16, the verify-gate half of fix F14 of the audit of
+# 2026-09-23: the coverage suite took about 180 seconds alone on one project and
+# about 400 with a second run beside it, and the brief said 83.
+
+class TheVerifyGateStatesTheMeasuredSuiteTime(unittest.TestCase):
+
+    def test_no_stale_suite_time(self):
+        brief = squash(read(AGENTS / "run-issues-verify-gate.md"))
+        self.assertNotIn("about 83 seconds", brief)
+
+    def test_the_figure_carries_its_date_and_repository(self):
+        brief = squash(read(AGENTS / "run-issues-verify-gate.md"))
+        start = brief.index("RUN THE WHOLE SUITE IN THAT COPY")
+        passage = brief[start:start + 1200]
+        self.assertIn("2026-09-23", passage)
+        # The live drill pins the project's name here; the published brief
+        # names it by role, and this pins that wording instead.
+        self.assertIn("On one project", passage)
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 24, criterion 10. `~/.claude/hooks/run-issues-suite-gate.py`
+# refuses every runner suite that does not go through `run_suite.py` at
+# `baseline`, `correction` or `finale` (ruling `q-ti17-1`, 2026-09-23). A command
+# this skill states and that hook refuses stops a run at the step that states it,
+# so every one is put through the hook's own `decide()`, never a copy of its rule.
+
+def suite_gate():
+    spec = importlib.util.spec_from_file_location(
+        "run_issues_suite_gate", HOOKS / "run-issues-suite-gate.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def stated_commands(path):
+    """Every line of every fenced block, a trailing `\\` joined to the next,
+    and every inline code span outside the fences, whitespace squashed."""
+    text = read(path)
+    fenced = []
+    for block in re.findall(r"```[^\n]*\n(.*?)```", text, re.S):
+        fenced.extend(block.replace("\\\n", " ").splitlines())
+    prose = re.sub(r"```.*?```", "", text, flags=re.S)
+    spans = re.findall(r"`([^`]+)`", prose)
+    return [" ".join(one.split()) for one in fenced + spans if one.strip()]
+
+
+# HELD from this class: `test_every_suite_the_skill_states_passes` and
+# `test_the_ledger_header_puts_the_suite_after_the_wrappers_dashes`. The first
+# needs a correction-stage `run_suite.py` call in `SKILL.md`, and the hook also
+# refuses a plain `npx vitest` command the published `SKILL.md` quotes; the
+# second reads a `Full suite:` header that routes through the wrapper. Both
+# travel with `SKILL.md`. The finale ships, and its three cases stay.
+class EveryStatedSuitePassesTheSuiteGate(unittest.TestCase):
+
+    TREE = "/Users/x/code/p/.claude/worktrees/run-issues-batch-abc123"
+
+    def judged(self, path, state):
+        gate = suite_gate()
+        runs = [(self.TREE, state)]
+        found = []
+        for command in stated_commands(path):
+            calls = gate.calls_of(command, self.TREE)
+            if not calls:
+                continue
+            found.extend(calls)
+            with self.subTest(file=path.name, command=command[:120]):
+                self.assertIsNone(gate.decide("", command, self.TREE, runs))
+        return found
+
+    def test_every_suite_the_finale_states_passes_once_the_finale_is_written(self):
+        found = self.judged(FINALE, "finale-mechanical")
+        self.assertIn(("wrapper", "finale", self.TREE), found,
+                      "finale.md states no finale-stage wrapper call")
+
+    def test_the_finale_suite_stays_under_the_step_clock(self):
+        line = [one for one in stated_commands(FINALE)
+                if "run_suite.py --stage finale" in one]
+        self.assertTrue(line)
+        self.assertTrue(all("run_step.py" in one and "--kind suite" in one
+                            for one in line), line)
+
+    def test_the_refused_plain_suite_is_no_longer_offered(self):
+        self.assertNotIn("Run one only where neither has read the tree",
+                         squash(read(SKILL)))
+
+
+# --------------------------------------------------------------------------
+# Tracker-tooling issue 24, criterion 11. A gate writes its verdict to
+# `runs/<batch-id>/verdicts/<issue>-attempt-<N>.md`, never into the issue file;
+# the author's `gate-issue-write-guard.py` refuses the old road. That hook is not in
+# this pack; the briefs still name it, as a guard the reader may register.
+
+GATE_BRIEFS = ("run-issues-verify-gate.md", "run-issues-review-gate.md",
+               "run-issues-review-gate-critical.md")
+
+OLD_ROAD = (
+    "Write your verdict into the issue file",
+    "Write the verdict into the issue file",
+    "Gates write verdicts into issue files",
+    "the full text lives in the issue files",
+)
+
+
+# HELD from this class: `test_the_round_header_names_the_verdict_file` and
+# `test_the_checks_are_pointed_at_the_verdict_file`, and the `SKILL.md` half of
+# the first case, which is narrowed to the briefs below. All three read the
+# round header and the check commands in `SKILL.md`, which in the published copy
+# still point at the issue file. The briefs ship, and they are graded in full.
+class VerdictsGoToTheRun(unittest.TestCase):
+
+    def test_no_brief_and_not_the_skill_sends_a_verdict_to_the_issue_file(self):
+        """Narrowed here to the three gate briefs: the live drill reads
+        `SKILL.md` too, and the published one still says the verdicts live in
+        the issue files."""
+        for path in [AGENTS / name for name in GATE_BRIEFS]:
+            text = squash(read(path))
+            for phrase in OLD_ROAD:
+                with self.subTest(file=path.name, phrase=phrase):
+                    self.assertNotIn(phrase, text)
+
+    def test_every_gate_brief_names_the_verdicts_directory(self):
+        for name in GATE_BRIEFS:
+            with self.subTest(brief=name):
+                text = squash(read(AGENTS / name))
+                self.assertIn("runs/<batch-id>/verdicts/", text)
+                self.assertIn("Verdict goes to:", text)
+                self.assertIn("gate-issue-write-guard.py", text)
+
+    def test_the_two_copies_paragraph_names_the_verdict_file_as_the_run_trees(self):
+        """Each brief says every given path names the MAIN CHECKOUT copy. The
+        verdict path names the run's own tree, and a gate that "corrects" it
+        to the main checkout leaves `check_verdict.py` reading `absent`."""
+        for name in GATE_BRIEFS:
+            with self.subTest(brief=name):
+                text = squash(read(AGENTS / name))
+                at = text.index("THE RUN'S RECORDS EXIST TWICE")
+                self.assertIn("The verdict file is the exception",
+                              text[at:at + 1500])
+
+
+# HELD from this class: `test_step_one_opens_with_the_level_branch_and_names_each_cut`
+# (AC4) and `test_the_hardening_trigger_exempts_a_light_issue` (AC5). Both read
+# step 1 and the hardening trigger of `SKILL.md`, and the published copy has no
+# `Level:` branch. The finale and the two briefs ship, and their three cases stay.
+class ALightIssueRunsTheLightRules(unittest.TestCase):
+    """Tracker-tooling issue 40, AC4, AC5, AC7's finale call, AC8 and AC9."""
+
+    HARDEN_TRIGGER = ("A typed issue in scope with no `Hardened:` line is the "
+                      "trigger to read `launch-harden.md`")
+
+    @staticmethod
+    def paragraph_holding(text, needle):
+        for paragraph in re.split(r"\n\s*\n", text):
+            if needle in squash(paragraph):
+                return squash(paragraph)
+        raise AssertionError(f"no paragraph holds {needle!r}")
+
+    def test_the_finale_checks_the_briefing_names_every_blocked_issue(self):
+        """AC7: the check is one the finale runs."""
+        finale = squash(read(FINALE))
+        self.assertIn("python3 ~/.claude/skills/run-issues/check_briefing_blocked.py"
+                      " --ledger <run.md> --briefing", finale)
+        self.assertTrue((RUN_ISSUES / "check_briefing_blocked.py").is_file())
+
+    def test_the_implementer_brief_names_the_light_exception(self):
+        """AC8."""
+        text = read(AGENTS / "run-issues-implementer.md")
+        paragraph = self.paragraph_holding(
+            text, "**Run the FULL suite before you call the issue gate-ready.**")
+        self.assertIn("Level: light", paragraph)
+        light = paragraph[paragraph.index("Level: light"):]
+        self.assertIn("the tests of the files it touched", light)
+        self.assertIn("no whole suite", light)
+
+    def test_the_review_brief_says_what_a_light_round_reads(self):
+        """AC9, default `q-h0925-40-3`."""
+        paragraph = self.paragraph_holding(
+            read(AGENTS / "run-issues-review-gate.md"),
+            "**This gate runs no full suite.**")
+        self.assertIn("Level: light", paragraph)
+        light = paragraph[paragraph.index("Level: light"):]
+        self.assertIn("no verify gate", light)
+
+
+# HELD from this class: `test_one_step_names_the_whole_road`,
+# `test_the_no_issue_writes_paragraph_allows_the_rewrite` and
+# `test_the_stories_that_paid_for_it_left_the_skill`. The first two read the
+# "needs the full level" step and the no-issue-writes paragraph of `SKILL.md`;
+# the third asserts four stories have LEFT it, and the published copy still
+# carries them. The implementer brief ships, and its case stays.
+class ALightIssueMeetsARiskPath(unittest.TestCase):
+    """Tracker-tooling issue 42. AC5: the runner's road for a "needs the full
+    level" report; AC7: the implementer's road out of the refusal."""
+
+    PHRASE = "needs the full level"
+
+    def step_holding(self, needle):
+        skill = read(SKILL)
+        loop = skill[skill.index("## Per-issue loop"):]
+        loop = loop[:loop.index("\n## ", 1)]
+        steps = re.split(r"\n(?=\d+\. )", loop)
+        found = [squash(step) for step in steps if needle in squash(step)]
+        self.assertEqual(len(found), 1, f"{len(found)} steps hold {needle!r}")
+        return found[0]
+
+    def test_the_implementer_brief_names_the_refusal_and_the_road_out(self):
+        """AC7: one paragraph says stop, write the record, leave the work
+        uncommitted, and report the phrase."""
+        text = read(AGENTS / "run-issues-implementer.md")
+        paragraphs = [squash(p) for p in re.split(r"\n\s*\n", text)
+                      if self.PHRASE in squash(p)]
+        self.assertEqual(len(paragraphs), 1, paragraphs)
+        for mark in ("stop", "## Implementation record, attempt N",
+                     "uncommitted", "final message"):
+            with self.subTest(mark=mark):
+                self.assertIn(mark, paragraphs[0])
+
+
+class TheCriteriaWinOverTheProse(unittest.TestCase):
+    """Tracker-tooling issue 48. The implementer brief says the criteria win
+    where an issue's prose disagrees; ruling `q-fin-bbc605-02`."""
+
+    PHRASE = "the criteria win"
+
+    # AC3: the paragraph at `54238bc`, where the agents repository stood when
+    # this issue's branch started. The criteria win over the prose, and an
+    # implementer who finds the criteria themselves wrong still stops.
+    WRONG = (
+        "**If the acceptance criteria are WRONG** — not merely hard, but "
+        "incorrect or materially incomplete — stop, do not build to them, and "
+        "say so with the concrete evidence that shows it. A gate will confirm "
+        "or reject your claim. This is not an exit from difficult work; \"I "
+        "could not meet the criteria\" is a different report and belongs under "
+        "blocked.")
+
+    def paragraphs(self):
+        text = read(AGENTS / "run-issues-implementer.md")
+        return [squash(p) for p in re.split(r"\n\s*\n", text)]
+
+    def index_holding(self, paragraphs, needle):
+        found = [i for i, p in enumerate(paragraphs) if needle in p]
+        self.assertEqual(len(found), 1, f"{len(found)} paragraphs hold {needle!r}")
+        return found[0]
+
+    def test_one_paragraph_says_the_criteria_win(self):
+        """AC1 and AC2: one paragraph names both sections, the rulings and the
+        prose, between the Hold paragraph and the Scope paragraph."""
+        paragraphs = self.paragraphs()
+        here = self.index_holding(paragraphs, self.PHRASE)
+        for mark in ("## Acceptance criteria", "## Must still be true",
+                     "ruling", "prose"):
+            with self.subTest(mark=mark):
+                self.assertIn(mark, paragraphs[here])
+        hold = self.index_holding(paragraphs,
+                                  "**Hold what the issue does not mention.**")
+        scope = self.index_holding(paragraphs, "**Scope.**")
+        self.assertLess(hold, here)
+        self.assertLess(here, scope)
+
+    def test_the_wrong_criteria_paragraph_is_unchanged(self):
+        """AC3."""
+        paragraphs = self.paragraphs()
+        here = self.index_holding(paragraphs,
+                                  "**If the acceptance criteria are WRONG**")
+        self.assertEqual(paragraphs[here], self.WRONG)
+
+
+# HELD from this class: `test_the_round_header_names_both_files` and
+# `test_each_check_reads_its_own_gates_file`. Both read the round header and the
+# check commands in `SKILL.md`, which the published copy states for one shared
+# verdict file. The briefs ship, and their case stays.
+class EachGateHasItsOwnVerdictFile(unittest.TestCase):
+    """Issue 51 of the tracker-tooling set, AC6, ruling `q-fin-ea4cfa-05`: the
+    round header names one verdict file per gate, and so does every brief."""
+
+    HEADER = (
+        "Verdict goes to:  <run tree>/.scratch/<feature>/runs/<batch-id>/"
+        "verdicts/<issue>-attempt-<N>-review.md (review gate); <same directory>/"
+        "<issue>-attempt-<N>-verify.md (verify gate)")
+    BRIEFS = {"run-issues-review-gate.md": "-review.md",
+              "run-issues-review-gate-critical.md": "-review.md",
+              "run-issues-verify-gate.md": "-verify.md"}
+
+    def test_each_brief_names_its_own_file_and_no_shared_one(self):
+        for name, ending in self.BRIEFS.items():
+            brief = read(AGENTS / name)
+            with self.subTest(brief=name):
+                self.assertNotIn("attempt-<N>.md", brief)
+                self.assertIn(ending, brief)
+        self.assertNotIn("Append only", read(AGENTS / "run-issues-verify-gate.md"))
 
 
 if __name__ == "__main__":

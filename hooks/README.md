@@ -13,7 +13,7 @@ cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/origin-row-guard.py hooks/git-shared-state-guard.py \
    hooks/run-issues-brief-cap.py hooks/run-issues-typecheck-gate.py \
    hooks/machine-wide-kill-guard.py hooks/gate-commit-guard.py \
-   hooks/rulings-write-guard.py \
+   hooks/rulings-write-guard.py hooks/run-issues-suite-gate.py \
    ~/.claude/hooks/
 ```
 
@@ -93,6 +93,10 @@ its `PreToolUse` array rather than replacing the array.
           {
             "type": "command",
             "command": "python3 /ABSOLUTE/PATH/TO/gate-commit-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/run-issues-suite-gate.py"
           }
         ]
       },
@@ -110,7 +114,7 @@ its `PreToolUse` array rather than replacing the array.
 }
 ```
 
-All eleven are `PreToolUse` hooks, so each runs before the tool call it matches
+All twelve are `PreToolUse` hooks, so each runs before the tool call it matches
 and can stop it. Exit 2 blocks that one call and feeds the hook's stderr back to
 the model, which then fixes the call and reissues it. Exit 0 lets the call
 through. None of them needs a timeout: each reads one JSON payload from stdin
@@ -319,7 +323,11 @@ other session has touched, and the commit that follows carries work its message
 does not describe.
 
 In the main checkout it refuses a wide `git add`, a `git commit` that names no
-paths, and the destructive whole-tree commands. In a linked worktree it refuses
+paths, and the destructive whole-tree commands. A merge in progress is the one
+exception, because git will not let a merge commit name its paths: a pathless
+`git commit` or `git merge --continue` that concludes it passes when every staged
+path is one the merge brings, and prints the list of paths it carries. A staged
+path the merge does not bring is refused by name. In a linked worktree it refuses
 one thing, a bare `git stash` and a `git stash pop`, because the stash stack is
 the single piece of git state a worktree does not get its own copy of. Every
 other git command passes, every non-Bash call passes, and it writes nothing.
@@ -399,6 +407,42 @@ had that line already — "kill only what you started" was implicit in every gat
 brief on the day it was broken. That is the whole of what you lose: a reminder
 instead of a refusal.
 
+## run-issues-suite-gate.py, on `Bash`
+
+It refuses a whole test suite in a run unless it goes through the wrapper,
+`skills/run-issues/run_suite.py`, at a stage the caller owns. A whole suite is
+`npm test` and its cousins under `pnpm`, `yarn` or `bun`, or `vitest` with no
+argument naming a file or a directory. An implementer's stage is `issue` and the
+verify gate's is `verify`. The runner, which is the main session inside a live
+run's tree, gets `baseline` and `correction`, and `finale` once the run ledger's
+`State:` line names a finale stage. A light issue's implementer gets no whole
+suite at all, and the refusal points it at `skills/run-issues/scoped_suite.py`.
+
+A run that names a file or a directory passes. So do the review gates, every
+other agent, and the main session outside a live run's tree, which is where you
+run a suite by hand. Only a command that launches a suite is judged, so
+`npm ls vitest` and `grep vitest package.json` never meet it. It writes nothing.
+
+**It needs four files from this pack**: `find_live_ledger.py`,
+`check_finale_stage.py` and `issue_level.py` in `skills/run-issues/`, and
+`skills/lib/set_level.py`, which the first and third import. The hook looks for
+them at `../skills/run-issues/` relative to itself, which is
+`~/.claude/skills/run-issues` once installed as above; set `RUN_ISSUES_SKILL_DIR`
+if you keep the pack elsewhere. Where it cannot read the live ledgers, the main
+session's suite passes. Where it cannot read an issue's level, the issue is
+judged full. Both say so on stderr.
+
+**Install it only if your project's suite is slow enough to matter and your run
+ledger names the command.** The refusals print the wrapper call with the ledger
+header's `Full suite:` command in it, so a loop without that header gets a road
+it cannot follow.
+
+Skip it and the wrapper is a habit. Four runs on one project spent 665 minutes
+on 206 whole suites, and 62 of the 128 an implementer ran re-read a tree nothing
+had changed. `run_suite.py` refuses that repeat only when a suite goes through
+it, and without this hook nothing makes a suite go through it. That is what you
+lose: the only road to a whole suite becomes one road among several.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -414,7 +458,7 @@ which runs from this directory with no environment set. So does
 either, and it reports five skips, which is the Bash gap named above and not a
 failure. `run-issues-foreground-gate.py` ships
 `test_run_issues_foreground_gate.py`, 27 behavioural cases with no environment
-set. `git-shared-state-guard.py` ships `test_git_shared_state_guard.py`, 68
+set. `git-shared-state-guard.py` ships `test_git_shared_state_guard.py`, 79
 cases; it builds a real git repository with a linked worktree in a temporary
 directory, so it needs `git` on the path and takes a few seconds.
 `machine-wide-kill-guard.py` ships `test_machine_wide_kill_guard.py`, 19 cases on
@@ -430,6 +474,12 @@ the hook beside it as the harness does, a JSON payload on stdin and an exit code
 out, and it needs `skills/lib/rulings.py` reachable at
 `~/.claude/skills/lib/rulings.py`, which is where the hook itself looks for the
 reader.
+`run-issues-suite-gate.py` ships `test_run_issues_suite_gate.py`, 56 cases; its
+ledgers and git repositories are built in a temporary directory, and it reads
+the four sibling files above at `../skills/` and the three role files it pins at
+`../agents/`, so run it from this directory inside the pack. One case, the
+registration check, skips itself when no `settings.json` sits beside the hooks
+directory, which is every copy of the pack that has not been installed.
 
 Only `coderules-gate.py` ships no test, because it has none in the tree it came
 from. It carries a drill in its docstring instead: pipe a JSON payload on stdin
@@ -444,6 +494,7 @@ spawn the hook should refuse. If nothing is refused, step 2 did not take.
 Read `skills/` and you will meet other hook names — `machine-preflight.py`,
 `model-map-gate.py`, `model-landed-check.py`, `number-claim-guard.py`,
 `run-state-path-guard.py`, `generated-file-guard.py`, `gate-source-write-guard.py`,
+`gate-issue-write-guard.py`, `run-issues-risk-path-guard.py`,
 `run-issues-parallel-gates.py`, `run-issues-criteria-fault.py`. **None of them is in
 this directory.** Where a skill says one of those refuses something, read it as a
 rule the loop holds and not as a control you have: `MANIFEST.md` says why each is
@@ -457,6 +508,6 @@ open to you is to write your own against the rule the skill states, with the sha
 the published hooks beside it carry: payload on stdin, reason on stderr, exit 2 to refuse,
 exit 0 on anything it cannot read.
 
-`generated-file-guard.py` is the one of those nine that a published hook actually
+`generated-file-guard.py` is the one of those eleven that a published hook actually
 reaches for: `origin-row-guard.py` loads its `bash_targets` parser to resolve a
 redirect target, and passes every Bash write when it is absent.

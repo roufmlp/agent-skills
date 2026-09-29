@@ -25,26 +25,46 @@ moved the tree since the verify gate read it, so a whole-tree reading here reads
 the same tree twice. Read the diff, drive your drills on single files, and cite
 the verify gate's coverage report as the whole-tree reading you rely on. The cut
 is whole-suite runs, never single files: drop no drill for it. Issue 06 of the
-tracker-tooling set, `three suites per issue`, 2026-09-17.
+tracker-tooling set, `three suites per issue`, 2026-09-17. On a `Level: light`
+issue there is no verify gate: cite the implementer's `scoped_suite.py` reading
+instead, as the standard review gate says.
 
 Everything in the standard review gate applies — read the ledger's HEADER and
 the ledger row for this issue first and stop if it is already past your stage,
 then orient from
 `primer.md`, the issue and the diff only; build the numbered rubric before
-judging, including every `## Must still be true` line; reject unrequired scope on
-the absent-criterion citation bar, with test files excepted; invoke /code-review;
+judging, including every `## Must still be true` line; report unrequired scope
+under `Beyond the criteria:` on the absent-criterion citation bar, with test files
+excepted; invoke /code-review;
 report every finding with confidence and severity rather than filtering for
 importance; grade each criterion, with **no evidence meaning FAIL**; ground every
 claim in the diff; route out-of-scope findings to their home first and cite the
 exact appended line, quoted; any command written for a human runs once first
 against the state it will meet and is marked `RAN`, or is marked `UNRUN`, one of
 the two words beside every command; append merge-read items to
-`merge-briefing.md`; a three-line final message; touch no code — every drill
+`merge-briefing.md`; a four-line final message ending in the grades line; touch no code — every drill
 runs on a scratchpad copy, and each graded file's checksum is recorded at gate
 open and gate close. That
 includes its concurrency rule: you run at the same time as the verify gate, so
 everything you write goes under your own `## Review gate` heading, append-only,
 and the verify verdict may not exist yet — it is not an input to your judgement.
+
+**Every REJECT ground names a criterion or an invariant the issue holds**, by
+that name, here as in the standard gate. A money, auth or secret defect that fails
+no named item goes under `Beyond the criteria:` with one sentence saying the issue
+should have stated it. The runner takes the criteria re-check with it: the issue
+stops, and no strike is charged for a rubric the issue never held. Tracker-tooling
+issue 13, fix F10 of the audit of 2026-09-23.
+
+**End the verdict with one grades line, and repeat it in your final message:**
+`Grades: C1=pass C2=fail M9=owed`, one `<name>=<word>` per rubric row, in four
+words. `pass` is met and observed. `fail` is behaviour the item demands that you
+did not observe. `owed` is behaviour correct and its written proof short: a
+missing pin, an unrun mutation, a claim wider than the code. `fault` is the item
+itself wrong, unbuildable or contradicting another. The runner passes both gates'
+lines to `charge_round.py`, which decides what the round costs, so the word is
+the verdict that counts. Tracker-tooling issue 14, fix F11 of the audit of
+2026-09-23: four runs decided the same split four ways by hand.
 
 What this variant adds:
 
@@ -67,13 +87,20 @@ a log line, an error message, or a URL. Check what the diff adds to any of those
 service key where a policy should have been written, a check removed to make a
 feature pass — that is an automatic rejection regardless of the rest.
 
-Write the verdict into the issue file.
+Write the verdict to the file the round header's `Verdict goes to:` line labels `(review gate)`,
+`<run tree>/.scratch/<feature>/runs/<batch-id>/verdicts/<issue>-attempt-<N>-review.md`,
+and never into the issue file or the verify gate's file:
+a write guard refuses both where the setup registers one (the author's is
+`gate-issue-write-guard.py`, which this pack does not ship). Each gate has a verdict file
+of its own (ruling `q-fin-ea4cfa-05`). The issue file is the spec every later attempt reads.
 
 **THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** The issue file and
 your private copy from the spawn prompt, the register and the merge briefing off
 the ledger's header all exist in two places: the MAIN CHECKOUT and the run's
 worktree under `.claude/worktrees/`. Both files exist, both are readable, and
 nothing inside either says which one anybody else is using.
+The verdict file is the exception: the round header's `Verdict goes to:` names
+the run's own tree, and you write it there, never beside the main checkout's copy.
 
 **THE LEDGER DECIDES WHICH COPY IS LIVE. THE SHAPE OF THE PATH DOES NOT.**
 Corrected 2026-09-18 on the ruling of queue item `q-finale-2957c3-04`. This

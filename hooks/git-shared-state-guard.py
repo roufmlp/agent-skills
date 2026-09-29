@@ -7,9 +7,11 @@ it is `git`. In a LINKED WORKTREE it refuses one thing: a bare `git stash` and a
 `git stash pop`, because the stash stack is the one piece of git state a
 worktree does not get its own copy of. In the MAIN checkout it also refuses a
 wide `git add`, a `git commit` that names no paths, and the destructive
-whole-tree commands. Every other git command passes, every non-Bash tool call
-passes, and it writes nothing anywhere. On a payload it cannot parse, or on any
-error of its own, it exits 0.
+whole-tree commands. The one exception is a merge in progress: a pathless
+`git commit` or `git merge --continue` that concludes it passes when every staged
+path is one the merge brings, and says on stdout which paths it carries. Every
+other git command passes, every non-Bash tool call passes, and it writes nothing
+anywhere. On a payload it cannot parse, or on any error of its own, it exits 0.
 
 ## The fault
 
@@ -61,6 +63,24 @@ refuses always in the main checkout instead.
 It holds no exception list (ruling 10). A wide but honest commit uses
 `--pathspec-from-file`, so one rule holds for every commit: the commit names what
 it carries.
+
+## Concluding a merge
+
+A merge commit cannot name its paths: git refuses "a partial commit during a
+merge". So ruling 7, read literally, leaves a conflicted merge in the main
+checkout with no porcelain way out. One measured session concluded such a merge
+with `write-tree`, `commit-tree`, `update-ref` and `merge --quit`, which bypassed
+this guard without a word.
+
+Ruling 7's purpose is that a commit carries only what its author chose. A merge
+commit's author chose the merge, so while `MERGE_HEAD` exists a pathless
+`git commit` or `git merge --continue` passes when every staged path is one the
+merge brings: a path changed on a merged branch since its merge base with HEAD.
+A staged path outside that set is another session's work, or an edit that is
+not the merge's, and the commit is refused naming it. A pass states on stdout
+which paths the merge commit carries. `-a` and `--amend` keep their refusals.
+If the guard cannot read what the merge brings, ruling 7's refusal stands: the
+exception is granted on a measurement, never on its absence.
 
 The block mechanism — read the payload from stdin, write the reason to stderr,
 exit 2 — is the documented PreToolUse contract, and every published hook beside
@@ -301,8 +321,92 @@ def refuse_add(argv, cwd):
     return None
 
 
-def refuse_commit(argv, cwd):
-    """Rulings 5, 7, 9 and 10."""
+def git_lines(cwd, git_dir, *args):
+    """The NUL-separated output of a read-only git call, or None on failure."""
+    argv = ["git", "-C", cwd]
+    if git_dir:
+        argv += ["--git-dir", git_dir]
+    try:
+        done = subprocess.run(argv + list(args), capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    if done.returncode != 0:
+        return None
+    return [line for line in done.stdout.split("\0") if line]
+
+
+_MERGE_CACHE = {}
+
+
+def merge_in_progress(cwd, git_dir):
+    """What concluding the merge here would carry, or None where no merge runs.
+
+    Answers {"carried": [...], "stray": [...]} when measured, and {} when
+    `MERGE_HEAD` exists but the paths could not be read. `carried` is every
+    staged path; `stray` is the part of it no merged branch brings.
+    """
+    key = (cwd, git_dir)
+    if key in _MERGE_CACHE:
+        return _MERGE_CACHE[key]
+    answer = None
+    located = git_lines(cwd, git_dir, "rev-parse", "--git-path", "MERGE_HEAD")
+    merge_head = resolve(cwd, located[0].strip()) if located else None
+    if merge_head and os.path.isfile(merge_head):
+        answer = {}
+        try:
+            with open(merge_head) as handle:
+                heads = [line.strip() for line in handle if line.strip()]
+        except OSError:
+            heads = []
+        staged = git_lines(cwd, git_dir, "diff", "--cached", "--name-only",
+                           "--no-renames", "-z", "HEAD")
+        brought = set()
+        for head in heads:
+            # `HEAD...<head>`: what the merged branch changed since the merge base.
+            paths = git_lines(cwd, git_dir, "diff", "--name-only", "--no-renames",
+                              "-z", f"HEAD...{head}")
+            if paths is None:
+                heads = []
+                break
+            brought.update(paths)
+        if heads and staged is not None:
+            answer = {"carried": staged,
+                      "stray": [path for path in staged if path not in brought]}
+    _MERGE_CACHE[key] = answer
+    return answer
+
+
+def refuse_merge_conclusion(merge):
+    """The merge exception to ruling 7: a pathless commit concludes the merge
+    when every staged path is one the merge brings."""
+    if not merge:
+        return ("a merge is in progress, but the guard could not read which paths "
+                "it brings, so it cannot show that the commit carries only the merge.")
+    if merge["stray"]:
+        shown = ", ".join(f"`{path}`" for path in merge["stray"][:20])
+        more = len(merge["stray"]) - 20
+        if more > 0:
+            shown += f" and {more} more"
+        return ("a merge is in progress, and the index also holds staged paths no "
+                f"merged branch brings: {shown}. A merge commit cannot name its "
+                "paths, so it would carry them under the merge's message.")
+    return None
+
+
+def refuse_merge(argv, cwd, git_dir):
+    """`git merge --continue` commits the whole index, exactly as a pathless
+    `git commit` does, so it gets the same test. Every other merge form passes:
+    git itself refuses to start a merge over a staged index."""
+    if "--continue" not in argv[1:]:
+        return None
+    merge = merge_in_progress(cwd, git_dir)
+    if merge is None:
+        return None  # git answers "There is no merge in progress" itself.
+    return refuse_merge_conclusion(merge)
+
+
+def refuse_commit(argv, cwd, git_dir=None):
+    """Rulings 5, 7, 9 and 10, and the merge exception to ruling 7."""
     rest, after = split_pathspec(argv[1:])
     flags = set()
     pathspec_file = False
@@ -319,6 +423,10 @@ def refuse_commit(argv, cwd):
         return "`git commit -a` commits every tracked change in the checkout, including every other session's."
     if pathspec_file:
         return None
+    if after is None:
+        merge = merge_in_progress(cwd, git_dir)
+        if merge is not None:
+            return refuse_merge_conclusion(merge)
     if after is None or not after:
         return ("a commit here carries whatever the shared index holds, which is "
                 "every session's staged work and not only yours.")
@@ -433,6 +541,12 @@ def road_for(subcommand):
                    "  git commit -m \"<message>\" --pathspec-from-file=<file>\n"
                    "A commit still refuses a file git does not know yet, so a new "
                    "file needs its own `git add <path>` first."),
+        "merge": ("Unstage each path the merge does not bring, then conclude it:\n"
+                  "  git restore --staged <path>\n"
+                  "  git commit --no-edit\n"
+                  "The edit stays in the working tree. Commit it by name after "
+                  "the merge lands. To see what the merge carries:\n"
+                  "  git status --short"),
         "amend": ("Undo your own last commit instead, which loses no work:\n"
                   "  git log -1            # read the message first: is it yours?\n"
                   "  git reset --soft HEAD~1\n"
@@ -470,24 +584,27 @@ def road_key(subcommand, reason):
         return "branch"
     if "--amend" in reason:
         return "amend"
+    if "a merge is in progress" in reason:
+        return "merge"
     if subcommand in ("checkout", "switch"):
         return "restore"
     return subcommand
 
 
 CHECKOUT_RULES = {
-    "add": lambda argv, cwd: refuse_add(argv, cwd),
-    "stage": lambda argv, cwd: refuse_add(argv, cwd),
-    "commit": lambda argv, cwd: refuse_commit(argv, cwd),
-    "reset": lambda argv, cwd: refuse_reset(argv),
-    "checkout": lambda argv, cwd: refuse_checkout(argv, cwd),
-    "switch": lambda argv, cwd: refuse_switch(argv),
-    "restore": lambda argv, cwd: refuse_restore(argv, cwd),
-    "clean": lambda argv, cwd: refuse_clean(argv, cwd),
+    "add": lambda argv, cwd, git_dir: refuse_add(argv, cwd),
+    "stage": lambda argv, cwd, git_dir: refuse_add(argv, cwd),
+    "commit": lambda argv, cwd, git_dir: refuse_commit(argv, cwd, git_dir),
+    "merge": lambda argv, cwd, git_dir: refuse_merge(argv, cwd, git_dir),
+    "reset": lambda argv, cwd, git_dir: refuse_reset(argv),
+    "checkout": lambda argv, cwd, git_dir: refuse_checkout(argv, cwd),
+    "switch": lambda argv, cwd, git_dir: refuse_switch(argv),
+    "restore": lambda argv, cwd, git_dir: refuse_restore(argv, cwd),
+    "clean": lambda argv, cwd, git_dir: refuse_clean(argv, cwd),
 }
 
 
-def verdict(argv, cwd, main):
+def verdict(argv, cwd, main, git_dir=None):
     """The reason this git call is refused, or None.
 
     `main` says whether the call lands in a checkout whose index is shared. The
@@ -503,7 +620,7 @@ def verdict(argv, cwd, main):
     rule = CHECKOUT_RULES.get(subcommand)
     if not rule:
         return None, ""
-    return rule(argv, cwd), subcommand
+    return rule(argv, cwd, git_dir), subcommand
 
 
 # The stash rule holds in every checkout, so its refusal may not open with the
@@ -532,6 +649,43 @@ def refuse(command, cwd, reason, subcommand):
     return 2
 
 
+def merge_notice(argv, cwd, git_dir):
+    """The paths a passing merge conclusion carries, or None.
+
+    Only a pathless `git commit` or `git merge --continue` concludes a merge
+    with the whole index. Anything else that passed passed on its own terms.
+    """
+    subcommand = argv[0] if argv else ""
+    if subcommand == "commit":
+        rest, after = split_pathspec(argv[1:])
+        if after is not None or any(w.startswith("--pathspec-from-file") for w in rest):
+            return None
+    elif not (subcommand == "merge" and "--continue" in argv[1:]):
+        return None
+    merge = merge_in_progress(cwd, git_dir)
+    if not merge:
+        return None
+    carried = merge["carried"]
+    listed = "\n".join(f"  {path}" for path in carried[:40])
+    if len(carried) > 40:
+        listed += f"\n  and {len(carried) - 40} more"
+    return (f"A merge is in progress in the shared checkout {cwd}. The commit "
+            f"concludes it and carries {len(carried)} staged path(s), every one "
+            f"brought by the merge:\n{listed}")
+
+
+def announce(notices):
+    """A pass that concludes a merge says what the merge commit carries."""
+    message = "\n\n".join(notices)
+    print(json.dumps({
+        "systemMessage": message,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "additionalContext": message,
+        },
+    }))
+
+
 # ------------------------------------------------------------------- driver
 
 
@@ -544,6 +698,7 @@ def decide(payload):
         return 0
     cwd = str(payload.get("cwd") or os.getcwd())
 
+    notices = []
     for words in simple_commands(command):
         if not words:
             continue
@@ -565,9 +720,16 @@ def decide(payload):
         if os.path.basename(head) != "git":
             continue
         where, git_dir, argv = parse_git(words, cwd)
-        reason, subcommand = verdict(argv, where, is_main_checkout(where, git_dir))
+        main = is_main_checkout(where, git_dir)
+        reason, subcommand = verdict(argv, where, main, git_dir)
         if reason:
             return refuse("git " + " ".join(argv[:1]), where, reason, subcommand)
+        if main:
+            notice = merge_notice(argv, where, git_dir)
+            if notice:
+                notices.append(notice)
+    if notices:
+        announce(notices)
     return 0
 
 

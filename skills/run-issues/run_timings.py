@@ -53,6 +53,13 @@ WHAT IT MEASURES, and the one thing it deliberately does not:
     function REFUSES a verdict when any pair it graded holds a backgrounded step,
     rather than printing a number it cannot support. It does not compute the true span:
     The human ruled the refusal in and the measurement out, on cost.
+
+    **Since tracker-tooling issue 30 (2026-09-24) a backgrounded AGENT span runs to
+    the end of the step's own transcript** (`step_end`), where that file exists, so
+    the "nobody running" figure and the longest steps count the work and not the
+    spawn. Run `batch-46e4de` read 27 per cent idle before and 9 per cent after. A
+    backgrounded Bash call still reads as instant, and `serial_gates` still refuses
+    a pair holding a backgrounded step: that ruling is untouched.
 """
 
 import argparse
@@ -129,14 +136,56 @@ def read(path):
                 name, text, started = found
                 if not started:
                     continue
-                seconds = (parse(stamp) - parse(started)).total_seconds()
+                ended = parse(stamp)
+                background = backgrounded.get(block.get("tool_use_id"), False)
+                if name == "Agent" and background:
+                    ended = max(ended, step_end(path, entry) or ended)
+                seconds = (ended - parse(started)).total_seconds()
                 calls.append((seconds, name, text))
                 if name == "Agent":
-                    spans.append([parse(started), parse(stamp)])
-                    labelled.append((parse(started), parse(stamp), text,
-                                     backgrounded.get(block.get("tool_use_id"),
-                                                      False)))
+                    spans.append([parse(started), ended])
+                    labelled.append((parse(started), ended, text, background))
+    # A backgrounded step can outlive the session that spawned it. Its span
+    # stops at the session's own last line, so busy never exceeds the wall.
+    if last is not None:
+        spans = [[start, min(end, last)] for start, end in spans]
+        labelled = [(start, min(end, last), text, background)
+                    for start, end, text, background in labelled]
     return calls, spans, first, last, labelled
+
+
+def step_end(path, entry):
+    """Where a backgrounded Agent step really ended, or None.
+
+    Tracker-tooling issue 30. A backgrounded call returns at the spawn, so its
+    result time is not its end. The result line carries
+    `toolUseResult.agentId`, and the step writes its own transcript at
+    `<session>/subagents/agent-<id>.jsonl`; its last timestamp is the end. Run
+    `batch-46e4de` backgrounded its verify gates and read 27 per cent of its
+    wall clock as nobody running, about 9 per cent real. Without that file
+    the spawn is all this knows, as before.
+    """
+    result = entry.get("toolUseResult")
+    agent = result.get("agentId") if isinstance(result, dict) else None
+    if not isinstance(agent, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", agent):
+        return None
+    step = os.path.join(os.path.dirname(path),
+                        os.path.basename(path).rsplit(".jsonl", 1)[0],
+                        "subagents", f"agent-{agent}.jsonl")
+    latest = None
+    try:
+        with open(step) as handle:
+            for line in handle:
+                try:
+                    stamp = json.loads(line).get("timestamp")
+                except (ValueError, AttributeError):
+                    continue
+                if stamp:
+                    moment = parse(stamp)
+                    latest = moment if latest is None or moment > latest else latest
+    except OSError:
+        return None
+    return latest
 
 
 def deep(path):

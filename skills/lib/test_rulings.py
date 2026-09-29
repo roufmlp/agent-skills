@@ -16,7 +16,7 @@ import unittest
 
 from rulings import (check_answered, check_commit, content_words,
                      declared, issue_of, matches, nearest, parse,
-                     fold, main, path_for, quoted_ids)
+                     fold, main, path_for, quoted_ids, ruled_by_id)
 from collect_shards import RULED
 from rulings import EMPTY, HEADING, RULED_SHARD, WRONG, skipped
 
@@ -123,6 +123,61 @@ class Matches(unittest.TestCase):
 
     def test_an_unrelated_question_matches_nothing(self):
         self.assertEqual(matches("how the invoice pdf is rendered", self.entries), [])
+
+
+# The pair measured on 2026-09-22. The ids are identical and the subjects
+# describe one thing in different words -- "cleanup" against "clear", "fails"
+# against "refusing" -- so one content word is shared and the word heuristic
+# never fired.
+SAME_NAME = """# Rulings
+
+## 2026-09-22 `q-h0922b-124-1` — which road stops a refused subscription clear from refusing the sign-in
+Ruled: the clear is best effort; a failure is logged and the sign-in proceeds.
+Carried by: `.scratch/example-feature/issues/124-the-push-subscription.md`
+"""
+SAME_NAME_HEADING = ("## `q-h0922b-124-1` [irreversible] — a failed push "
+                     "cleanup fails the sign-in")
+
+
+class RuledById(unittest.TestCase):
+    """The certainty beside the heuristic.
+
+    An item carrying a ruling entry's own question id is that question by
+    name, whatever words either heading chose. The word overlap is what
+    `matches` reads and it cannot see this: on the measured pair the two
+    headings share one content word against a threshold of three.
+    """
+
+    def setUp(self):
+        self.entries = parse(SAME_NAME)
+        # The fixture has to parse, or this class asserts against an empty
+        # record and passes for the wrong reason.
+        self.assertEqual(len(self.entries), 1)
+
+    def test_the_word_heuristic_does_not_see_the_measured_pair(self):
+        subject = ("a failed push cleanup fails the sign-in")
+        self.assertEqual(matches(subject, self.entries), [])
+
+    def test_the_same_id_on_the_heading_is_a_match(self):
+        hit = ruled_by_id(SAME_NAME_HEADING, self.entries)
+        self.assertEqual([entry.question for entry in hit],
+                         ["q-h0922b-124-1"])
+
+    def test_a_question_reference_names_an_entry_too(self):
+        entries = parse("## 2026-09-13 `05-Q2` — who owns the depot import\n"
+                        "Ruled: Ops owns it.\nCarried by: `x.md`\n")
+        hit = ruled_by_id("## 05-Q2: something else entirely `q-a-1`", entries)
+        self.assertEqual([entry.question for entry in hit], ["05-Q2"])
+
+    def test_a_different_id_is_not_a_match(self):
+        head = SAME_NAME_HEADING.replace("124-1", "124-2")
+        self.assertEqual(ruled_by_id(head, self.entries), [])
+
+    def test_a_heading_with_no_id_matches_nothing(self):
+        self.assertEqual(ruled_by_id("## a heading with no name", self.entries), [])
+
+    def test_an_empty_record_matches_nothing(self):
+        self.assertEqual(ruled_by_id(SAME_NAME_HEADING, []), [])
 
 
 DECLARED = """## 05-Q2: which local Postgres at what concurrency `q-ti04-1`

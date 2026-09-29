@@ -63,7 +63,7 @@ Spawn by `subagent_type`; the pass never pastes a brief.
 
 | Stage | Agent type | Effort |
 |---|---|---|
-| Attack one issue | `harden-issues-attacker` | high |
+| Attack one issue | `harden-issues-attacker` | medium |
 | Seam pass over the set, once | `harden-issues-seam` | high |
 
 Attackers run concurrently, one per issue. The seam agent runs after them all,
@@ -105,8 +105,9 @@ check rather than a reminder.
 
 **Model: inherit.** Both agent files carry `model: inherit`, so the pass runs on
 the tier the session was launched on. To harden on Fable, launch the session on
-Fable. Effort stays `high`, not `max`: the checklist is enumeration against a
-file, and enumeration is recall rather than chained reasoning.
+Fable. The attacker runs at `medium` and the seam at `high`, on the human's ruling of
+2026-09-25: the attacker's checklist is enumeration against one file, which is
+recall rather than chained reasoning, while the seam reasons across the whole set.
 
 **Print one launch line before spawn #1, on every invocation** — the resolved
 session model, the issues in scope, and how many attackers are about to spawn.
@@ -124,13 +125,32 @@ rule the pass holds; `hooks/README.md` says what a reader gains by writing one.
 Ticket 33, ruling 2.
 
 **Never attack an issue a live run holds.** One rule, and it reads the same for
-every caller: skip any issue whose row in any `runs/<batch-id>/run.md` in the
-same directory is past `queued` — in any run, whoever is calling.
-`find_live_ledger.py --list` prints the live ledgers, and there can be two
-(ticket 38, the one-run-per-feature layout ticket). That is the whole guard. It
-never asks which run is live, and it never asks which caller you are. Ticket 33,
+every caller: skip any issue whose row in a LIVE run's `run.md` is past
+`queued` — in any run, whoever is calling. That is the whole guard. It never
+asks which run is live, and it never asks which caller you are. Ticket 33,
 ruling 5, ruled by the human 2026-09-07; `decisions.md` holds the blanket rule it
 replaced.
+
+**Run the command. Never read a directory.** This is the guard, and there can be
+two live ledgers (ticket 38, the one-run-per-feature layout ticket):
+
+```bash
+python3 ~/.claude/skills/run-issues/find_live_ledger.py --list
+```
+
+It prints `batch id`, `ledger path`, `worktree`, `kind`, tab separated, and it
+enumerates EVERY worktree of the repository from whichever one you are standing
+in — `git worktree list` is the same list from any tree, measured 2026-09-13 on
+a repository whose only live ledger sat in the main checkout.
+
+**Until 2026-09-13 this paragraph said "any `runs/<batch-id>/run.md` in the same
+directory", and that sentence caused the fault it exists to prevent.** Run state
+is committed, so every worktree carries a copy frozen at the commit it branched
+from. In a worktree the same directory is that frozen copy. On 2026-09-13 the
+`h0913` pass read its own worktree's `runs/`, could not see run `batch-19ff9f`,
+and rewrote issue 37 while that run held it and had committed 720 lines into the
+same file; the edit was reverted before the merge. The script was never at
+fault and was not changed. The instruction was. Ruled by the human 2026-09-13.
 
 Two consequences, both intended. A run's launch phase sees its own rows at
 `queued` and proceeds, because an issue nothing is building yet has no second
@@ -140,7 +160,13 @@ rows are not run A's issues.
 `needs-harden` and `ready-for-agent` are both in scope — `needs-harden` is what a
 run sets when it finds criteria that are wrong or stale, so those issues are
 exactly what this pass exists to serve, and a status-shaped guard would tell it to
-skip them. What the guard protects against is a second writer: rewriting criteria
+skip them. **A `parked` issue is in scope only where the human typed it**, and this
+pass never adds one to a batch on its own: parked is promotion's floor for a
+medium or low row nothing waits on, and
+`python3 ~/.claude/skills/lib/sweep_parked.py <issues dir>` is what offers one —
+it prints the `/harden-issues` line, `/daily-brief` runs it, and the human chooses.
+Hardening is also the way OUT of parked, because the stamp below sets
+`ready-for-agent`, so a typed parked issue is hardened like any other. What the guard protects against is a second writer: rewriting criteria
 under a working implementer causes a rejection on correct work, then a strike,
 then an escalation chasing a criterion the implementer never saw.
 
@@ -149,7 +175,8 @@ attacker against an issue it holds, after two rejections, before it buys a third
 implementer. The guard above protects against a second writer, and at that moment
 there is none — the implementer is dead and the runner spawns nothing else until
 the attacker returns. Strike-2 mode is narrower than a normal pass: classes 1, 5
-and 9 only, evidence or silence, and **it never waits for an answer** — an
+and 9 only, plus class 4's measured population on any guard criterion it
+rewrites, evidence or silence, and **it never waits for an answer** — an
 unsettled reversible fork takes its recommended default by the routing table,
 and only a fork in the table's four `[irreversible]` classes, or a split,
 returns as a blocked issue, not a question the run sits on.
@@ -211,6 +238,26 @@ sharpened (with evidence), question (for the human), or clean.
    finale, queue item D4; `decisions.md` holds the ten green guards and the
    refusal of mutation testing as the mechanical alternative.)
 
+   **A guard criterion names the population it reads, measured, as a closed
+   list.** A guard told to read "the whole artefact" names nothing a build can
+   meet, and every adversarial gate plants one more spelling: one tracker's issue 53
+   passed every other criterion in all seven attempts and was rejected on a new
+   bypass each time. Measure the forms the repository holds today and write three
+   lines inside the criterion:
+
+   ```
+   Forms: `.ts`, `.tsx` under `src/app/`
+   Measured by: `git ls-files 'src/app/**' | sed -n 's/.*\.//p' | sort -u`, <date>
+   Outside the list: a form a gate plants that this list does not hold is a register row, not a rejection.
+   ```
+
+   The guard still refuses what it cannot place inside that list
+   (`~/.claude/coderules.md`, ruled `q-s4-1` on 2026-09-23). A criterion that
+   reads like a guard and is not one says so in one line, `Not a guard: <why>`.
+   `check_issue_ready.py --all-guards` refuses the stamp on either missing, and
+   its docstring holds the measured wording it recognises. (Tracker-tooling
+   issue 22, fix F7.)
+
    **A criterion may never ask for evidence to land somewhere the party it names
    cannot write.** Read the clause, name its writer, and check that writer's
    pen. Two homes fail today: an implementer writes neither the issue file nor
@@ -243,6 +290,31 @@ sharpened (with evidence), question (for the human), or clean.
    and will act on both. Narrowing it is not the remedy; deleting it is. (Adopted
    by the human 2026-08-07. This edits class 5 deliberately and must never become a
    class of its own — two homes for impossibility claims is the drift it avoids.)
+
+   **A promoted claim you MEASURE FALSE is corrected in place; only a LOOSE one may
+   be annotated.** A false sentence at the top of an issue is what an implementer
+   reads first, and a correction twelve lines below it arrives too late. So strike
+   the false claim where it stands and write the measured truth in its place, with
+   the citation; keep the `## Corrections from the hardening pass` section for
+   claims that are merely vague or unproven, where the promoted record is still
+   worth reading as written. Measured: it happened twice in one batch — issue 407
+   opened "The work is lost", false by `new-tender-form.tsx:736-738`, and issue 408
+   called the deal board "read-only", false by `sourcing-board.tsx:8`, both with the
+   correction sitting below the false line. The pass already writes the correction,
+   so this rule only says where it goes. (Ruled by the human 2026-09-18, queue item
+   `q-h-078` item 19.)
+   **A count the pass writes carries the command that measured it.** Pass
+   `h0917c` wrote "twenty-two" colour families into issue 139, and the
+   installed Tailwind ships 26. Put the command in backticks in the same
+   criterion. A number that is a design choice or a fixture size, not a
+   measurement, is quoted on a `Not measured:` line with the reason.
+
+   **A criterion a run has reset is rewritten, never only added to.** Issue 139c
+   gained a broad rule beside the narrow one and kept both: "Both implementers
+   built the first. Both gates graded the second." Replace the sentence the run
+   found at fault, or strike it with `~~ ~~` where it stands.
+   `check_criteria_edit.py` refuses both faults before the stamp. (Tracker-tooling
+   issue 23, fix F9.)
 6. **Empty or missing hostile data.** Does QA/production hold data that can
    exercise each criterion? If not, say so and name the fixture to create —
    otherwise the gates validate over an empty set.
@@ -251,15 +323,55 @@ sharpened (with evidence), question (for the human), or clean.
 8. **Observability.** How will each criterion be verified, and is the property
    observable to a gate or a walk at all? A criterion nobody can observe is not a
    criterion.
-9. **Size against the one-implementer bound.** A clean issue runs ~30-90 min;
-   suspect anything whose criteria span several independent deliverables, or that
-   packs migration + logic + UI into one slice. Propose the cut line — where one
-   half ships and gates alone ("extract + harness", then "behavioural tests") —
-   and route it by `~/.claude/questionrules.md`'s table: the session settles
-   the split itself when it can cut, harden both halves and leave both
-   stampable in this same pass; a split it cannot complete that way goes to
-   the human. `/run-issues` deliberately never splits mid-run — an oversized
-   issue that reaches a runner arrives back here.
+9. **Size against the one-implementer bound, which is a COUNT and not a
+   duration.** Run the counter; do not estimate minutes:
+
+   ```
+   python3 ~/.claude/skills/lib/check_issue_size.py \
+     --issues .scratch/<feature>/issues --limit 14 \
+     --grade <each issue this pass hardened>
+   ```
+
+   **14 is the human's ruling of 2026-09-14**, not a default: no issue may be
+   bigger than the biggest one this pipeline has finished. It refuses an issue
+   carrying more than `--limit` acceptance criteria, names the count and lists
+   every criterion it counted. `--grade` narrows refusal to
+   the files this pass hardened, so a backlog minted before the rule is read and
+   not refused. A graded file carrying NO criterion also refuses: a count of
+   zero is not a pass.
+
+   **Never convert its count into minutes, and never quote a past issue's
+   duration as a comparable unless you read it off `issues.jsonl`.** Until
+   2026-09-14 this class was a sentence — "a clean issue runs ~30-90 min" — and
+   each attacker reasoned by analogy from figures it found in run ledgers. Those
+   figures were ESTIMATES that later passes quoted as measurements, so the
+   pipeline was calibrating estimates against estimates. The measured record: 25
+   issues, median span 36.2 minutes, p90 72, and exactly one over 90. The
+   analogy step is where the judgement hid, which is why it is gone.
+
+   The count is the refusal. **The cut is still yours**, and the count does not
+   make it for you: suspect anything whose criteria span several independent
+   deliverables, or that packs migration plus logic plus UI into one slice, even
+   at nine criteria. Propose the cut line — where one half ships and gates alone
+   ("extract + harness", then "behavioural tests") — and route it by
+   `~/.claude/questionrules.md`'s table: the session settles the split itself
+   when it can cut, harden both halves and leave both stampable in this same
+   pass; a split it cannot complete that way goes to the human. `/run-issues`
+   deliberately never splits mid-run — an oversized issue that reaches a runner
+   arrives back here.
+
+   Four candidates attackers have reached for were measured on 2026-09-14 and
+   predict nothing: invariant count (rank correlation +0.05), blocker count
+   (+0.03), whether the issue ships a migration (+0.25 over a field 19 of the 25
+   run issues carried), and whether it touches a browser (+0.13). Do not cite
+   one as a size signal.
+   `check_issue_size.py`'s docstring holds the whole table and the fit's own
+   error bar.
+
+   **The count is scored.** `run_costs.py` writes it onto each issue's line in
+   `issues.jsonl` beside the span that issue then occupied, and
+   `run_compare.py sizing` reads the two together. The limit is the human's, and
+   they re-rule it off that record, never off an attacker's estimate.
 
 10. **The database the rows land in.** An issue whose work writes data rows — an
     import, a seed, a backfill, a migration carrying data — names every database
@@ -298,44 +410,70 @@ The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only
 because of something a sibling issue deletes).
 
-## Repair the stale citations first, before anybody attacks the file
+## Read what the human has already ruled, before anybody attacks the file
 
-A citation that moved reads as a wrong premise, and an attacker spends a round
-on it. Where the repo carries the script, run it over each issue in scope before
-the attackers spawn:
+An attacker that has not read their rulings asks for them again. That happened in
+the last two attended passes — hardening asked for on issues the human had already
+cut and ruled — and a question they have answered costs them the same minutes the
+second time. Read the project's rulings file and hand it to every attacker with its
+issues:
 
+```bash
+python3 ~/.claude/skills/lib/rulings.py --list <repo>/.scratch/rulings.md
 ```
-node scripts/check-issue-citations.mjs --quiet <each issue file>
-```
 
-Correct every `moved` row to the line it reports. Read every `gone` row rather
-than deleting it — the line may have been rewritten, or the citation may always
-have been wrong, and those are different repairs. `unknown` means the check
-could not run and is not a fault.
+Each entry names the question it answered, the subject, the ruling, and the file
+that now carries it. Apply an entry that governs an issue in scope the way you
+apply any other fact about the repo, and count it. A project with no rulings
+file prints `no ruling on record`, which is the honest state of a tracker nobody
+has ruled on yet. An entry the reader cannot parse is named at exit 1 and left
+out of the listing: repair that entry before you work from the list, because a
+ruling it dropped is one nothing can apply and nothing can refuse.
+
+`~/.claude/skills/lib/check_queue_shard.py` holds the other half at the end of the pass: an item whose
+subject matches an entry is refused as **already ruled**, with that entry
+printed. Apply it, or say on the item what this asks that the entry does not —
+`Rulings checked: none match`, quoting the entry it matched and its nearest
+neighbour. An item that names an entry and then contradicts it is a new question
+and passes.
+
+## Citations quote text, never a line number
 
 **Every citation you WRITE from 2026-08-26 onward quotes text, never a line
-number.** `src/lib/deals/room.ts`, then the distinctive phrase the line contains,
-in backticks. A quoted phrase expires only when the code it names actually
-changes, which is exactly when a citation should expire; a line number expires
-whenever anything above it grows. Do not convert the citations already written —
-17,345 of them exist across 393 issue files, measured 2026-08-26 — and do not
-spend a round on it. Repair a `moved` row in place as text, so the corpus drains
-as issues close.
+number.**
+`src/lib/deals/room.ts`, then the distinctive phrase the line contains, in
+backticks. A quoted phrase expires only when the code it names actually changes,
+which is exactly when a citation should expire; a line number expires whenever
+anything above it grows. Ruled by the human on 2026-08-26 in the daily brief;
+`decisions.md` holds what that run broke and the cost they named.
 
-Ruled by the human on 2026-08-26 in the daily brief; `decisions.md` holds what
-that run broke and the cost they named. **This rule alone will not hold, and they
-know it**: a
-convention nothing refuses is the remember class their own rules reject. Issue 406,
-"nothing refuses a new line number citation in a source comment", is the guard
-that makes it stick.
+Do not convert the citations already written — 17,345 of them exist across 393
+issue files, measured 2026-08-26 — and do not spend a round on it. Repair one in
+place as text where you are reading it anyway, so the corpus drains as issues
+close.
 
-**This pass is where the repair happens, by the human's ruling of 2026-08-15.** A run
-may not write an issue file, so `/run-issues` reports these and leaves them; the
-347/263 run left eight. You already read the whole file and you are already
-allowed to write it, so the fix costs nothing extra here and costs a round
-everywhere else. A `holds` is not proof: the check compares against the commit
-that last touched the citation's own line, so a citation rewritten without
-re-checking its number can read `holds` and still be wrong.
+**There is no separate citation-repair step, and no script to run.** Until
+2026-09-15 this section told the pass to run a project's citation checker over
+every issue in scope before the attackers spawned, and to correct each `moved`
+row. The human deleted that step on 2026-09-15, on a measurement taken in the
+`h0915` pass over one tracker: **class 5 already does this work.** Class 5 makes
+every attacker verify each factual claim against the real code, and a citation is
+a factual claim. In that pass the one drifted citation found — issue 103's
+pointer into `src/model/delivery-date.ts` — was found by an attacker reading the
+code, not by a script. The script duplicated work the attackers must do anyway
+and added a step to every issue in every run.
+
+Two consequences, both intended. A repo that carries such a script does not need
+the pass to run it. And a stale citation is now caught as what it always was: a
+class 5 unverified premise, reported with the rest.
+
+**This rule alone will not hold, and the human knows it**: a convention nothing
+refuses is the remember class their own rules reject. A build check that refuses
+the form outright — "nothing refuses a new line number citation in a source
+comment" is how the issue that asks for one reads in two of the trackers this pass
+came from — is the guard that makes it stick. Where that check has not shipped in
+the repo you are hardening, say so in the stamp line rather than adding a sweep
+here.
 
 ## Output and the stamp
 
@@ -350,6 +488,12 @@ re-checking its number can read `holds` and still be wrong.
   gets one written rather than a refusal.
 - **Say how many citations were repaired** in the stamp line below, so a reader
   can tell a quiet pass from one that found nothing.
+- **A claim measured FALSE is corrected in place, never merely annotated.** Strike
+  it where it stands, write the measured truth there with its citation, and record
+  the change in `## Corrections from the hardening pass`. That section keeps only
+  the LOOSE claims — vague or unproven — where the promoted record still reads
+  correctly as written. Class 5 carries the measurement behind this rule. (Ruled by
+  the human 2026-09-18, queue item `q-h-078` item 19.)
 - **Every question follows `~/.claude/questionrules.md`.** That file sets the two
   tiers and the parts each carries. A question with no default is a question the
   pass has not finished thinking about.
@@ -363,8 +507,54 @@ re-checking its number can read `holds` and still be wrong.
   the mark at all.)
 - Questions go to the human: into the `/to-issues` quiz, or as the standalone numbered
   list. Apply their answers to the files.
+- **Both directions, before the stamp.** `## Blocked by` is the section a
+  scheduler reads to decide what may be built today, and promotion cannot write
+  it: promotion reads a register row and never the code. You read the code, so
+  you are the one stage that can. Measured on one tracker on 2026-09-13: not one
+  of the 22 needs-harden issues was named as a blocker by any other issue, and
+  issue 64, the tab bar, was needed by every screen in prose only. For every
+  issue this pass hardened:
+  - **Its own section.** Write `## Blocked by` naming every open issue whose
+    work it needs, `- None` where nothing does. A file promotion minted carries
+    the single bullet `- Unknown until hardened`, which says nobody has looked
+    yet; your answer replaces it.
+  - **The other direction.** Each attacker's findings file carries a
+    `## Downstream edges` section naming the open issues that depend on what its
+    issue builds, and `seam.md` carries the ones only the whole set shows. Add a
+    bullet naming the hardened issue to each of those issues' `## Blocked by`.
+    **Where no seam ran** — a one-issue pass — the attacker's file is the whole
+    input, and this half is yours.
+  - **Then grade the tracker**, and stamp only on a clean walk:
+
+    ```bash
+    python3 ~/.claude/skills/lib/check_issue_links.py --issues <issues dir> \
+        --scan <findings dir> --grade <each file this pass wrote>
+    ```
+
+    It refuses a stamped issue carrying no section, and an issue whose prose says
+    it needs, reads, calls, assumes, builds on or comes after an open issue its
+    section does not name — quoting the sentence. **Exit 1 is no stamp**: repair
+    what it names, then run it again. **Name every file you wrote in `--grade`,
+    and nothing else** — this pass stamps the issues it hardened, and a tracker
+    carries issues minted before the rule (128 of one tracker's 641 on
+    2026-09-13), so a grade of the whole directory would block every stamp there.
+    Ruled by the human 2026-09-13, issue 02 of the tracker-tooling set.
+- **Then two refusals over the same files, and stamp only when both exit 0:**
+
+    ```bash
+    python3 ~/.claude/skills/run-issues/check_issue_ready.py --all-guards \
+        --issue <each file this pass hardened>
+    python3 ~/.claude/skills/harden-issues/check_criteria_edit.py \
+        --issue <each file this pass hardened>
+    ```
+
+    The first refuses a guard criterion with no measured `Forms:` list (class 4).
+    The second refuses a count with no command, and an edit that only added to a
+    criterion a run has reset (class 5). Run the second before the commit that
+    holds the pass's edits, because it compares against `HEAD`; after that
+    commit, pass `--base <the commit before it>`.
 - Then stamp the issue, one line under `Status:`:
-  `Hardened: <date> — <n> sharpened, <m> questions resolved.`
+  `Hardened: <date> — <n> sharpened, <m> questions resolved, <r> rulings applied.`
 - **Stamping also sets `Status: ready-for-agent`.** The two must agree, and the
   stamp alone is not enough: `/run-issues` resolves `all` from the `Status:`
   line and skips anything reading `needs-*`, so an issue that entered through
@@ -389,12 +579,16 @@ the measurement it was adopted on.
 
 **An open question never removes an issue from a run.** Where the human has not
 answered, take the recommended default, write it into the file as a default rather
-than a decision, and stamp — status included, same rule:
+than a decision, and stamp — status included, same rule. A default that changes a
+criterion is written inside that criterion in one form,
+``Default (`q-<pass>-<issue>-<n>`)``, the question's own id, because
+`check_issue_ready.py` reads it by that form and no other (issue 43b):
 
-`Hardened (provisional): <date> — <n> sharpened, <m> defaults pending.`
+`Hardened (provisional): <date> — <n> sharpened, <m> defaults pending, <r> rulings applied.`
 
-A provisionally stamped issue is in scope for `/run-issues`' own `all`, and the merge
-briefing names every one that shipped that way, so the answer arrives after the run
+A provisionally stamped issue is in scope for `/run-issues`' own `all`, except a
+`Level: full` issue whose criterion carries that mark unruled (rule 7 of issue 32),
+and the merge briefing names every one that shipped that way, so the answer arrives after the run
 instead of holding it up. An `[irreversible]` question is not defaultable — it
 leaves the issue unstamped, and out of that scope until the human rules. A split
 follows the routing table in `~/.claude/questionrules.md`: the session completes
@@ -482,7 +676,7 @@ hardening session is attended. Settle it here.
   a defect in the issue. Either the check happens here and the answer goes into the
   file, or the criterion is rewritten so the implementer and the gates settle it
   alone.
-- **If they are away, or waves the list off**, the default road applies unchanged: take
+- **If they are away, or wave the list off**, the default road applies unchanged: take
   the default, write it as a default, queue it to this pass's queue shard. A
   check nobody ran never holds the batch.
 

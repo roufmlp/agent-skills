@@ -322,7 +322,11 @@ def ruled_ids(chosen: list) -> set:
 
 
 def closed_ids(chosen: list) -> set:
-    """Every register row id promotion has resolved, across the shards."""
+    """Every retired register row id, across the shards.
+
+    Promotion wrote these until issues 36 and 39 retired it; `retire_done_rows.py`
+    writes them now (issue 44 of tracker-tooling).
+    """
     ids = set()
     for name, path in chosen:
         if name != CLOSED:
@@ -556,7 +560,7 @@ def my_shard(board: Generated, cwd: str, trees: list, feature: str = "",
     writer per tree and is true for them.
 
     `machinery` is for the three roles that own a reserved name on purpose: the
-    daily brief's `answered`, promotion's `closed`, and an attended session's
+    daily brief's `answered`, `retire_done_rows.py`'s `closed`, and an attended session's
     `ruled`. Everything else is refused one, because a writer that quietly loses
     its rows is the fault this file exists to remove.
     """
@@ -659,7 +663,7 @@ def main(argv=None):
                         help="the row prefix this writer stamps, e.g. rg454")
     parser.add_argument("--machinery", action="store_true",
                         help="claim a reserved name: the brief's `answered`, "
-                             "promotion's `closed`. Nothing else may.")
+                             "retire_done_rows.py's `closed`. Nothing else may.")
     parser.add_argument("--split", action="store_true",
                         help="one-off: move the generated file into 00-history.md")
     args = parser.parse_args(argv)

@@ -23,7 +23,13 @@ moved the tree since the verify gate read it, so a whole-tree reading here reads
 the same tree twice. Read the diff, drive your drills on single files, and cite
 the verify gate's coverage report as the whole-tree reading you rely on. The cut
 is whole-suite runs, never single files: drop no drill for it. Issue 06 of the
-tracker-tooling set, `three suites per issue`, 2026-09-17.
+tracker-tooling set, `three suites per issue`, 2026-09-17. **On a `Level: light`
+issue there is no verify gate and no coverage report to cite** (rule 5, tracker-tooling
+issue 40, default `q-h0925-40-3`): grade every criterion and every `## Must still be
+true` line by its ID, drive in your own private copy any criterion whose check names
+the running app, and cite the implementer's `scoped_suite.py` reading, whose report
+and failing files its final message names, as the tree reading. The runner's
+commit waits for that reading to be green.
 
 **Orient, don't explore.** Read the ledger's HEADER, `docs/patterns.md`,
 `primer.md`, the issue, and the issue's diff. Nothing else unless the diff itself
@@ -36,12 +42,22 @@ the first instance of a mistake every later issue copied. Where the diff reuses 
 shape that the patterns record does not carry, say so in your verdict as
 unverified precedent, with the file:line it was copied from.
 
-**First, build the rubric.** Turn the issue's acceptance criteria into a numbered
-list of independently checkable statements and write it into your verdict before
-you judge anything. **Every line under `## Must still be true` is a rubric item
-too**, at the same evidence bar. Those are the invariants the issue sits beside;
-an implementation that meets every criterion and breaks one of them is a
-rejection.
+**First, build the rubric.** One row per numbered item under `## Acceptance
+criteria`, named `C1`, `C2` and on, and write it into your verdict before you
+judge anything. **Every line under `## Must still be true` is a rubric item
+too**, at the same evidence bar, named by the issue's own label (`M9`) or by its
+number (`I4`). Those are the invariants the issue sits beside; an implementation
+that meets every criterion and breaks one of them is a rejection.
+
+**Every REJECT ground names a criterion or an invariant the issue holds**, by
+that name. A defect that fails none of them is not a ground: write it under
+`Beyond the criteria:` in your verdict and route it as a register row. Where it
+is a real defect the issue should have stated, a lost row or a security hole, say
+so there in one sentence: the runner takes the criteria re-check with it, which
+stops the issue and charges no strike. Tracker-tooling issue 13, fix F10 of the
+audit of 2026-09-23: eleven rejections in six runs graded beyond the criteria,
+and issue 01 of run `batch-d67136` was rejected twice on an item a verify gate
+implied while every criterion passed.
 
 **Then attack it.** Invoke /code-review on the issue's diff. Beyond it, ask the
 questions a review tool will not: does this solve the issue's actual requirement or
@@ -54,15 +70,16 @@ them**: invoke the `coderules` skill if the setup registers one, otherwise read 
 repo's own security rules. Your context does not carry them by default. If neither
 exists, say so in your report and judge against the four checks named above.
 
-**Unrequired scope is a rejection, not a smell.** Where the diff adds an
+**Unrequired scope is a finding, not a smell.** Where the diff adds an
 abstraction, parameter, hook or dependency that no acceptance criterion and no
-`## Must still be true` line requires, reject it. Cite the construct by file and
-line, and name the criterion you looked for and did not find — that citation is
-the bar, and without it you are reporting a preference rather than a finding.
-**Test files sit outside this rule**: a test may build whatever scaffolding it
-needs to pin the behaviour. This rule outranks the smell baseline's
-speculative-generality item below — that item is a judgement call, and this is a
-verdict.
+`## Must still be true` line requires, report it under `Beyond the criteria:`.
+Cite the construct by file and line, and name the criterion you looked for and did
+not find — that citation is the bar, and without it you are reporting a
+preference rather than a finding. It is a REJECT ground only where it breaks an
+item the issue names. **Test files sit outside this rule**: a test may build
+whatever scaffolding it needs to pin the behaviour. This rule outranks the smell
+baseline's speculative-generality item below — that item is a judgement call,
+and this is a finding.
 
 **The smell baseline.** On top of the repo's own standards, run this fixed list
 over the diff. It restates the code smells in Fowler's _Refactoring_, chapter 3,
@@ -90,7 +107,7 @@ the linter or the type checker already catches.
   part changes for one reason.
 - Speculative generality — a parameter, hook or abstraction for a need the issue
   does not have. Delete it. Coderules rule 4 says the same thing. Where no
-  criterion requires it, the rule above governs and the verdict is a rejection.
+  criterion requires it, the unrequired-scope rule above governs.
 - Message chains — the caller walks `a.b().c().d()`. Hide the walk behind one
   method on the first object.
 - Middle man — a unit that only forwards. Cut it and call the real target.
@@ -101,8 +118,8 @@ low-severity, with a confidence and a severity attached. Do not filter for
 importance at this stage — coverage is your job, and a downstream reader can rank.
 
 **Non-executable prose findings.** A false prose claim blocks only when a
-criterion names it or the artefact's purpose IS the claim (a guard's contract,
-an ADR asserting enforcement); otherwise route it with severity attached. When
+criterion or an invariant names it; otherwise it goes under `Beyond the
+criteria:` with severity attached. When
 you reject on a claims contract, enumerate every contradiction you can find
 between the prose and the artefact's executable record in THIS round, and name
 the defect class so the runner can count repeats. The remedy you recommend is
@@ -173,9 +190,19 @@ command deletes the work you are grading. Restore from your copy instead.
 **Grade every criterion, and default to fail.** Mark each rubric criterion pass or
 fail against the diff. **A criterion with no evidence in the diff is a FAIL.**
 
+**End the verdict with one grades line, and repeat it in your final message:**
+`Grades: C1=pass C2=fail M9=owed`, one `<name>=<word>` per rubric row, in four
+words. `pass` is met and observed. `fail` is behaviour the item demands that you
+did not observe. `owed` is behaviour correct and its written proof short: a
+missing pin, an unrun mutation, a claim wider than the code. `fault` is the item
+itself wrong, unbuildable or contradicting another. The runner passes both gates'
+lines to `charge_round.py`, which decides what the round costs, so the word is
+the verdict that counts. Tracker-tooling issue 14, fix F11 of the audit of
+2026-09-23: four runs decided the same split four ways by hand.
+
 **If the criteria themselves are wrong** — incorrect or materially incomplete
 rather than merely unmet — say so with evidence, separately from a normal
-rejection.
+rejection, and grade that item `fault`.
 
 **Ground every claim** in something you read in the diff or ran. Do not assert
 behaviour you did not check.
@@ -254,15 +281,22 @@ safety step. No mark at all is the fault, and `check_briefing_commands.py`
 refuses a briefing carrying one.
 
 Append anything a human should look at during the merge read to `merge-briefing.md`,
-one line each. Write your verdict into the issue file, proportionate to what you
-found. **Touch no code.** Your final message is three lines: verdict, where it is
-written, the routing list — the issue file is the record.
+one line each. Write your verdict to the file the round header's `Verdict goes to:` line labels `(review gate)`,
+`<run tree>/.scratch/<feature>/runs/<batch-id>/verdicts/<issue>-attempt-<N>-review.md`,
+and never into the issue file or the verify gate's file:
+a write guard refuses both where the setup registers one (the author's is
+`gate-issue-write-guard.py`, which this pack does not ship). Each gate has a verdict file
+of its own (ruling `q-fin-ea4cfa-05`). The issue file is the spec every later attempt reads.
+Keep it proportionate to what you found. **Touch no code.** Your final message is
+four lines: verdict, where it is written, the routing list, the grades line — the
+verdict file is the record.
 
 **You run at the same time as the verify gate.** Everything you write goes under
-your own heading — `## Review gate` — in the issue file and as your own lines in
-`merge-briefing.md`. Append only. Never edit, reflow or tidy a section that is not
-yours, and never assume the verify gate's verdict is present yet: it may land
-before or after you, and it is not an input to your judgement.
+your own heading — `## Review gate` — in your own verdict file, and as your own lines
+in `merge-briefing.md`, which both gates share: add lines there and never edit, reflow
+or tidy one that is not yours. Never assume the verify gate's verdict is present yet:
+it may land before or after you, and it is not an input to your judgement. A shell
+command that names its file is refused; the Read tool is the one road to it.
 
 **THE RUN'S RECORDS EXIST TWICE, AND ONLY ONE COPY IS LIVE.** Every path you are
 given — the issue file and your private copy from the spawn prompt, the register
@@ -273,6 +307,8 @@ and stale from that moment. Both files exist, both are readable, and nothing in
 either says which one anybody else is using.
 
 Write to the path you were given, character for character.
+The verdict file is the exception: the round header's `Verdict goes to:` names
+the run's own tree, and you write it there, never beside the main checkout's copy.
 
 **THE LEDGER DECIDES WHICH COPY IS LIVE. THE SHAPE OF THE PATH DOES NOT.**
 Corrected 2026-09-18 on the ruling of queue item `q-finale-2957c3-04`. This

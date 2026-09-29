@@ -930,6 +930,95 @@ class TheRunnerMarker(unittest.TestCase):
         self.assertEqual(quality_for("700", text).marked, 0)
 
 
+class ChargedRoundsTest(unittest.TestCase):
+    """Tracker-tooling issue 15, fix F12 of the audit of 2026-09-23.
+
+    `issues.jsonl` and the ledgers disagreed on strikes for 13 issues, because a
+    standards split, a runner-error annulment and the prose-deletion road each
+    cancel a strike in prose. The token now carries what the round COST, written
+    from `charge_round.py`'s output, and a reset names the round it follows.
+    Where a row carries a charge, the strike is read, not derived.
+    """
+
+    def row(self, notes, issue="710"):
+        return f"| Issue | Notes |\n|---|---|\n| {issue} | {notes} |\n"
+
+    def test_a_correction_charge_is_no_strike(self):
+        """Issue 44 of run `batch-24d0d1`, in the new spelling."""
+        text = self.row("attempt 1; gates 1: verify=pass review=reject "
+                        "charge=correction. STANDARDS-SHAPED SPLIT, so a "
+                        "CORRECTION ROUND and NOT a strike")
+        row = quality_for("710", text)
+        self.assertEqual(row.strikes, 0)
+        self.assertEqual(row.flags, ())
+
+    def test_a_none_charge_on_a_rejected_round_is_no_strike(self):
+        """Issue 163: rejected on a records criterion the runner closed."""
+        text = self.row("attempt 1; gates 1: verify=reject review=pass "
+                        "charge=none")
+        self.assertEqual(quality_for("710", text).strikes, 0)
+
+    def test_a_strike_charge_counts(self):
+        text = self.row("attempt 1; gates 1: verify=reject review=pass "
+                        "charge=strike; attempt 2; gates 2: verify=pass "
+                        "review=pass charge=none")
+        self.assertEqual(quality_for("710", text).strikes, 1)
+
+    def test_a_reset_annuls_the_strikes_charged_up_to_its_round(self):
+        """Issue 169's row writes the reset BEFORE its gate tokens, so the
+        position of the words cannot say which strikes it annuls. The round
+        it names can."""
+        text = self.row("attempt 3; criteria reset 1 of 2 after gates 2; "
+                        "gates 1: verify=pass review=reject charge=strike; "
+                        "gates 2: verify=pass review=reject charge=strike; "
+                        "gates 3: verify=reject review=pass charge=strike")
+        self.assertEqual(quality_for("710", text).strikes, 1)
+
+    # Run `batch-f43aaf`, issue 221: round 1 charged a strike on a real bug,
+    # the criteria reset after round 2 annulled it, and the run's record read
+    # `"strikes": 0` beside a ledger showing `charge=strike`. The human ruled on
+    # 2026-09-28 (option A) that the reset rule stands and the annulled
+    # strikes are counted beside it, so the record shows both.
+
+    def test_a_reset_counts_the_strikes_it_annuls(self):
+        text = self.row("attempt 3; criteria reset 1 of 2 after gates 2; "
+                        "gates 1: verify=pass review=reject charge=strike; "
+                        "gates 2: verify=pass review=reject charge=strike; "
+                        "gates 3: verify=reject review=pass charge=strike")
+        got = quality_for("710", text)
+        self.assertEqual((got.strikes, got.annulled), (1, 2))
+
+    def test_the_221_shape_reads_no_strike_and_one_annulled(self):
+        text = self.row("attempt 1; gates 1: verify=pass review=reject "
+                        "charge=strike; attempt 2; gates 2: verify=reject "
+                        "review=reject charge=none; criteria reset after "
+                        "gates 2; attempt 3; gates 3: verify=pass "
+                        "review=reject charge=correction")
+        got = quality_for("710", text)
+        self.assertEqual((got.strikes, got.annulled), (0, 1))
+
+    def test_no_reset_annuls_nothing(self):
+        text = self.row("attempt 1; gates 1: verify=reject review=pass "
+                        "charge=strike; attempt 2; gates 2: verify=pass "
+                        "review=pass charge=none")
+        self.assertEqual(quality_for("710", text).annulled, 0)
+
+    def test_a_prose_row_counts_what_its_reset_annulled(self):
+        """A row with no charge token: the reset zeroes the derived count,
+        and what it zeroed is the annulled figure."""
+        text = self.row("attempt 1; verify: reject; review: reject; attempt 2; "
+                        "criteria reset (strikes ANNULLED); verify: pass; "
+                        "review: pass")
+        got = quality_for("710", text)
+        self.assertEqual((got.strikes, got.annulled), (0, 1))
+
+    def test_attempt_three_written_once_reads_three(self):
+        """Issues 169, 92 and 146 of run `batch-24d0d1` read `attempts: 1`."""
+        text = self.row("attempt 3; criteria reset 1 of 2 (strikes ANNULLED, "
+                        "attempt refunded); gates 3: verify=pass review=reject")
+        self.assertEqual(quality_for("710", text).attempts, 3)
+
+
 class BothGateVerdicts(unittest.TestCase):
     """Ticket 37 ruling 17 puts BOTH gate verdicts on the per-issue line.
 
@@ -998,6 +1087,32 @@ class BothGateVerdicts(unittest.TestCase):
         self.assertEqual(rows["149e"].verify, tool.PASS)
         self.assertEqual(rows["149e"].review, tool.REJECT)
         self.assertEqual(rows["149c"].review, tool.PASS)
+
+
+class TheOneGateRound(unittest.TestCase):
+    """Tracker-tooling issue 40, default `q-h0925-40-2`. A light round names the
+    review gate alone, `gates N: review=<word> charge=<charge>`. Its strikes
+    are read like any other token's; its verify cell reads unread, because no
+    verify gate ran."""
+
+    def row(self, notes):
+        return f"| Issue | Notes |\n|---|---|\n| 710 | {notes} |\n"
+
+    def test_its_charges_are_read(self):
+        text = self.row("attempt 1; gates 1: review=reject charge=strike; "
+                        "attempt 2; gates 2: review=pass charge=none")
+        row = quality_for("710", text)
+        self.assertEqual((row.strikes, row.marked, row.flags), (1, 2, ()))
+
+    def test_an_uncharged_reject_is_counted_as_a_two_gate_one_is(self):
+        row = quality_for("710", self.row("attempt 1; gates 1: review=reject"))
+        self.assertEqual(row.strikes, 1)
+
+    def test_the_review_is_read_and_the_verify_is_not(self):
+        row = quality_for("710", self.row("attempt 1; gates 1: review=reject "
+                                          "charge=strike"))
+        self.assertEqual((row.verify, row.review, row.first_attempt),
+                         (tool.UNREAD, tool.REJECT, tool.REJECT))
 
 
 if __name__ == "__main__":

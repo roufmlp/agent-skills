@@ -29,7 +29,9 @@ judgement call you get to make.
 **Every question carries your recommended answer**, and is marked `[reversible]`
 or `[irreversible]`. Recommending is not deciding: the recommendation is what
 happens if nobody answers, and it is written into the file as a default rather
-than as a decision, so a later reader can tell the two apart. Mark
+than as a decision, so a later reader can tell the two apart. A default that
+changes a criterion is written inside it as ``Default (`q-<pass>-<issue>-<n>`)``,
+the one mark `check_issue_ready.py` reads (issue 43b). Mark
 `[irreversible]` only where `~/.claude/questionrules.md`'s routing table allows
 the mark — a major architectural change; deleting production rows or a
 migration's direction; money or authentication; anything shipping data or
@@ -62,6 +64,9 @@ and is deciding whether to buy a third implementer or fix the spec. Four changes
 
 - **Classes 1, 5 and 9 only** — unstated invariants, unverified premises, size.
   Those are what the record says actually fails. Skip the rest.
+  **One part of class 4 comes with you:** a guard criterion you rewrite names
+  its measured population (the `Forms:` block in class 4). Issue 53's guard was
+  rewritten by a strike-2 pass, and the population is what its gates fought over.
 - **The `Status:` and ledger guard below does not apply.** The run holds this
   issue on purpose and has stopped: no implementer is in the tree, and nothing
   else spawns until you return.
@@ -133,6 +138,24 @@ Each class has shipped a real defect through green gates.
    put it back, watch it green. Write that drive into the criterion so the
    implementer owes it. An undriven mutation is a guard nobody has proved can
    fail. (Adopted by the human 2026-08-07, from the 247-170 run.)
+   **A guard criterion names its population, measured.** A criterion that tells a
+   check to read a set of files and refuse what it cannot place carries three
+   lines inside it, or you write them:
+
+   ```
+   Forms: `.ts`, `.tsx` under `src/app/`
+   Measured by: `<the command you ran over the real tree>`, <date>
+   Outside the list: a form a gate plants that this list does not hold is a register row, not a rejection.
+   ```
+
+   You run the command yourself; the list is what it printed, not what you
+   expect. "The whole artefact" means the forms the repository holds today
+   (`~/.claude/coderules.md`, ruled `q-s4-1`, 2026-09-23). One project's issue 53
+   was rejected seven times, each time on a spelling a gate planted outside any
+   population the criterion named. A criterion that reads like a guard and is
+   not one gets `Not a guard: <why>` instead. The session runs
+   `~/.claude/skills/run-issues/check_issue_ready.py --all-guards`, which
+   refuses the stamp on either missing, so this is not optional.
 5. **Unverified premises.** Every factual claim in the issue — counts, "both
    bots", "the DB splits case variants", any impossibility claim — verified
    against real code or data. (114's headline premise was false of the actual
@@ -144,6 +167,17 @@ Each class has shipped a real defect through green gates.
    Flagging is not enough for this shape: a reader cannot tell a checked negative
    from a guessed one, and will act on both. Narrowing it is not the remedy;
    deleting it is. (Adopted by the human 2026-08-07.)
+   **Every count you write carries the command that measured it**, backticked,
+   in the same criterion. Pass `h0917c` wrote "twenty-two" colour families into
+   issue 139; the installed Tailwind ships 26. A number that is a design choice
+   or a fixture size goes on a `Not measured:` line that quotes it and says why.
+
+   **A criterion a run has reset is rewritten, never added to.** Where
+   `runs/*/harden/<issue>.md` records `criteria-fault`, replace the sentence at
+   fault, or strike it with `~~ ~~` where it stands. Issue 139c kept both rules:
+   "Both implementers built the first. Both gates graded the second." The session
+   runs `~/.claude/skills/harden-issues/check_criteria_edit.py`, which refuses
+   both faults.
 6. **Empty or missing hostile data.** Does QA or production hold data that can
    exercise each criterion? If not, say so and name the fixture to create.
    Otherwise the gates validate over an empty set. (118: five tables, zero rows.)

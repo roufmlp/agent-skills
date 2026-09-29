@@ -115,10 +115,44 @@ Then, per answer type:
   python3 ~/.claude/skills/lib/collect_shards.py --kind queue --my-shard --prefix answered --machinery
   ```
 
+  **Write the ruling into `<repo>/.scratch/rulings.md` in the same breath.** The
+  id in `answered.md` hides the item; the rulings entry is what the next
+  drafting and hardening pass reads, and `check_queue_shard.py` refuses a new
+  question whose subject one of these entries already answers. One entry per
+  answered item:
+
+  ```
+  ## <date> `<question id>` — <the subject in ten words>
+  Ruled: <their answer in one line>
+  Carried by: `<the issue file you just wrote it into>`
+  ```
+
+  Then walk the two against each other, and stop on exit 1:
+
+  ```bash
+  python3 ~/.claude/skills/lib/rulings.py --answered <your answered.md> \
+      --queue <repo>/.scratch/decisions-queue.md --rulings <repo>/.scratch/rulings.md
+  ```
+
+  It names every id you retired that no entry carries, and every entry of the
+  rulings file it could not parse. A retirement with no entry is the fault this
+  file exists to stop: the question is off the board and nothing on record
+  answers it, so the next attacker asks it again. An entry that does not parse
+  is the same fault written a different way, and it also makes this walk blame
+  you for a ruling you did record.
+
+  **Where the repo still carries a `decisions-log.md`, fold it in once.**
+  `python3 ~/.claude/skills/lib/rulings.py --fold <that file>` prints it as
+  entries; append them and stop reading the log. It holds answers they have
+  already given, and until they are entries the guard cannot see them.
+
   **`answered` is this skill's name and nothing else may take it.** An attended
   session sweeping its own queue at close follows these apply rules but is not
   the brief, so it writes `--prefix ruled` instead, and it writes three things on
   the line rather than one: the id, the date, and where the ruling is recorded.
+  Such a session commits its `ruled.md`, its rulings entry and the issue edit
+  together — `python3 ~/.claude/skills/lib/rulings.py --commit <each staged path>`
+  refuses a commit that carries the retirement and not the entry.
   The board hides the item either way. The separate name is what lets the next
   brief tell a retirement the human made in a walk from one a session recorded,
   and the third field is what lets that brief check the second kind.
@@ -161,7 +195,8 @@ Then, per answer type:
   the row closed in the register: promotion has already written its id into its
   own `closed.md`, and nothing has to be un-written. It was refused after all.
 - **A refusal they overturned** → write the issue file promotion would have written:
-  `Status: needs-harden`, one category role, a link to the finding's bug file, no
+  the `Status:` that brief's own rule sets (`parked` or `needs-harden`, and a parked
+  file carries `Parked:`), one category role, a link to the finding's bug file, no
   copied evidence, under a number from
   `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for daily-brief`
   (a number nobody claimed is refused). The row is already closed by promotion, so
@@ -335,8 +370,16 @@ regeneration:
 
 ```bash
 python3 ~/.claude/skills/lib/collect_shards.py --kind queue --repo <repo>
+python3 ~/.claude/skills/lib/retire_done_rows.py --feature <feature> --repo <repo> --cwd <repo>
 python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --repo <repo>
 ```
+
+The middle line retires every done row, so the register holds only rows nobody has
+built (issue 44 of tracker-tooling). A row at `verified` or `fixed` gets its id
+appended to the main checkout's `closed` shard; a `df-NN` row waits until its merge.
+Run it once per feature of each repo. `--cwd <repo>` names the tree it writes, because
+the brief stands in no worktree of that repo. A `held:` line on stderr names a done row
+it could not retire, with the reason; carry it into section 3 as a repair for the human.
 
 Read, per repo in `repos.md`: `.scratch/decisions-queue.md`, every
 `.scratch/<feature>/runs/<batch-id>/run.md`, every `merge-briefing.md` beside a
@@ -441,6 +484,20 @@ per-run table, the per-issue table and the longest steps by kind. It is GENERATE
 from `runs.jsonl` and a hand edit to it is refused, so name it and let them open it;
 never read a figure out of it into the brief.
 
+**The board is regenerated for every repo this brief reads, and named** (issue 05
+of the tracker-tooling set, ruled by the human on 2026-09-13):
+
+```bash
+python3 ~/.claude/skills/lib/board.py <that repo's issues dir> --out <that feature dir>/board.html
+```
+
+Name the path it wrote and stop. The board is a picture of the tracker — columns
+by status, the graph, the next batch outlined — and it is generated from the files
+every time, so a stale copy cannot exist. **Never read a figure off it into the
+brief.** Every number it draws has a command that prints it, and the brief already
+runs those. Where it exits 1, paste the refusal in beside the sweep's: that tracker
+could not be read, and the brief is where they find that out.
+
 One command's output plus the two lines it cannot carry. This is not a fourth
 section, and the brief still has thirty minutes.
 
@@ -463,6 +520,26 @@ default already applied, which is the point of the phase.
 round already fixed and merged. Listing them beside refusals invited them to overturn
 success and mint issue files for shipped work. Keep the count, because a round that
 fixes nothing is worth them noticing.
+
+### 1c. Parked issues — the sweep
+
+```bash
+python3 ~/.claude/skills/lib/sweep_parked.py <that repo's issues dir>
+```
+
+Promotion parks a medium or low row that names no blocker, and after that nothing
+offers it: not `/run-issues all`, not `next_batch.py`, not `/harden-issues`. This
+is the one place a parked issue reaches a human, so the sweep runs here and its
+output goes in this section whole — the table and the `/harden-issues` line under
+it. **Where it prints `No parked issue is due`, leave the section out entirely.**
+**Where it exits 1, keep the section and paste the refusal into it** — the sweep
+could not read that tracker, and a refusal dropped for an empty list is a broken
+tracker reading exactly like a clean one.
+It is a decision (bring this back, or leave it), which is why it is its own
+section and not a paragraph inside the promotions screen.
+
+The line it prints is a command the human pastes, and nothing here acts on it: this
+skill hardens nothing and un-parks nothing.
 
 ### 2. Decisions — the next ten
 

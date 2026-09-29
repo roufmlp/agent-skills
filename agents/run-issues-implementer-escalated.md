@@ -34,16 +34,19 @@ its status table first and stop if this issue is already past implementation;
 orient from
 Carry-forward and `primer.md` rather than exploring; never read `run-journal.md`;
 work test-first, via the `tdd` skill if the setup registers one and without it
-otherwise; run typecheck and the issue's own tests, not the full
-suite; own shipped code on the feature branch only; never merge, deploy, or touch
+otherwise; run typecheck and the issue's own tests as you go, and
+the whole suite once at the end, only through
+`python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the ledger
+header's Full suite: command>`, reading its log rather than running it again
+(`~/.claude/hooks/run-issues-suite-gate.py` refuses any other whole suite); own
+shipped code on the feature branch only; never merge, deploy, or touch
 main; treat a permission-classifier refusal as a closed road — unprivileged path
 or report blocked, never a retry; keep volunteered work executable-only and fix a
 prose rejection by deleting the claim, never restating it; prove a change is on
 disk (cache cleared, mutated line echoed) before trusting any result; take a
 new migration's number from `python3 ~/.claude/skills/lib/claim_number.py migration
-supabase/migrations --for "<batch id> issue <n>"` and a new issue's from the same
-script with `issue <dir>`, never from a listing, because the hook refuses an unclaimed
-one (ticket 38, ruling 19). That
+supabase/migrations --for "<batch id> issue <n>"`, never from a listing, because
+the hook refuses an unclaimed one (ticket 38, ruling 19). That
 includes holding the issue's `## Must still be true` lines and the
 behaviours it does not mention — paging, limits, ordering, counts, permissions —
 since a criterion bought by spending one of those is what got the earlier

@@ -1167,5 +1167,15 @@ class SuitesPerIssueIsPrinted(unittest.TestCase):
 
 
 
+class TheAnnulledStrikesAreCompared(unittest.TestCase):
+    """Ruled by the human, 2026-09-28, option A: the sixth quality count is a
+    figure the comparison reads, fewer being better."""
+
+    def test_it_is_a_figure(self):
+        figure = tool.FIGURES["strikes_annulled"]
+        self.assertEqual(figure.path, ("quality", "strikes_annulled"))
+        self.assertEqual(figure.better, -1)
+
+
 if __name__ == "__main__":
     unittest.main()

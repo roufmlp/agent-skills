@@ -8,13 +8,21 @@ why the cap counts an explicit `attempt N` marker and refuses when it finds
 none it can trust.
 """
 
+import contextlib
+import io
+import os
 import unittest
 
 from check_attempt_cap import (
+    MAX_ATTEMPTS,
+    MAX_LIGHT_ATTEMPTS,
+    MAX_RESETS,
     Decision,
+    charge_faults,
     count_markers,
     decide,
     find_row,
+    main,
 )
 
 LEDGER = """Owner: run-issues-batch-0a1b2c
@@ -145,9 +153,10 @@ class Decide(unittest.TestCase):
     def test_a_criteria_reset_refunds_the_attempt_it_consumed(self):
         """The human's ruling of 2026-09-20. Three attempts and one reset
         spends two."""
-        row = ("| 501 | in-progress | attempt 1; gates 1: verify=reject review=reject; "
-               "attempt 2; gates 2: verify=reject review=reject; criteria reset 1; "
-               "attempt 3; gates 3: verify=reject review=reject |")
+        row = ("| 501 | in-progress | attempt 1; gates 1: verify=reject review=reject "
+               "charge=strike; attempt 2; gates 2: verify=reject review=reject "
+               "charge=strike; criteria reset 1 after gates 2; attempt 3; "
+               "gates 3: verify=reject review=reject charge=strike |")
         ledger = HEADER + row + "\n"
         d = decide(ledger, "501")
         self.assertTrue(d.allowed, d.reason)
@@ -223,6 +232,299 @@ class Decide(unittest.TestCase):
 
     def test_decision_is_a_plain_value(self):
         self.assertIsInstance(decide(LEDGER, "293"), Decision)
+
+
+
+class RoundChargesTest(unittest.TestCase):
+    """Tracker-tooling issue 15, fix F12 of the audit of 2026-09-23.
+
+    A rejected gate round carries what it charged, and a reset names the round
+    it follows, or the next spawn is refused. `run_quality.py` then reads the
+    strike instead of deriving it from prose.
+    """
+
+    def ledger(self, stamps, issue="400"):
+        return HEADER + f"| {issue} | in-progress | {stamps} |\n"
+
+    def test_a_rejected_round_with_no_charge_is_refused(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=pass review=reject"), "400")
+        self.assertFalse(decision.allowed)
+        self.assertIn("gates 1", decision.reason)
+        self.assertIn("charge_round.py", decision.reason)
+
+    def test_a_charged_rejected_round_is_allowed(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=pass review=reject charge=strike"),
+            "400")
+        self.assertTrue(decision.allowed, decision.reason)
+
+    def test_a_passing_round_needs_no_charge(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=pass review=pass"), "400")
+        self.assertTrue(decision.allowed, decision.reason)
+
+    def test_a_passing_round_charged_a_strike_is_refused(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=pass review=pass charge=strike"), "400")
+        self.assertFalse(decision.allowed)
+
+    def test_a_reset_naming_no_round_is_refused(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=pass charge=strike; "
+            "criteria reset 1 of 2"), "400")
+        self.assertFalse(decision.allowed)
+        self.assertIn("after gates", decision.reason)
+
+    def test_a_reset_naming_a_round_the_row_lacks_is_refused(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "criteria reset after gates 2"), "400")
+        self.assertFalse(decision.allowed)
+        self.assertIn("gates 2", decision.reason)
+
+    def test_a_reset_naming_its_round_is_allowed_and_still_refunds(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=pass charge=strike; "
+            "criteria reset 1 of 2 after gates 2"), "400")
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.resets, 1)
+        self.assertEqual(decision.spent, 1)
+
+    def test_a_reset_named_once_and_mentioned_again_in_prose_is_allowed(self):
+        """Found by the review of 2026-09-23: rows are prose, and a runner that
+        names the reset and then explains it must not be refused for it.
+
+        Asked of `charge_faults` alone. The cap itself counts every mention
+        of a reset as a reset, which is older than the charge and not this
+        case's subject."""
+        from check_attempt_cap import charge_faults
+        self.assertEqual(charge_faults(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=pass charge=strike; "
+            "criteria reset 1 of 2 after gates 2; the criteria reset annulled "
+            "both strikes"), [])
+
+    def test_a_reset_mentioned_twice_counts_once(self):
+        """Tracker-tooling issue 20. The row names its reset and explains it,
+        and the cap read two resets and froze the criteria."""
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=pass charge=strike; "
+            "criteria reset 1 of 2 after gates 2; the criteria reset annulled "
+            "both strikes"), "400")
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.resets, 1)
+        self.assertEqual(decision.spent, 1)
+
+    def test_two_resets_named_at_two_rounds_still_freeze_the_criteria(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "criteria reset after gates 1; attempt 2; gates 2: verify=reject "
+            "review=pass charge=strike; criteria reset after gates 2"), "400")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.resets, 2)
+        self.assertIn("frozen", decision.reason)
+
+    def test_a_counted_reset_stamp_that_names_no_round_is_refused(self):
+        """Found by the review of issue 20: once one reset is named, a second
+        counted stamp with no round would go uncounted and the criteria would
+        never freeze."""
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "criteria reset 1 of 2 after gates 1; attempt 2; gates 2: "
+            "verify=reject review=pass charge=strike; criteria reset 2 of 2"),
+            "400")
+        self.assertFalse(decision.allowed)
+        self.assertIn("2 of 2", decision.reason)
+
+    def test_a_zero_padded_round_is_the_same_round(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=pass charge=strike; "
+            "criteria reset after gates 2; the criteria reset after gates 02 "
+            "annulled both"), "400")
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.resets, 1)
+
+    def test_the_charges_alone_can_be_checked_at_the_commit_step(self):
+        """No spawn follows a commit, so the cap has nothing to authorise.
+        Issue 163 went `done` at attempt 1 with its rejected round uncharged."""
+        import contextlib, io, tempfile, pathlib
+        from check_attempt_cap import main
+        path = pathlib.Path(tempfile.mkdtemp()) / "run.md"
+        path.write_text(self.ledger("attempt 1; gates 1: verify=reject "
+                                    "review=pass; committed abc1234"))
+        with contextlib.redirect_stderr(io.StringIO()), \
+                contextlib.redirect_stdout(io.StringIO()):
+            refused = main(["--ledger", str(path), "--issue", "400",
+                            "--charges"])
+        self.assertEqual(refused, 1)
+        path.write_text(self.ledger("attempt 1; attempt 2; attempt 3; "
+                                    "gates 3: verify=pass review=pass"))
+        with contextlib.redirect_stderr(io.StringIO()), \
+                contextlib.redirect_stdout(io.StringIO()):
+            allowed = main(["--ledger", str(path), "--issue", "400",
+                            "--charges"])
+        self.assertEqual(allowed, 0, "the cap is not asked at the commit step")
+
+
+class ProseAboutAnAttempt(unittest.TestCase):
+    """Tracker-tooling issue 27. On run `batch-46e4de` the cap read issue 33b's
+    phrase "attempt 1's files" as a second attempt, and the runner reworded the
+    row. The journal answered with a reminder; a reminder is not a fix."""
+
+    def ledger(self, stamps):
+        return HEADER + f"| 400 | in-progress | {stamps} |\n"
+
+    def test_a_possessive_mention_is_not_an_attempt(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 1's files preserved under runs/"), "400")
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.attempt, 2)
+
+    def test_a_quoted_or_repeated_stamp_is_one_attempt(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "the brief quotes `attempt 1` again; attempt 1 (re-stamped)"), "400")
+        self.assertEqual(decision.attempt, 2)
+
+    def test_three_stamps_still_reach_the_cap(self):
+        decision = decide(self.ledger(
+            "attempt 1; gates 1: verify=reject review=reject charge=strike; "
+            "attempt 2; gates 2: verify=reject review=reject charge=strike; "
+            "attempt 3; gates 3: verify=reject review=reject charge=strike; "
+            "attempt 3's review named the same fault"), "400")
+        self.assertFalse(decision.allowed)
+
+
+class TheLightCap(unittest.TestCase):
+    """Tracker-tooling issue 40, AC3 and AC6: a `Level: light` issue gets two
+    attempts, and everything else keeps three. The level is read through
+    `issue_level.py` from the issue file in the run's tree, on every call."""
+
+    ROW = "| 12 | in-progress | attempt 1; attempt 2 |\n"
+
+    def setUp(self):
+        import tempfile
+        self.scratch = tempfile.TemporaryDirectory()
+        self.tree = os.path.realpath(self.scratch.name)
+        self.ledger = os.path.join(self.tree, ".scratch", "feat", "runs",
+                                   "batch-abc123", "run.md")
+        os.makedirs(os.path.dirname(self.ledger))
+        os.makedirs(os.path.join(self.tree, "docs", "agents"))
+        with open(os.path.join(self.tree, "docs", "agents", "risk-paths.md"),
+                  "w") as handle:
+            handle.write("No risk paths: a fixture.\n")
+        self.write_ledger(self.tree)
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def write_ledger(self, worktree, row=None):
+        with open(self.ledger, "w") as handle:
+            handle.write(f"Owner: run-issues-batch-abc123\nWorktree: `{worktree}`"
+                         "\n\n## Status\n\n| Issue | Status | Stamps |\n"
+                         "|---|---|---|\n" + (row or self.ROW))
+
+    def issue(self, level_line, tree=None):
+        path = os.path.join(tree or self.tree, ".scratch", "feat", "issues",
+                            "12-x.md")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as handle:
+            handle.write((level_line + "\n" if level_line else "") + "# 12\n")
+
+    def cap(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(["--ledger", self.ledger, "--issue", "12"])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_light_issue_is_refused_its_third_attempt(self):
+        self.issue("Level: light")
+        code, _, err = self.cap()
+        self.assertEqual(code, 1, err)
+        self.assertIn("Level: light", err)
+        self.assertIn("cap of two", err)
+        self.assertIn("light: two attempts spent", err)
+
+    def test_a_full_issue_is_allowed_its_third_attempt(self):
+        self.issue("Level: full")
+        code, out, err = self.cap()
+        self.assertEqual(code, 0, err)
+        self.assertIn("attempt 3", out)
+
+    def test_a_light_issue_keeps_its_second_attempt(self):
+        self.issue("Level: light")
+        self.write_ledger(self.tree, "| 12 | in-progress | attempt 1 |\n")
+        code, out, err = self.cap()
+        self.assertEqual(code, 0, err)
+        self.assertIn("attempt 2, 1 of 2 spent", out)
+
+    def test_anything_but_level_light_is_full(self):
+        """AC6: no line, another word, and no file at all."""
+        for line in (None, "Level: medium"):
+            with self.subTest(line=line):
+                self.issue(line)
+                code, out, err = self.cap()
+                self.assertEqual(code, 0, err)
+                self.assertIn("attempt 3", out)
+        os.remove(os.path.join(self.tree, ".scratch", "feat", "issues", "12-x.md"))
+        code, out, err = self.cap()
+        self.assertEqual(code, 0, err)
+        self.assertIn("attempt 3", out)
+        self.assertIn("no issue file", err)
+
+    def test_the_level_is_read_in_the_tree_the_worktree_line_names(self):
+        """Seam pass h0925: light beside the ledger, full in the run's tree."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as other:
+            other = os.path.realpath(other)
+            self.issue("Level: light")
+            self.issue("Level: full", tree=other)
+            self.write_ledger(other)
+            code, out, err = self.cap()
+            self.assertEqual(code, 0, err)
+            self.assertIn("attempt 3", out)
+
+    def test_a_lift_to_full_between_two_calls_is_read(self):
+        self.issue("Level: light")
+        self.assertEqual(self.cap()[0], 1)
+        self.issue("Level: full")
+        self.assertEqual(self.cap()[0], 0)
+
+    def test_the_full_caps_are_unchanged(self):
+        self.assertEqual((MAX_ATTEMPTS, MAX_RESETS, MAX_LIGHT_ATTEMPTS), (3, 2, 2))
+
+
+class TheOneGateRound(unittest.TestCase):
+    """Seam pass h0925, from issue 38: a light round's token names the review
+    gate alone, and a rejected one with no charge is flagged."""
+
+    def row(self, stamps):
+        return f"| 400 | in-progress | {stamps} |"
+
+    def test_a_one_gate_reject_with_no_charge_is_a_fault(self):
+        faults = charge_faults(self.row("attempt 1; gates 1: review=reject"))
+        self.assertEqual(len(faults), 1)
+        self.assertIn("gates 1", faults[0])
+
+    def test_a_one_gate_reject_with_its_charge_is_clean(self):
+        self.assertEqual(charge_faults(self.row(
+            "attempt 1; gates 1: review=reject charge=strike")), [])
+
+    def test_a_one_gate_pass_charged_a_strike_is_a_fault(self):
+        self.assertEqual(len(charge_faults(self.row(
+            "attempt 1; gates 1: review=pass charge=strike"))), 1)
+
+    def test_the_two_gate_token_reads_as_before(self):
+        self.assertEqual(len(charge_faults(self.row(
+            "attempt 1; gates 1: verify=pass review=reject"))), 1)
+        self.assertEqual(charge_faults(self.row(
+            "attempt 1; gates 1: verify=reject review=pass charge=strike")), [])
 
 
 if __name__ == "__main__":

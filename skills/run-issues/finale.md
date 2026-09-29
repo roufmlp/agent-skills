@@ -21,16 +21,15 @@ python3 ~/.claude/skills/run-issues/check_finale_stage.py --ledger <run.md> --to
 
 It permits the next stage in the chain and a repeat of the current one, and refuses a
 jump, a reversal and a ledger with no state; its docstring holds the three runs that
-earned it. Promotion is safe to re-enter — it deletes each row as it resolves it — and
-the board render is safe to repeat:
+earned it. `finale_reds.py` is safe to re-enter — it writes no row twice — and the board
+render is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
    cache** (delete `.next` / `dist` first — a warm cache agrees with whatever it
    already compiled). Committed run state is build input: the ledger, journal and
    issue files sit inside the repo, so whatever scans the project scans them too.
    Confirm the toolchain excludes them, and treat a code fence in a write-up as
-   something the build may try to compile. Failures reopen the offending issue
-   through the per-issue loop.
+   something the build may try to compile.
 
    **The cold-cache build destroys the dev server's build directory, so this step
    hands the next one a working server.** After the build finishes, `preview_start`
@@ -62,15 +61,33 @@ the board render is safe to repeat:
    ```
 
    **Run the suite, the build and the citation pass under the step wrapper** (ticket
-   37 of the pilot-delivery map, ruling 19). It stamps start, end and exit code into
-   `runs/<batch-id>/steps.jsonl` and passes the command's own exit code straight
-   through, so a refusal still stops the finale exactly where it stopped before:
+   37, ruling 19): it stamps start, end and exit code into `runs/<batch-id>/steps.jsonl`
+   and passes the exit code through. The suite also goes through the suite wrapper at
+   stage `finale`, which `run-issues-suite-gate.py` passes once `State:` names a finale stage:
 
    ```
-   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind suite --label "full suite" -- <the suite command>
+   python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind suite --label "full suite" -- python3 ~/.claude/skills/run-issues/run_suite.py --stage finale -- <the suite command>
    python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind build --label "cold-cache build" -- <the build command>
    python3 ~/.claude/skills/run-issues/run_step.py --batch <batch-id> --kind citation --label "citation pass" -- <the citation command>
    ```
+
+   The suite wrapper runs the repo's harness suite after it, every finale, where the
+   project's run-isolation contract names a `harnessSuite`; its red files join the
+   record's failing files, and the call exits red if either suite did.
+
+   **Then turn the suite's reds into register rows, before step 2's sweep** (issue 39).
+   The wrapper adds coverage to a vitest suite itself and prints the report's path,
+   graded here, never by a second suite. Drop both coverage flags below where it
+   printed no report:
+
+   ```
+   python3 ~/.claude/skills/run-issues/finale_reds.py --run <run dir> --coverage <the report path the wrapper printed> --diff-range <fork-point>..HEAD
+   ```
+
+   Each red file, each file the coverage check refuses, and a red naming no file become
+   one `open` row, mapped to the issue whose `Touches:` meets it. A red test reopens
+   nothing; the typecheck and the build still do. List every id it prints in the
+   briefing. Exit 2 means it found no `finale` record: the suite has not run.
 
    The five kinds are `citation`, `suite`, `build`, `board` and `cost`, and a sixth
    spelling is REFUSED before the command runs, because a step stamped under a kind
@@ -141,24 +158,23 @@ the board render is safe to repeat:
    branches from a worktree cut hours or days earlier, so the human's rulings since the
    cut are invisible to every agent in the pipeline. The finale diffs the merge base
    against main's current tip and reads every commit touching an issue in scope.
-   Anything he already answered leaves the briefing, and the briefing says he
-   answered it. (Adopted 2026-08-10; `decisions.md` holds the near miss.)
+   Anything the human already answered leaves the briefing, and the briefing says
+   they answered it. (Adopted 2026-08-10; `decisions.md` holds the near miss.)
 
    **Sweep the register for rows their own issue already fixed.** A review gate files
    a row, the issue's correction round fixes it inside the commit the gate was
-   reading, and nothing re-reads the row afterwards — so promotion, which reads
-   neither the bug file nor the diff, mints an issue for work that has shipped. The
+   reading, and nothing re-reads the row afterwards — so the row reaches the human
+   as work still owed after it shipped. The
    finale already holds the commits, so it does the re-reading: any row whose issue
    committed after the row was filed is checked against that commit and marked
-   `verified` where the fix landed, which routes it to promotion's `fixed` exit
+   `verified` where the fix landed, which step 3's `retire_done_rows.py` retires
    (register row `seam-h04`; remedy chosen by the human, 2026-08-10).
 
    **Then read the sweep back over the whole run, and a non-zero exit stops the finale
-   BEFORE promotion** (ticket 36, ruling 12). Every row this run owns must be one
+   BEFORE step 3** (ticket 36, ruling 12). Every row this run owns must be one
    somebody decided: a status the machine knows, and a note saying why it stands where
    it does. A row left `open` WITH ITS REASON passes and that is deliberate; a row
-   saying nothing does not, because promotion reads the status cell and would mint an
-   issue file for work nobody has judged.
+   saying nothing does not, because it reaches the human as work nobody has judged.
 
    ```
    python3 ~/.claude/skills/run-issues/check_register_status.py <register> --sweep <batch-id>
@@ -170,48 +186,28 @@ the board render is safe to repeat:
    If the finale fails on a usage limit, leave the ledger at `finale-judgment`,
    write the halt block, and revive after reset — never downgrade it to save the
    wait, and never declare the run complete with the judgment half unrun.
-3. **Promotion — the last phase that resolves findings, and the only door into
-   `issues/`.** Spawn one
-   `promotion` agent **carrying `model:` set to the `promotion=` value on the
-   ledger's `Model map at launch:` line** — it is one of the twelve mapped roles,
-   so `model-map-gate.py` refuses a spawn that omits it (ticket 39, ruling 10).
-   Its prompt names the issue directory and the claim command
-   `python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for "promotion <batch id>"`, one call per
-   file: the number is claimed atomically across every worktree, never read off a
-   listing, and `number-claim-guard.py` refuses a file under an unclaimed one (ticket
-   38 of the pilot-delivery map, rulings 7 and 16). Run it over every register row this run wrote, **plus every row anywhere in
-   the register that already reads `verified`**. A row already at
-   `verified` exits as `fixed`, before audience is even read, because the run fixed it
-   and the fix is in the commit. That exit takes no judgement, so widening the scope
-   cannot promote anything wrongly, and it is what sweeps up a `df-NN` row left by a
-   direct fix — see "The direct road" in `~/.claude/CLAUDE.md`. Without the sweep those
-   rows belong to no run and accumulate for ever (ticket 29 of the pilot-delivery map,
-   2026-08-12). Of the rest it promotes on the audience-and-severity
-   thresholds, and refuses the others. A promoted row becomes an issue file at the
-   status that brief sets, one category role, and a link to its bug file. All three
-   exits delete the row, so the register's length stays the promotion backlog and
-   nothing else.
+3. **Promotion left the run** (issue 39). The finale spawns no promotion: the rows
+   this run wrote, `finale_reds.py`'s included, wait in the register for the human,
+   and `/daily-brief` carries them. The ledger still passes through
+   `finale-promotion`, and this step's one duty is issue 44's: in this tree, run
+   `python3 ~/.claude/skills/lib/retire_done_rows.py --feature <feature>`, and every
+   row still at `verified` or `fixed` leaves the register. The briefing's
+   `## Promotion` section lists each row the run wrote, by id. `Issues minted` reads
+   0, and `Register rows left` counts those rows.
 
-   **The thresholds live in `~/.claude/agents/promotion.md` and nowhere else.** Both
-   skills spawn the one agent, so a run brief that restates a threshold restates a
-   figure it cannot keep current; `decisions.md` holds the day both files carried a
-   stale one. Name the exits here; read the numbers there.
+   **Then check that `## Skipped or blocked` names every issue the ledger blocked**, a
+   light issue the cap stopped at two attempts included (tracker-tooling issue 40). Exit
+   1 names each one missing; add it with its row's reason and re-run. Exit 2 read nothing.
 
-   **`fixed` is reported as a count and never as a refusal** (T15-3, ruled
-   2026-08-06). A run that fixes work must not report that work under a word the
-   daily brief offers to overturn.
-
-   **The runner never promotes rows itself.** This is the same call as the board in
-   step 4, for the same reason: by run end the runner's context is the most expensive
-   in the pipeline, and writing issue files is repetitive work that has no business
-   in it. The runner spawns, gets two lists back, and appends them to
-   `merge-briefing.md`, one line each. `/daily-brief` carries both to the human and they
-   hold the veto over either direction.
+   ```
+   python3 ~/.claude/skills/run-issues/check_briefing_blocked.py --ledger <run.md> --briefing .scratch/<feature>/runs/<batch-id>/merge-briefing.md
+   ```
 4. **Drop what this run made, then measure the run and append its row.**
    The judgement step above is the last thing that drives the app, so anything the
    launch created outside git goes first here: this run's databases, and any
    workspace row or sandbox tenant the launch seeded. **Where the project declares a
-   run-isolation contract, run the `drop` verb that declaration names** — it is the
+   run-isolation contract, run the `drop` verb that declaration names** (a contract
+   that declares no isolation mechanism has nothing to drop) — it is the
    same file the launch's permission floor graded, so the command is already
    permitted. A drop matches on the batch id in the name, takes the run worktree's
    database and every private copy's, and KEEPS any a session still holds. Dropping

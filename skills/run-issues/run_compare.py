@@ -136,6 +136,10 @@ FIGURES = {
     "strikes": Figure("strikes", ("quality", "strikes"), "quality", better=-1),
     "escalations": Figure(
         "escalations", ("quality", "escalations"), "quality", better=-1),
+    # Option A of 2026-09-28: the strikes a criteria reset took back.
+    "strikes_annulled": Figure(
+        "strikes annulled", ("quality", "strikes_annulled"), "quality",
+        better=-1),
     # Ruling 14's one threshold.
     "cache_ratio": Figure(
         "cache read-to-write", ("cache", "ratio"), "cache", unit="to 1",

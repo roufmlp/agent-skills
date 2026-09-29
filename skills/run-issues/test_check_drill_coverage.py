@@ -138,6 +138,65 @@ def test_an_empty_section_is_exit_two():
 
 # ── The accumulate-never-overwrite rule ─────────────────────────────────────
 
+# ── The verdict lives in the run, the criteria in the issue ─────────────────
+#
+# Issue 24 of the tracker-tooling set, 2026-09-23: a gate writes its verdict to
+# `runs/<batch-id>/verdicts/<issue>-attempt-<N>.md`, never into the issue file.
+
+LEANED = (
+    "7. **The shared bucket is answered — PASS.** Sixteen files rather than\n"
+    "   the nine predicted. The record drives unheld against held (17 of 17).\n")
+
+
+def _two_files(tmp, verdict_text):
+    issue_path = os.path.join(tmp, "114-issue.md")
+    verdict_path = os.path.join(tmp, "114-attempt-1.md")
+    with open(issue_path, "w") as handle:
+        handle.write(CRITERIA)
+    with open(verdict_path, "w") as handle:
+        handle.write(verdict_text)
+    return issue_path, verdict_path
+
+
+def _main(argv):
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()), \
+            contextlib.redirect_stderr(io.StringIO()) as err:
+        return mod.main(argv), err.getvalue()
+
+
+def test_the_verdict_file_is_graded_against_the_issue_s_criteria():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        issue_path, verdict_path = _two_files(
+            tmp, "## Review gate\n\n" + LEANED)
+        code, err = _main(["--issue", issue_path, "--verdict", verdict_path,
+                           "--section", "## Review gate"])
+    assert code == 1, err
+    assert "criterion 7" in err
+
+
+def test_a_verdict_file_without_the_section_is_exit_two():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        issue_path, verdict_path = _two_files(tmp, "## Verify gate\n\n" + LEANED)
+        code, err = _main(["--issue", issue_path, "--verdict", verdict_path,
+                           "--section", "## Review gate"])
+    assert code == 2, err
+
+
+def test_an_unreadable_verdict_file_is_exit_two():
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        issue_path, _ = _two_files(tmp, "")
+        code, err = _main(["--issue", issue_path, "--verdict",
+                           os.path.join(tmp, "absent.md"),
+                           "--section", "## Review gate"])
+    assert code == 2
+    assert "absent.md" in err
+
+
 def test_a_findings_table_numbered_from_one_does_not_erase_the_rubric():
     # The bug that made the first working draft report nine criteria silent:
     # the findings table restarts at 1 and overwrote the rubric's entries.

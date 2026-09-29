@@ -74,7 +74,8 @@ I start one by naming it: **"direct road, issue NN"**. Then, in order:
    time. An agent works from `/tdd` and `/code-review` instead.
 4. Write both records, before the merge: a register row at `verified`, prefix `df-NN`,
    never reused; and `bugs/df-NN.md`, about fifteen lines, saying what changed and why.
-   The row routes the fix and dies at the next promotion; the bug file is what survives.
+   The row routes the fix. Once the merge puts it in main, the next finale or daily brief
+   retires it, and the bug file is what survives.
 5. Merge to local main. The push stays mine.
 
 Ruled 2026-08-12.
@@ -140,8 +141,9 @@ open questions, records each default as a default rather than a decision, and
 queues it to its own shard of `.scratch/decisions-queue.d/`, which
 `collect_shards.py` concatenates into `.scratch/decisions-queue.md`. Only
 genuinely irreversible calls wait:
-a split, a `wontfix` close, a migration's direction, a money or auth rule, anything
-that ships data or commits a public contract. `daily-brief` collects the queues and
+a split the session cannot cut, harden and stamp itself, a `wontfix` close, a
+migration's direction, a money or auth rule, anything that ships data or commits a
+public contract. `daily-brief` collects the queues and
 carries my answers back out.
 
 **An attended session sweeps its own queue at close** (ruled 2026-08-08). Where I am at

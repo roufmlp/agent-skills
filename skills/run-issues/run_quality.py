@@ -252,6 +252,43 @@ RESET = _CAP.MARKER["criteria reset"]
 # it. A row carrying a token never reaches it.
 GATE_ROUND = _CAP.MARKER["gate round"]
 
+# **The charge ends the derivation where it is written** (tracker-tooling issue
+# 15, fix F12 of the audit of 2026-09-23). `issues.jsonl` and the ledgers
+# disagreed on strikes for 13 issues. Where a row's tokens carry `charge=`, a
+# strike is a `charge=strike` on a round after the last `criteria reset after
+# gates N`, and nothing is derived. A row with no charge reads as before.
+RESET_ROUND = _CAP.MARKER["reset round"]
+
+
+def charged_strikes(row):
+    """`(strikes, flags, annulled)` read off the charges, or None on a row
+    with none. `annulled` counts the strikes a criteria reset took back:
+    the human ruled on 2026-09-28 (option A) that the reset rule stands and the
+    record shows what it annulled, after run `batch-f43aaf` recorded
+    `"strikes": 0` beside a ledger that showed `charge=strike` on issue 221."""
+    rounds = list(GATE_ROUND.finditer(row or ""))
+    if not any(found.group("charge") for found in rounds):
+        return None
+    after = max((int(n) for n in RESET_ROUND.findall(row)), default=0)
+    strikes, flags, annulled = 0, [], 0
+    for found in rounds:
+        charge = (found.group("charge") or "").lower()
+        # A light round names the review gate alone (issue 40): no verify word.
+        rejected = "reject" in ((found.group("verify") or "").lower(),
+                                found.group("review").lower())
+        struck = charge == "strike" or (rejected and not charge)
+        if int(found.group("round")) <= after:
+            annulled += struck
+            continue
+        if struck:
+            strikes += 1
+        if rejected and not charge:
+            flags.append(
+                f"gates {found.group('round')} was rejected and carries no "
+                "charge. Counted as one; read the row before quoting the "
+                "figure.")
+    return strikes, flags, annulled
+
 # A gate stating its verdict, and NOTHING else that names a gate. The verdict
 # word must sit against the role word, with only a variant name, a separator
 # and markdown emphasis allowed between: `verify: pass`, `review REJECT`,
@@ -322,6 +359,8 @@ class Issue:
     first_attempt: str = UNREAD
     corrections: int = 0
     strikes: int = 0
+    # The strikes a criteria reset took back (ruled 2026-09-28, option A).
+    annulled: int = 0
     flags: tuple = ()
     # Ruling 17 of ticket 37 puts BOTH gate verdicts on the per-issue line.
     # `first_attempt` collapses them into one word, which is right for ruling
@@ -391,8 +430,9 @@ def marked_verdicts(text):
     return tuple(
         pair
         for found in GATE_ROUND.finditer(text or "")
-        for pair in (("verify", found.group("verify").lower()),
-                     ("review", found.group("review").lower()))
+        for pair in ((("verify", found.group("verify").lower()),)
+                     if found.group("verify") else ())
+        + (("review", found.group("review").lower()),)
     )
 
 
@@ -449,12 +489,13 @@ def issue_quality(ledger_text):
         # 2026-08-17 and older ledgers are still read.
         spans = segments or ((1, row),)
 
-        strikes, flags = 0, []
+        strikes, flags, annulled = 0, [], 0
         for number, text in spans:
             rejected = _outcome(text) == REJECT
             if rejected:
                 strikes += 1
             if RESET.search(text):
+                annulled += strikes
                 # `SKILL.md` step 8: the earlier attempts were graded against a
                 # spec that no longer exists, so every strike to here goes, not
                 # one of them. Run `batch-b5e96d`'s issue 531 says the same in
@@ -470,6 +511,11 @@ def issue_quality(ledger_text):
                     f"and the row denies the strike. Counted as one; read the "
                     f"row before quoting the figure.")
 
+        charged = charged_strikes(row)
+        if charged is not None:
+            strikes, flags, annulled = charged
+            flags = [f"issue {issue}: {flag}" for flag in flags]
+
         # One call, not two. Written as `_by_gate(...)[0]` and
         # `_by_gate(...)[1]` until the review of 2026-09-06: two identical
         # parses per row, and two call sites that had to stay in step or the
@@ -481,7 +527,10 @@ def issue_quality(ledger_text):
             # was attempted. `render_quality` prints that cell as `not
             # recorded`, because a row reading 0 on an issue that shipped is a
             # false figure in a briefing.
-            attempts=len(spans) if segments else 0,
+            # The HIGHEST number, not the count of numbers: issues 169, 92
+            # and 146 of run `batch-24d0d1` write `attempt 3` once, after two
+            # rounds a reset annulled, and read one attempt.
+            attempts=max(number for number, _ in segments) if segments else 0,
             first_attempt=_outcome(spans[0][1]),
             verify=verify,
             review=review,
@@ -490,6 +539,7 @@ def issue_quality(ledger_text):
                          + sum(HOW_MANY[word.lower()]
                                for word in WORDED_ROUNDS.findall(row))),
             strikes=strikes,
+            annulled=annulled,
             flags=tuple(flags),
         ))
     return tuple(found)
@@ -577,11 +627,12 @@ def render_quality(rows):
     if flagged:
         lines.append("")
         lines.append(
-            "* The strike column is DERIVED, from rounds rejected since the "
-            "last criteria\n  reset. `SKILL.md` permits two annulments that "
-            "write no marker -- a runner\n  error, and step 5's prose-deletion "
-            "road -- so where the row's own words\n  disagree with the count, "
-            "both are shown and neither is preferred:")
+            "* Where a row carries no `charge=`, the strike column is "
+            "DERIVED, from rounds\n  rejected since the last criteria reset, "
+            "and where its own words disagree\n  with the count both are "
+            "shown and neither is preferred. Where it carries\n  charges, a "
+            "flag is a rejected round written without one, counted as a "
+            "strike:")
         lines.extend("  - " + flag for flag in flagged)
     return "\n".join(lines)
 

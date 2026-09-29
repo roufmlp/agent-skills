@@ -345,6 +345,18 @@ class TheInsideRunCountsAreNowMeasured(unittest.TestCase):
     def test_the_strikes_are_counted(self):
         self.assertEqual(self.record()["quality"]["strikes"], 1)
 
+    def test_the_strikes_a_reset_annulled_are_counted_beside_them(self):
+        """Run `batch-f43aaf`: `"strikes": 0` against a ledger that showed a
+        strike. Ruled 2026-09-28, option A."""
+        ledger = (
+            "| issue | status | estimate | stamps |\n|---|---|---|---|\n"
+            "| 221 | done | 60-90 min | attempt 1; gates 1: verify=pass "
+            "review=reject charge=strike; attempt 2; gates 2: verify=reject "
+            "review=reject charge=none; criteria reset after gates 2; "
+            "attempt 3; gates 3: verify=pass review=pass charge=none |\n")
+        got = tool.quality_counts(ledger)
+        self.assertEqual((got["strikes"], got["strikes_annulled"]), (0, 1))
+
     def test_escalations_are_counted_off_the_transcript_role_names(self):
         self.assertEqual(self.record()["quality"]["escalations"], 1)
 
@@ -773,6 +785,47 @@ class WholeSuiteReadings(unittest.TestCase):
     def test_a_directory_with_no_transcripts_reads_zero(self):
         root = pathlib.Path(tempfile.mkdtemp(prefix="suites-empty-"))
         self.assertEqual(tool.whole_suite_readings(root), (0, 0))
+
+    # Tracker-tooling issue 29. Run `batch-46e4de` read 9 whole suites where
+    # there were about 93: the count saw a suite only when the command began
+    # `npx vitest` or `npm test`, and most began with the wrapper or a launcher.
+    LAUNCHED = [
+        "python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- npm test",
+        "python3 /x/run_suite.py --stage=verify -- npx vitest run --coverage",
+        "env -u DATABASE_URL -u PGHOST npx vitest run --maxWorkers=2",
+        "nohup npx vitest run > /tmp/v.log 2>&1 &",
+        "timeout 300 npm test",
+        "CI=1 NODE_OPTIONS=--max-old-space-size=8192 npm test",
+        "python3 ~/.claude/skills/run-issues/run_step.py --step s1 -- npm test",
+    ]
+
+    def test_a_suite_behind_the_wrapper_or_a_launcher_counts(self):
+        for command in self.LAUNCHED:
+            with self.subTest(command=command):
+                self.assertEqual(self.count([(command, True)]), (0, 1))
+
+    def test_a_scoped_suite_behind_a_launcher_still_does_not_count(self):
+        self.assertEqual(self.count([
+            ("env -u DATABASE_URL npx vitest run tests/jobs/", True)]), (0, 0))
+
+    def test_a_call_the_wrapper_refused_is_not_a_reading(self):
+        """The review of issue 29: a repeat on a green tree never started."""
+        root = fixture_run([("python3 /x/run_suite.py --stage issue -- npm test",
+                             True, "r1")])
+        with open(root / "session.jsonl", "a", encoding="utf-8") as handle:
+            handle.write("\n" + json.dumps({"isSidechain": True, "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "r1", "content":
+                 "REFUSED: tree abc already ran green at stage issue, at x."}]}}))
+        self.assertEqual(tool.whole_suite_readings(root), (0, 0))
+
+    def test_an_interpreter_option_before_the_wrapper_is_read(self):
+        self.assertEqual(self.count([
+            ("python3 -u /x/run_suite.py --stage issue -- npm test", True)]), (0, 1))
+
+    def test_a_launcher_that_runs_something_else_does_not_count(self):
+        self.assertEqual(self.count([
+            ("timeout 5 grep -rn vitest package.json", True),
+            ("env -u X npm ls vitest", True)]), (0, 0))
 
 
 class SuitesPerIssue(unittest.TestCase):

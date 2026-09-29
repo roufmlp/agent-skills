@@ -295,5 +295,66 @@ class ReadCarriesTheBackgroundFlag(unittest.TestCase):
         pass  # covered by the classes above; read() is pinned here.
 
 
+class ABackgroundedStepRunsUntilItsOwnTranscriptEnds(unittest.TestCase):
+    """Tracker-tooling issue 30. Run `batch-46e4de` backgrounded its verify
+    gates. Each read as a six-second spawn, so the run reported 26 per cent of
+    its wall clock with nobody running, where about 9 per cent was real. The
+    result carries `toolUseResult.agentId`, and the step's own transcript sits
+    at `<session>/subagents/agent-<id>.jsonl`."""
+
+    def write(self, path, lines):
+        import json
+        with open(path, "w") as handle:
+            for one in lines:
+                handle.write(json.dumps(one) + "\n")
+
+    def setUp(self):
+        import os
+        import tempfile
+        self.room = tempfile.mkdtemp(prefix="timings-")
+        self.session = os.path.join(self.room, "s1.jsonl")
+        self.subagents = os.path.join(self.room, "s1", "subagents")
+        os.makedirs(self.subagents)
+        self.write(self.session, [
+            {"timestamp": "2026-09-23T19:23:00Z",
+             "message": {"content": [{"type": "tool_use", "id": "t1", "name": "Agent",
+                                      "input": {"description": "Verify gate for issue 201",
+                                                "run_in_background": True}}]}},
+            {"timestamp": "2026-09-23T19:23:06Z",
+             "toolUseResult": {"isAsync": True, "agentId": "a42"},
+             "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}},
+            {"timestamp": "2026-09-23T20:23:00Z",
+             "message": {"content": [{"type": "text", "text": "the run goes on"}]}},
+        ])
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.room, ignore_errors=True)
+
+    def test_the_span_ends_where_the_step_s_transcript_ends(self):
+        import os
+        self.write(os.path.join(self.subagents, "agent-a42.jsonl"), [
+            {"timestamp": "2026-09-23T19:23:07Z", "message": {"content": "go"}},
+            {"timestamp": "2026-09-23T20:18:00Z", "message": {"content": "done"}},
+        ])
+        _, spans, _, _, labelled = run_timings.read(self.session)
+        start, end = spans[0]
+        self.assertEqual((end - start).total_seconds(), 55 * 60)
+        self.assertTrue(labelled[0][3], "the flag still rides for serial_gates")
+
+    def test_a_step_that_outlives_the_session_stops_at_its_end(self):
+        import os
+        self.write(os.path.join(self.subagents, "agent-a42.jsonl"), [
+            {"timestamp": "2026-09-23T21:00:00Z", "message": {"content": "late"}},
+        ])
+        _, spans, _, last, _ = run_timings.read(self.session)
+        self.assertEqual(spans[0][1], last)
+
+    def test_without_the_step_s_transcript_the_spawn_is_all_it_knows(self):
+        _, spans, _, _, _ = run_timings.read(self.session)
+        start, end = spans[0]
+        self.assertEqual((end - start).total_seconds(), 6)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

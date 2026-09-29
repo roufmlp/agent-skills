@@ -26,6 +26,10 @@ tests, and a copy of the rule here would drift the same way.
     python3 correction_brief.py --issue <abs path> --item "..." [--item "..."]
     python3 correction_brief.py --issue <abs path> --items-file <path>
 
+Run it from the run tree, or name it with `--repo`. It refuses a tree the
+coverage check has not graded as it stands now, and lists that grading's
+refusals after the runner's items: the check comes first by construction.
+
 Exit 0 prints the prompt on stdout. Exit 1 refuses and says why.
 Drill: `test_correction_brief.py` beside this file.
 """
@@ -36,6 +40,7 @@ import argparse
 import importlib.util
 import os
 import pathlib
+import re
 import sys
 
 # `~/.claude/hooks` is NOT in this repo and has no worktree copy, so the hook
@@ -75,6 +80,93 @@ AFK = (
 GATE_HEADINGS = ("## verify gate", "## review gate")
 
 
+# Issue 51 of the tracker-tooling set, ruling `q-fin-ea4cfa-05`: each gate
+# writes a verdict file of its own, `<issue>-attempt-<N>-review.md` and
+# `-verify.md`, so no gate can overwrite the other's. A file of that shape is
+# read for its own gate's heading alone. The shared `<issue>-attempt-<N>.md` an
+# older run wrote keeps the either-heading question above.
+GATE_FILE = re.compile(r"-attempt-\d+-(review|verify)\.md$")
+GATE_HEADING = {"review": "## Review gate", "verify": "## Verify gate"}
+
+
+def gate_of(path):
+    """`review` or `verify` for a per-gate verdict file, else None."""
+    found = GATE_FILE.search(os.path.basename(str(path)))
+    return found.group(1) if found else None
+
+
+def wrong_heading_refusal(where, gate, body) -> str:
+    """The refusal for a gate's file that lacks its own gate's heading."""
+    heading = GATE_HEADING[gate]
+    if heading.lower() in body.lower():
+        return ""
+    return (
+        f"REFUSED. Check the {gate} gate wrote its verdict into its own file, "
+        "then re-run.\n"
+        f"  {where} holds no `{heading}`. Each gate writes a verdict file of "
+        "its own (ruling q-fin-ea4cfa-05), and the file's name says which.\n"
+        "  Two roads out:\n"
+        f"  1. Pass the file the round header labels `({gate} gate)`, and "
+        "re-run.\n"
+        f"  2. Run `check_verdict.py --file {where} --section \"{heading}\"` "
+        "to see what the gate returned, and ledger the issue `blocked` with "
+        "what it prints." + AFK)
+
+
+def missing_gate_refusal(issue_text, paths) -> str:
+    """The refusal when per-gate files were passed and one the issue's level
+    runs is absent. A light issue runs one review gate (ruling
+    `q-fin-ea4cfa-01`); a full issue runs both. The issue's own `Level:` line
+    is all this holds, and the run lifts a light issue whose risk file cannot
+    back it to full, so a verify file on disk beside a passed gate file is
+    needed whatever the line says."""
+    given = {gate_of(path) for path in paths} - {None}
+    if not given:
+        return ""
+    level = _issue_level().level_in(issue_text)
+    needed = ("review",) if level == "light" else ("review", "verify")
+    if "verify" not in needed and any(
+            _sibling(path, "verify").is_file() for path in paths if gate_of(path)):
+        level, needed = "light, lifted to full", ("review", "verify")
+    missing = [gate for gate in needed if gate not in given]
+    if not missing:
+        return ""
+    gate = missing[0]
+    return (
+        f"REFUSED. Pass the {gate} gate's verdict file too, and re-run.\n"
+        f"  The {gate} file is missing. This issue runs at `Level: {level}`, "
+        f"so {' and '.join(needed)} each wrote a file of their own, and a "
+        "brief built from one of them drops the other gate's owed items.\n"
+        "  Two roads out:\n"
+        f"  1. Add `--verdicts <run tree>/.scratch/<feature>/runs/<batch-id>/"
+        f"verdicts/<issue>-attempt-<N>-{gate}.md`, and re-run.\n"
+        f"  2. If the {gate} gate wrote nothing, run `check_verdict.py` on its "
+        "file and ledger the issue `blocked` with what it prints." + AFK)
+
+
+def _sibling(path, gate):
+    """The same attempt's file for `gate`, beside `path`."""
+    path = pathlib.Path(path)
+    return path.with_name(GATE_FILE.sub(
+        lambda found: found.group(0).replace(found.group(1), gate), path.name))
+
+
+_LOADED = {}
+
+
+def _issue_level():
+    """`issue_level.py` beside this file, loaded once on first use: it loads
+    three more modules, and only a per-gate brief needs it."""
+    if "issue_level" not in _LOADED:
+        spec = importlib.util.spec_from_file_location(
+            "correction_brief_issue_level",
+            pathlib.Path(__file__).resolve().parent / "issue_level.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _LOADED["issue_level"] = module
+    return _LOADED["issue_level"]
+
+
 def hook_module():
     """The cap hook, imported from its own file, or None when it is not there.
 
@@ -106,8 +198,9 @@ def compose(issue, items) -> str:
     return PREAMBLE.format(issue=issue) + listed + CLOSING
 
 
-def read_items(args) -> tuple:
-    """`(items, refusal)`. The refusal is empty when the list is usable."""
+def read_items(args, covered=()) -> tuple:
+    """`(items, refusal)`. The refusal is empty when the list is usable.
+    `covered` is the coverage check's refusals, listed after the runner's."""
     items = list(args.item)
     if args.items_file:
         try:
@@ -122,7 +215,7 @@ def read_items(args) -> tuple:
                 "  2. Pass each item with `--item` instead." + AFK)
         items += [line.strip() for line in raw.splitlines() if line.strip()]
 
-    items = [one.strip() for one in items if one.strip()]
+    items = [one.strip() for one in [*items, *covered] if one.strip()]
     if not items:
         return [], (
             "REFUSED. Name the owed items with `--item`, one per item, and "
@@ -139,7 +232,54 @@ def read_items(args) -> tuple:
     return items, ""
 
 
-def check_issue(path) -> str:
+def coverage_items(repo) -> tuple:
+    """`(items, refusal)`: the coverage check's refusals for the tree at
+    `repo`, which join the round's items, or the refusal when that tree was
+    never graded or could not be.
+
+    Run `batch-e35a25`, issue 227: the runner wrote this brief, then ran the
+    coverage check, and its refusals bought a second correction spawn.
+    `SKILL.md` step 5 ordered it in a sentence; the stamp the check leaves
+    makes the order a refusal here."""
+    spec = importlib.util.spec_from_file_location(
+        "correction_brief_coverage",
+        pathlib.Path(__file__).resolve().parent / "check_diff_coverage.py")
+    coverage = sys.modules.get(spec.name)
+    if coverage is None:
+        coverage = importlib.util.module_from_spec(spec)
+        # Registered before it runs: its dataclasses look their own module up
+        # by name while each class is built.
+        sys.modules[spec.name] = coverage
+        spec.loader.exec_module(coverage)
+    stamp = coverage.stamp_for(pathlib.Path(repo))
+    if stamp is None:
+        return [], (
+            f"REFUSED. Run `check_diff_coverage.py --repo {repo}` on this tree "
+            "first, and re-run.\n"
+            "  No coverage grading of the tree as it stands now exists. Its "
+            "refusals are items for this ONE round (`SKILL.md` step 5), so a "
+            "brief written before it goes out short, and the gap buys a second "
+            "spawn: issue 227 of run `batch-e35a25`.\n"
+            "  Two roads out:\n"
+            "  1. Run the check with the paths off the verify gate's last line, "
+            "and re-run this.\n"
+            "  2. Where no gate returned a report, run the suite with coverage "
+            "in the run tree, run the check without `--report-root`, and re-run "
+            "this." + AFK)
+    if stamp.get("exit") == 2:
+        return [], (
+            "REFUSED. Make the coverage check able to grade this tree, and "
+            "re-run.\n"
+            "  Its last grading of this tree could not grade it:\n"
+            + "".join(f"  {item}\n" for item in stamp.get("items") or [])
+            + "  Two roads out:\n"
+            "  1. Follow the remedy the check printed, run it again, and re-run "
+            "this.\n"
+            "  2. Ledger the issue `blocked` with this message." + AFK)
+    return list(stamp.get("items") or []), ""
+
+
+def check_issue(path, verdicts=None) -> str:
     """The refusal for an unusable issue path, or empty."""
     text = str(path)
     # NO WORKTREE REFUSAL. Until 2026-09-13 this refused any path containing
@@ -166,41 +306,87 @@ def check_issue(path) -> str:
             "  2. If the issue file is genuinely gone, ledger the issue "
             "`blocked` with this message." + AFK)
 
-    lowered = body.lower()
-    if not any(head in lowered for head in GATE_HEADINGS):
-        return (
-            "REFUSED. Check both gates wrote their verdicts into this file, "
-            "then re-run.\n"
-            f"  {text} holds neither `## Verify gate` nor `## Review gate`. The "
-            "scope of a correction round is the verdicts' owed list, so a file "
-            "with no verdict in it means the list came from somewhere else — "
-            "most often the worktree twin, or a gate that wrote beside its "
-            "private copy.\n"
-            "  Two roads out:\n"
-            "  1. Find where the gate wrote its verdict, move it beside the "
-            "branch, and re-run.\n"
-            "  2. Run `check_verdict.py --file <this file> --section \"## Verify "
-            "gate\"` to see which gate returned nothing, and ledger the issue "
-            "`blocked` with what it prints." + AFK)
-    return ""
+    # Issue 24 of the tracker-tooling set, 2026-09-23: a gate writes its
+    # verdict under `runs/<batch-id>/verdicts/` and never into the issue file,
+    # so the question below is asked of the verdict files. Since issue 51 each
+    # gate has a file of its own, and each is asked for its own heading.
+    issue_body = body
+    paths = ([verdicts] if isinstance(verdicts, (str, os.PathLike))
+             else list(verdicts or []))
+    for where in paths or [text]:
+        if paths:
+            try:
+                body = pathlib.Path(where).read_text(encoding="utf-8",
+                                                     errors="replace")
+            except OSError:
+                return (
+                    "REFUSED. Give the verdict file the round header's `Verdict "
+                    "goes to:` line names, and re-run.\n"
+                    f"  Nothing is readable at {where}.\n"
+                    "  Two roads out:\n"
+                    "  1. Re-run with `--verdicts <run tree>/.scratch/<feature>/"
+                    "runs/<batch-id>/verdicts/<issue>-attempt-<N>-review.md`, "
+                    "and the same again for `-verify.md`.\n"
+                    "  2. Run `check_verdict.py --file <that file> --section "
+                    "\"## Verify gate\"` to see which gate returned nothing, and "
+                    "ledger the issue `blocked` with what it prints." + AFK)
+        gate = gate_of(where) if paths else None
+        if gate:
+            refusal = wrong_heading_refusal(where, gate, body)
+            if refusal:
+                return refusal
+            continue
+        lowered = body.lower()
+        if not any(head in lowered for head in GATE_HEADINGS):
+            return (
+                "REFUSED. Check both gates wrote their verdicts into this file, "
+                "then re-run.\n"
+                f"  {where} holds neither `## Verify gate` nor `## Review gate`. The "
+                "scope of a correction round is the verdicts' owed list, so a file "
+                "with no verdict in it means the list came from somewhere else — "
+                "most often the worktree twin, or a gate that wrote beside its "
+                "private copy.\n"
+                "  Two roads out:\n"
+                "  1. Pass the run's verdict file with `--verdicts`, and re-run. "
+                "Since 2026-09-23 a gate writes there and never into the issue "
+                "file.\n"
+                "  2. Run `check_verdict.py --file <this file> --section \"## Verify "
+                "gate\"` to see which gate returned nothing, and ledger the issue "
+                "`blocked` with what it prints." + AFK)
+    return missing_gate_refusal(issue_body, paths)
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--issue", required=True,
                         help="the issue file, absolute, in the main checkout")
+    parser.add_argument("--verdicts", action="append", default=[],
+                        help="a run verdict file for the attempt the gates just "
+                             "graded, one per gate: runs/<batch-id>/verdicts/"
+                             "<issue>-attempt-<N>-review.md and -verify.md, or "
+                             "an older run's shared <issue>-attempt-<N>.md; "
+                             "repeatable")
     parser.add_argument("--item", action="append", default=[],
                         help="one owed item; repeatable")
     parser.add_argument("--items-file",
                         help="a file of owed items, one per line")
+    parser.add_argument("--repo", default=".",
+                        help="the run tree the round hands over; its coverage "
+                             "grading must exist, and its refusals join the "
+                             "items")
     args = parser.parse_args(argv)
 
-    refusal = check_issue(args.issue)
+    refusal = check_issue(args.issue, args.verdicts)
     if refusal:
         print(refusal, file=sys.stderr)
         return 1
 
-    items, refusal = read_items(args)
+    covered, refusal = coverage_items(args.repo)
+    if refusal:
+        print(refusal, file=sys.stderr)
+        return 1
+
+    items, refusal = read_items(args, covered)
     if refusal:
         print(refusal, file=sys.stderr)
         return 1

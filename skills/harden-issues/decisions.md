@@ -34,7 +34,51 @@ Earned, not invented — each shipped a real defect through green gates:
    a client module.
 8. **Observability** — 112's known fault is structurally invisible to a UI walk.
 9. **Size against the one-implementer bound** — 129 ran 4h58m, 19% of its batch;
-   114 ran 3h52m, 55% of its run.
+   114 ran 3h52m, 55% of its run. **Both figures are UNVERIFIED and neither may be
+   cited as a comparable.** Checked 2026-09-14 against every measurement record on
+   this machine: no line of any `issues.jsonl` names issue 129 or 114, so nothing
+   says whether these were measured or estimated. They stay here as the anecdote
+   that bought the class and nothing more. The measured record lives in
+   `~/.claude/rulings.md`, "Class 9 counts and refuses".
+
+## Class 9 stopped being a judgement (2026-09-14)
+
+The human ruled it. The class asked an attacker whether an issue fits "one implementer"
+against a sentence — "A clean issue runs ~30-90 min" — and no script computed anything.
+Each attacker listed what the file held, found some past durations, and reasoned by
+analogy. One attacker in the pass of 2026-09-14 wrote in its own findings file,
+unprompted: "the estimate above is mine and is a judgement, not a measurement." The
+human's three-class test in `~/.claude/CLAUDE.md` sorts that into the class that does not work,
+so the rule refuses now instead: `~/.claude/skills/lib/check_issue_size.py`.
+
+**The analogy step had nothing under it.** The durations attackers were quoting to each
+other were ESTIMATES. `batch-be624c`'s ledger heads that column *Estimate*;
+`batch-d67136`'s carries the runner's launch sizes and says so; `02e`'s WHALE stamp
+quotes the issue file's own `## Size`, which is a previous attacker. The pipeline was
+calibrating estimates against estimates, and the errors were large and one-directional:
+`05b` estimated 150 minutes took 68.6, `06` estimated 120 took 40.5, `05d` estimated 120
+took 28.0.
+
+**The unit is the acceptance criterion**, chosen by measurement and not by taste. Over
+the 25 issues that have run, criteria count correlates at spearman +0.62 and nothing else
+comes close; invariant count and blocker count predict nothing at all (+0.05 and +0.03),
+and both were things attackers had cited. The script counts and refuses; it does not
+estimate minutes, because the analogy step is exactly where the judgement hid.
+
+**It is scored.** `run_costs.py` writes the count onto the issue's line in `issues.jsonl`
+beside the span that issue then occupied, and `run_compare.py sizing` reads the two
+together. Nothing compared a prediction to an outcome before this, which is why the bound
+went four passes without anyone noticing it named a ceiling only 4% of issues reached.
+
+**The human set the limit at 14 the same day**, from the distribution: no issue may be bigger
+than the biggest one this pipeline has finished, which is issue 06 at 14 criteria and 40.5
+minutes. They were shown 12 and 17 and took neither — 12 would have refused issue 06 itself,
+and 17 would have left the passes judging size by hand.
+
+The whole measurement — the distribution, every predictor tested, the two faults found on
+the way — is in `~/.claude/rulings.md`, under "Class 9 counts and refuses", because
+the human's rule is that the rule belongs in the hot file and the evidence behind it does not.
+
 
 ## Hypotheses are not facts: the 122 lesson (2026-07-27)
 
@@ -145,7 +189,7 @@ answers into the issue files cited `checked by the human <date>`. A criterion th
 the run to pause for a person is treated as a defect in the issue, the same as a
 guard that cannot fail.
 
-The default road is untouched. If they are away or waves the list off, the check
+The default road is untouched. If they are away or wave the list off, the check
 defaults, is written as a default and is queued — the batch never waits on it.
 
 ## No issue named the database its rows land in (2026-08-12)
@@ -289,8 +333,8 @@ spawns and four gate spawns, bought by a section-heading choice.**
 ### The citation repair cost that produced the quoted-phrase rule
 
 Ruled by the human on 2026-08-26 in the daily brief, after one run broke 228
-citations across 49 open issue files and he named the repair cost as time he was
-losing personally. Issue 406, the guard that makes the rule stick, read
+citations across 49 open issue files and they named the repair cost as time they
+were losing personally. Issue 406, the guard that makes the rule stick, read
 `needs-harden` on the day the rule was written.
 
 ### The pass that ran ahead of the no-minting rule
@@ -342,6 +386,63 @@ have appeared.** `launch-harden.md` says which pass to run and never how to
 attack. Two copies of eleven classes drift, and the drift is invisible, because
 both files read as authoritative while they disagree. The structure test refuses
 a class name appearing in the phase file.
+
+## The citation-repair step is gone, and class 5 carries it (2026-09-15)
+
+SKILL.md told the pass to run a project's citation checker over every issue in
+scope before the attackers spawned, and to correct each `moved` row. That step was
+the human's own ruling of 2026-08-15. They deleted it on 2026-09-15, in the `h0915`
+pass over one tracker, on a measurement taken during that pass.
+
+What was measured. That tracker carries no such script, so the pass repaired by hand
+and the corpus was counted instead: `src/` comments held ZERO line-number citations
+(the human's own sweep, merged as `ffb5022`), `tests/` and `scripts/` held nine, and the
+ISSUE FILES held 1,535 across 77 of 149 files. So the corpus the step served is the
+issue files, and the guard being built -- issue 112 -- covers source comments only.
+The step was buying a check over the corpus nobody was guarding.
+
+Why it goes rather than widens. **Class 5 already does this work.** Class 5 makes
+every attacker verify each factual claim against the real code, and a citation is a
+factual claim. The one drifted citation the `h0915` pass found -- issue 103's
+pointer into `src/model/delivery-date.ts`, whose line 225 had moved to a comment
+fragment -- was found by an attacker reading the code under class 5, not by any
+script. Four more citations in issue 111 were hand-checked the same round and all
+four held. The step duplicated work the attackers cannot skip, and it charged a
+round per issue in every run to do it.
+
+The convention did NOT go with the step. A citation written from 2026-08-26 onward
+still quotes text, and the legacy corpus still drains rather than being converted.
+What changed is who notices a stale one: class 5, in the same pass that was going to
+read the file anyway.
+
+The structure test caught the first draft of this edit. `TestTheSlimLeftEveryRuleBehind`
+refused it twice, on the anchors `Every citation you WRITE from 2026-08-26 onward
+quotes text, never a line` and `is the guard that makes it stick` -- both had been
+paraphrased out while the story was rewritten. That is the test doing its stated job,
+and both sentences went back verbatim.
+
+## A guard names its forms, and a reset criterion is rewritten (2026-09-23)
+
+The audit of 2026-09-23 (`.scratch/tracker-tooling/evidence/audit-2026-09-23-run-time-and-strikes/`,
+section 2) measured six runs on one tracker. 62 per cent of rejected agent-minutes, about 1,665
+of 2,687, came from 12 guard-over-source issues. Two causes were this pass's.
+
+**Root cause 1: guard criteria no attempt can meet.** `~/.claude/coderules.md` said a guard
+"reads the WHOLE artefact and refuses what it cannot place", and nothing said what the
+whole artefact was. Issue 53 passed criteria 2 to 7 and every invariant in all seven
+attempts; each rejection named a new bypass. Issue 139 was rejected on a `.jsx` road and
+139b on `@apply`, and `src/` held zero of either. The human ruled `q-s4-1`: the whole artefact
+is the forms the repository holds today, measured by a stated command. Class 4 now asks for
+the `Forms:` block and `check_issue_ready.py --all-guards` refuses the stamp without it
+(tracker-tooling issue 22).
+
+**Root cause 2: hardening wrote the faulty criterion, then churned it.** Issue 139c gained a
+broad rule beside the narrow one and kept both; issue 139 was given "twenty-two" colour
+families with no command, and Tailwind ships 26. Class 5 now asks for the command beside a
+count and a rewrite rather than an addition on a reset criterion, and
+`check_criteria_edit.py` refuses both (tracker-tooling issue 23). Graded over whole files the
+count rule flagged 123 of 269 ready criteria, mostly fixture sizes, so it reads only the
+sentences the pass wrote.
 
 ## This file exists (2026-07-27)
 

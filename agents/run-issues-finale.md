@@ -206,15 +206,15 @@ against the commit that last touched the citation's own line, so a citation
 rewritten without re-checking its number can read `holds` and still be wrong.
 Say that in one line where you report the figures.
 
-**Sweep the register for rows the run itself already fixed, before promotion runs.**
+**Sweep the register for rows the run itself already fixed.**
 A review gate files a row; the same issue's correction round fixes it inside the
-commit the gate was reading; nothing re-reads the row. Promotion reads neither the
-bug file nor the diff, so it mints an issue for shipped work. You hold the commits
+commit the gate was reading; nothing re-reads the row, so it reaches the human as work
+still owed after it shipped. You hold the commits
 already: for every row this run wrote, check whether its issue committed after the
 row was filed, read that commit, and set the row to `verified` where the fix landed.
 Those rows sit in this run's own shards, under `register.d/<this tree>/`, so you
 edit files this tree owns and nothing anybody else is writing.
-Promotion's `fixed` exit then takes it. Say in the briefing how many rows you swept
+The finale's `retire_done_rows.py` then retires it. Say in the briefing how many rows you swept
 and name each. Three of seventeen issues minted on 2026-08-09 were stale this way,
 each costing a run slot and a hardening pass (`seam-h04`; adopted by the human
 2026-08-10).

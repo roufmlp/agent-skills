@@ -93,6 +93,12 @@
   item it cannot recognise lands in the refused pile, assert the collector found
   something, and drive the guard on every input it must refuse plus one control that
   must pass.
+- **"The whole artefact" means the forms the repository holds today, measured by a
+  command the guard's criterion states.** The collector refuses what it cannot place
+  inside that measured list. A form a reviewer plants outside the list is filed as a
+  finding for later, not a failure of this guard. An open population cannot be met:
+  one guard issue was rejected seven times, each time on a spelling a gate invented,
+  and 12 such issues cost 62 per cent of one audit's rejected agent-minutes.
 - User content renders escaped. `dangerouslySetInnerHTML` with user data does not
   pass review (XSS).
 - File uploads: allowlist of types, size cap, stored in object storage, never
@@ -160,7 +166,9 @@ Run before anything goes live with real users or real data, every time:
 _Sources: [OWASP Top 10 (2025)](https://owasp.org/Top10/2025/);
 [Supabase production checklist](https://supabase.com/docs/guides/deployment/going-into-prod);
 [Supabase, Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)._
-_Last updated: 2026-09-18 — a guard reads the whole artefact and refuses what it
+_Last updated: 2026-09-23 — "the whole artefact" is the measured list of forms the
+repository holds, from the audit of 2026-09-23, ruling `q-s4-1`.
+2026-09-18 — a guard reads the whole artefact and refuses what it
 cannot place, from run batch-0b9c1d, ruling `q-0b9c1d-04`.
 2026-09-13 — a guard is written against what the consumer does;
 code outside the row policy restates the policy; rule 6 covers the half-copy.

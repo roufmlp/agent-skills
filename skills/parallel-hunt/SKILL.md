@@ -26,7 +26,6 @@ Spawn by `subagent_type`; the orchestrator never pastes a brief.
 | Claim gate | `parallel-hunt-claim-gate` | high | one review, then dies |
 | Fix gate | `parallel-hunt-fix-gate` | high | one batch, then dies |
 | Fix gate, critical | `parallel-hunt-fix-gate-critical` | high | one batch, then dies |
-| Promotion | `promotion` | medium | one round end, then dies |
 
 Use the critical fix gate for `severity: critical` entries, or any fix whose diff
 touches money, auth or security.
@@ -114,7 +113,8 @@ its fixes on the old code is read against it.
   is how the count starts the day the key landed and backfills nothing. (Ticket 37 of
   the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
 - **`audience`** is `operator`, `tester` or `agent` — who can see the fault at all.
-  The finder writes it with the row, and promotion reads it.
+  The finder writes it with the row, and the human reads it when they turn a row into
+  an issue.
 - **`owner-notes` holds a status word and a link to `bugs/<ID>.md`. Nothing else,
   and 200 characters hard.** Both gates refuse a row that breaks it. One round of
   one project reached 5,212 bytes a row because this cell held whole gate verdicts;
@@ -138,26 +138,20 @@ Status machine, single writer per transition:
   (Outside this loop, a `/run-issues` commit step also closes rows to `verified`
   where its commit fixed them — rule F6, 2026-08-27.)
 - A hardening-pass or seam-agent row enters at `open` — or at `deferred` where
-  it only waits for promotion. No claim gate runs over it: the pass's evidence
+  it only waits for the human. No claim gate runs over it: the pass's evidence
   bar is the gates' own. (Ruled by the human 2026-08-29.)
 - `deferred` — orchestrator, at round end, and only from `open`, `in-fix` or
   `fix-ready`. A `candidate` is gated or deleted, never deferred; `retracted` is
-  terminal. **`deferred` means the row is waiting for promotion, and nothing else.**
-  It writes no issue file. Nothing in this loop writes an issue file except
-  promotion.
+  terminal. **`deferred` means the row is waiting for the human, and nothing else.**
+  It writes no issue file. Nothing in this loop writes an issue file.
 
-**Nothing rotates and nothing is archived.** Three exits bound the register instead.
-Promotion takes a row out and into `issues/`; a refusal takes a row out and leaves it
-out; `fixed` takes out a row the round already verified, writes nothing, and owes no
-reason, because the fix is in the commit and the record is in the bug file. What stays
-is live findings only, so the file's length is the promotion backlog — a number worth
-being able to read. A register that rotates on size or on the round boundary needs a
-guard against firing mid-run; with no rotation there is nothing to guard.
-
-**`fixed` is an exit in its own right and never a kind of refusal.** Split out on
-the human's ruling, 2026-08-06 (queue item T15-3). Before it, a round that fixed thirteen
-faults reported thirteen refusals into their daily brief, where one word would have
-overturned them and minted thirteen issue files for work that had already shipped.
+**Nothing rotates and nothing is archived.** A row leaves the register by the human's
+hand, when they turn it into an issue file or refuse it. A done row, at `verified` or
+`fixed`, leaves by `~/.claude/skills/lib/retire_done_rows.py`, which a run's finale and
+`/daily-brief` both run: it appends the row's id to a `closed` shard, and the bug file
+keeps the record (issue 44 of the tracker-tooling set, ruling `q-h0925-36-1`). A
+register that rotates on size or on the round boundary needs a guard against firing
+mid-run; with no rotation there is nothing to guard.
 
 **Retractions clean up after themselves.** The claim gate may touch nothing but
 status and its verdict, and the finder is dead, so the orchestrator deletes
@@ -262,64 +256,16 @@ A field you cannot fill stops the spawn. Two of them are refused rather than
 remembered: the seed will not write into a brief with no header, and the
 sign-in script will not mint on any host but this hunt's.
 
-## Promotion — the only door into `issues/`
+## The register is the inbox
 
-**No role in this loop writes an issue file.** Finders, fixers, gates and the
-orchestrator all write register rows. Promotion is the last phase of the round that
-resolves findings, after the round-end commit above, and the only step that creates
-an issue. `/run-issues` carries the same phase, on the
-same rule and the same register.
-
-A finding is out by default. Promotion is the work that gets it in.
-
-**A fresh `promotion` subagent does the work, never the orchestrator.** Writing issue
-files is repetitive file work arriving at the moment the orchestrator's context is
-most expensive, and the orchestrator would be reading rows it has no other reason to
-hold. It spawns the agent, gets two lists and a count back, and puts them in the
-round report. The spawn names the issue directory; the agent takes each number from
-`python3 ~/.claude/skills/lib/claim_number.py issue <dir> --for "promotion <hunt id>"`, which is
-atomic across every worktree, and the hook `number-claim-guard.py` refuses a file under
-an unclaimed number (ticket 38, rulings 7 and 16).
-The rule below lives in the agent file too, where it caches.
-
-Promotion runs on that rule and applies its own answer. It never waits. Every row is
-resolved one of three ways:
-
-- **Fixed** — the row is already at `verified`. **Take this exit first, before you
-  look at audience or severity.** Delete the row, write nothing, and report it as a
-  bare count. A fault the round fixed needs no issue: the fix is in the commit and
-  the record is in `bugs/<ID>.md`.
-- **Promoted** — the row clears the audience-and-severity thresholds. Write the issue
-  file, then delete the row.
-- **Refused** — everything else. Delete the row and give the reason in the round report.
-
-**The thresholds live in `~/.claude/agents/promotion.md` and nowhere else.** This file
-and `run-issues/SKILL.md` both carried "operator at any severity" for a day after the human
-set a `medium` floor on `operator` (T15-2, 2026-08-09), and a run brief repeated the
-stale figure. Name the exits here; read the numbers there.
-
-**`fixed` is never reported as a refusal**, and the ordering above is what enforces
-it. The human overturns a refusal with one word, so a round's thirteen successful fixes
-listed as thirteen refusals put a trap on their only control: one word would mint
-thirteen issue files for work that had already shipped. Ruled 2026-08-06, queue item
-T15-3. This section still said "two ways" a day after that ruling landed forty lines
-above it; corrected 2026-08-07.
-
-A promoted row becomes an issue file carrying:
-
-- A `Status:` the promotion brief's own rule sets, and this skill does not restate
-  it: `parked` for a medium or low row that names no blocker, `needs-harden` above
-  that. Neither is `needs-info`, which is a dead end for a file with no reporter.
-  `/harden-issues` sharpens either one from evidence, and the parked sweep, where
-  the project runs one, is what puts a parked issue back in front of the human.
-- One category role, from the same set `triage` uses.
-- A link to `bugs/<ID>.md`. Promotion copies no evidence into the issue file.
-
-**The human holds the veto, through `/daily-brief`.** The round report lists every
-promotion and every refusal, and the brief carries both to them. Overturning either
-is one word in the brief. **`fixed` is a count only, and carries no control** — it
-is not a decision and they are offered none over it. A step they have to invoke by hand is a
-step somebody forgets, and then the register grows in place of the issue directory.
+**No role in this loop writes an issue file**, and the orchestrator writes none
+either. Finders, fixers, gates and the orchestrator all write register rows. The round
+ends with its leftover rows at `deferred`, and they wait in the register for the
+human, who turns a row into an issue file by their own hand.
+Where the setup registers a write guard for it, the guard refuses any subagent a write
+that creates a file under `.scratch/<feature>/issues/`, and an edit to an issue file
+that exists still passes. The author's is `gate-issue-write-guard.py`; this pack does
+not ship it, so without one the rule is held by the roles alone.
 
 **Anything needing their hands, rather than their judgement, goes somewhere else.** A
 secret, an env var, an OAuth client, a DNS record at a registrar, a console setting —
@@ -425,15 +371,12 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    and one line.
 5. Loop until the finder returns dry twice **and** no entries remain `open`,
    `in-fix` or `fix-ready`.
-6. Round end, in this order: mark leftovers `deferred`; spawn one `promotion`
-   agent over every row, **carrying `model:` set to the `promotion=` value on
-   `round-brief.md`'s `Model map at launch:` line** — it is a mapped role, so
-   `model-map-gate.py` refuses a spawn that omits it (ticket 39, ruling 10);
+6. Round end, in this order: mark leftovers `deferred`;
    **take the five readings below, which must happen before the brief is
    deleted**; delete this round's QA workspace; delete the heartbeat
    cron; delete `round-brief.md`; commit. Then report — verified fixes, rejected
-   fixes, retracted claims, the two lists promotion returned, and the branch and
-   worktree the human merges. Say plainly what was left undone; a round that reports
+   fixes, retracted claims, the rows left `deferred` and the count of rows at
+   `verified`, and the branch and worktree the human merges. Say plainly what was left undone; a round that reports
    only its wins is not a report.
 
    **What a round cost, and what each role ran on.** Until ticket 39 of the
@@ -501,9 +444,8 @@ Stay thin — the orchestrator's context is the only one that lasts all round.
    Once the brief is deleted no ledger names that row, so nothing can sweep it
    later and the human clears it by id.
 
-   Do not promote rows yourself. Rule 1 holds all the way to the end of the round,
-   and spawning is what keeps it holding: the agent reads the rows, and you read two
-   lists.
+   Leave every row in the register for the human. The round report names the rows left
+   `deferred`; it resolves none of them.
 
 ## Auto-resume across usage limits
 
@@ -576,9 +518,10 @@ safe.
   keyed by the account it writes to.
 - **Every spawn carries its own role's model, read off `round-brief.md`.** The
   five hunt roles — `finder`, `fixer`, `claim-gate`, `fix-gate`,
-  `fix-gate-critical` — plus `promotion` are named on the brief's
-  `Model map at launch:` line, which the launch line writes. Take this role's
-  value and pass it in the Agent call's `model` field.
+  `fix-gate-critical` — are named on the brief's `Model map at launch:` line,
+  which the launch line writes. Take this role's value and pass it in the Agent
+  call's `model` field. The line may still carry a promotion model; nothing in
+  the round spawns that role.
 
   This bullet said the opposite until 2026-09-05: agent files use
   `model: inherit`, so every worker inherits the session's tier. The agent files

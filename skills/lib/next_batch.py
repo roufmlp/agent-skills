@@ -220,7 +220,9 @@ issues:
                HERE. It is the human's ruling of 2026-09-14 and it lives in that
                script's `--limit` default with the distribution it was read off; a
                second copy of the number is a second copy that goes stale.
-    THE MARKS  no `Hardened:` stamp; an open `## Questions` section. Either says
+    THE MARKS  no `Hardened:` stamp, where a `Light:` line stands in for one on a
+               `Level: light` issue only (issue 43); an open `## Questions`
+               section. Either says
                the file is not specification-complete, so the issue moves off the
                `/run-issues` line and onto the `/harden-issues` line.
     A NOTE     no `## Blocked by` section. Named, and it moves nothing. This file
@@ -275,6 +277,9 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "run-issues"))
+from check_issue_ready import headers, pending_defaults  # noqa: E402  Issue 33's one reader of `Level:`; issue 43b's rule 7.
 
 SATISFIED = ("done", "closed")
 CANDIDATES = ("ready-for-agent", "needs-harden")
@@ -389,6 +394,12 @@ SECTION_RE = re.compile(r"^## Blocked by\b")
 # 80 files write `Hardened (provisional):` and 8 write `Hardened:`. The 28 files
 # carrying neither are the un-hardened backlog, measured 2026-09-14.
 HARDENED_RE = re.compile(r"^Hardened\b[^:\n]*:", re.M)
+# Rule 5 of issue 32, built by issue 43: `/to-issues` writes this line in place of
+# the stamp on a `Level: light` draft it does not send to `/harden-issues`. It
+# counts as the stamp on that level only. Issue 42's lift rewrites a light issue
+# to `Level: full` and leaves the line, and that issue needs hardening (default
+# `q-h0925b-43-2`), so there the line is named and not counted.
+LIGHT_RE = re.compile(r"^Light:", re.M)
 # The questions section, in any of the three spellings this tracker writes:
 # `## Questions open on this file`, `## Questions, defaulted so the run never
 # waits`, `## Questions for the human, from the hardening pass of 2026-09-14`.
@@ -528,19 +539,32 @@ def parse_issue(path: Path) -> Issue:
         reason = (f"Status: {status!r} is not one this tool knows "
                   f"({', '.join(KNOWN_STATUSES)})")
     return Issue(issue_id, path.name, status, blockers_of(lines), themes,
-                 origin, severity, harden_marks("\n".join(lines)), reason)
+                 origin, severity, harden_marks("\n".join(lines), path), reason)
 
 
-def harden_marks(text: str) -> list:
+def harden_marks(text: str, path: Path | None = None) -> list:
     """What says this file is not ready to be handed to an implementer.
 
-    Three marks, all of them advice and none of them a refusal, and all of them
+    Four marks, all of them advice and none of them a refusal, and all of them
     read ONLY on the issues this tool offers. A tracker's backlog carries these
-    by the dozen and naming them all would bury the batch.
+    by the dozen and naming them all would bury the batch. The fourth is issue
+    43b's rule 7, read through `check_issue_ready.pending_defaults`, the function
+    the criteria gate refuses on, so the `/run-issues` line never names an issue
+    that gate refuses. It needs the file's path to find the rulings file.
     """
     marks = []
+    if path is not None:
+        faults, binds = pending_defaults(path, text)
+        if binds:
+            marks += [f"rule 7: {fault}" for fault in faults]
     if not HARDENED_RE.search(text):
-        marks.append("no Hardened: stamp")
+        if not LIGHT_RE.search(text):
+            marks.append("no Hardened: stamp")
+        else:
+            level = headers(text).level
+            if level != "light":
+                marks.append("no Hardened: stamp, and its Light: line counts only on "
+                             f"Level: light, not Level: {level or 'missing'}")
     found = QUESTIONS_RE.search(text)
     if found:
         heading = found.group(0)
@@ -718,7 +742,16 @@ def live_runs(rows) -> list:
 
 
 def ledger_rows(text: str):
-    """Yield (issue id, status) from every table whose header has Issue and Status."""
+    """Yield (issue id, status) from every table whose header has Issue and Status.
+
+    THE STATUS COMES BACK WITHOUT ITS EMPHASIS. `*` and backticks are stripped the
+    way `run_is_merged` strips them from a `State:` line, and nothing else is: the
+    word under them still meets `LEDGER_KNOWN` by exact membership, so an unknown
+    status refuses as it always did. One run wrote `**blocked**` for issues 151,
+    152 and 53, and on 2026-09-23 this tool refused the whole tracker
+    over the asterisks. A holding status is stripped the same way, so a formatted
+    `in-progress` still hides the issue rather than refusing or releasing it.
+    """
     issue_col = status_col = None
     for line in text.splitlines():
         stripped = line.strip()
@@ -736,7 +769,7 @@ def ledger_rows(text: str):
             continue
         found = LEDGER_CELL.match(cells[issue_col])
         if found:
-            yield found.group(1), cells[status_col]
+            yield found.group(1), cells[status_col].replace("*", "").replace("`", "").strip()
 
 
 @dataclass(frozen=True)

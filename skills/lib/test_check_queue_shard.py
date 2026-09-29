@@ -150,7 +150,7 @@ CHECKED = (
 )
 
 
-@unittest.skipUnless(RULINGS_READER, "this pack ships without `rulings.py`")
+@unittest.skipUnless(RULINGS_READER, "`rulings.py` is not beside this script")
 class TheRulingsGuard(unittest.TestCase):
     """Acceptance criteria 1 and 2 of issue 04."""
 
@@ -243,7 +243,7 @@ def stage(tmp, rulings, shard):
     return path, os.path.join(scratch, "rulings.md")
 
 
-@unittest.skipUnless(RULINGS_READER, "this pack ships without `rulings.py`")
+@unittest.skipUnless(RULINGS_READER, "`rulings.py` is not beside this script")
 class AnIncompleteRecord(unittest.TestCase):
     """This is the consumer whose silence causes the harm.
 
@@ -289,9 +289,108 @@ class AnIncompleteRecord(unittest.TestCase):
         self.assertIn(rulings, err)
         self.assertNotIn("every heading carries an id", out)
 
+# The pair that escaped on 2026-09-22, reconstructed from the two headings.
+# The ids are IDENTICAL. The subjects name one thing in different words --
+# "cleanup" against "clear", "fails" against "refusing" -- so they share one
+# content word against a threshold of three, and the word heuristic said
+# nothing. The item carried no `Rulings checked:` line; it was simply missed.
+SAME_NAME_RULINGS = (
+    "# Rulings\n\n"
+    "## 2026-09-22 `q-h0922b-124-1` — which road stops a refused subscription "
+    "clear from refusing the sign-in\n"
+    "Ruled: the clear is best effort; a failure is logged and the sign-in "
+    "proceeds.\n"
+    "Carried by: `.scratch/example-feature/issues/124-the-push-subscription.md`\n"
+)
+SAME_NAME_ITEM = (
+    "## `q-h0922b-124-1` [irreversible] — a failed push cleanup fails the "
+    "sign-in\n\n"
+    "A push subscription that will not clear leaves the sign-in refused.\n"
+    "Which road does the session take?\n"
+)
+
+
+@unittest.skipUnless(RULINGS_READER, "`rulings.py` is not beside this script")
+class TheSameQuestionByName(unittest.TestCase):
+    """An id match is a certainty, and a certainty has no escape line.
+
+    The declaration exists for a writer who read a near-miss entry and judged
+    it a different question. That is a judgement. An identical id is not a
+    judgement -- it is the same question by name -- so the only road onwards
+    is a follow-up under a NEW id.
+    """
+
+    def setUp(self):
+        self.entries = parse(SAME_NAME_RULINGS)
+        # The record has to read, or every assertion below is graded against
+        # nothing and passes for the wrong reason.
+        self.assertEqual([entry.question for entry in self.entries],
+                         ["q-h0922b-124-1"])
+
+    def test_the_case_that_escaped_on_22_september_is_refused(self):
+        refusals = check_text("# s\n\n" + SAME_NAME_ITEM, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertTrue(refusals[0].startswith("s.md:3:"), refusals[0])
+        self.assertIn("`q-h0922b-124-1`", refusals[0])
+        self.assertIn("id", refusals[0])
+        self.assertIn("best effort", refusals[0])
+        self.assertIn(".scratch/example-feature/issues/124-the-push-subscription.md",
+                      refusals[0])
+
+    def test_the_declaration_line_does_not_wave_an_id_match_through(self):
+        item = SAME_NAME_ITEM.replace(
+            "A push subscription",
+            "Rulings checked: none match\n"
+            "> 2026-09-22 `q-h0922b-124-1` — which road stops a refused "
+            "subscription clear\n\n"
+            "A push subscription")
+        refusals = check_text("# s\n\n" + item, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertIn("`q-h0922b-124-1`", refusals[0])
+
+    def test_a_follow_up_under_a_new_id_passes(self):
+        item = SAME_NAME_ITEM.replace("q-h0922b-124-1", "q-h0922b-124-2")
+        self.assertEqual(check_text("# s\n\n" + item, "s.md", self.entries), [])
+
+    def test_the_exit_code_and_the_refusal_reach_the_command_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shard, _ = stage(tmp, SAME_NAME_RULINGS, "# s\n\n" + SAME_NAME_ITEM)
+            code, out, err = drive(shard)
+        self.assertEqual(code, WRONG)
+        self.assertIn("q-h0922b-124-1", err)
+        self.assertNotIn("no item asks a question already ruled", out)
+
+
+@unittest.skipUnless(RULINGS_READER, "`rulings.py` is not beside this script")
+class ANearMissKeepsItsEscape(unittest.TestCase):
+    """The regression that matters most.
+
+    A different id and a close subject is exactly what the word heuristic was
+    built for, and the declaration is exactly what passes it. Nothing here
+    changes because an id certainty was added beside it.
+    """
+
+    def setUp(self):
+        self.entries = parse(RULINGS)
+
+    def test_a_near_miss_under_a_different_id_is_still_refused_undeclared(self):
+        refusals = check_text("# s\n\n" + ASKED, "s.md", self.entries)
+        self.assertEqual(len(refusals), 1, refusals)
+        self.assertIn("`01-Q1`", refusals[0])
+
+    def test_a_near_miss_under_a_different_id_still_takes_the_escape(self):
+        self.assertEqual(check_text("# s\n\n" + CHECKED, "s.md", self.entries), [])
+
+    def test_the_ids_that_differ_here_are_what_makes_it_a_near_miss(self):
+        """Pins the fixture rather than the code: were `q-ti04-1` ever the
+        same string as an entry's question id, the test above would be
+        measuring the id road and would pass while the escape was broken."""
+        held = {entry.question for entry in self.entries}
+        self.assertEqual(held & {"q-ti04-1", "05-Q2"}, set())
+
 
 class WithoutTheRulingsReader(unittest.TestCase):
-    """What `--rulings` does where this pack ships without `rulings.py`.
+    """What `--rulings` does where a copy of the pack leaves out `rulings.py`.
 
     It refuses rather than reporting a clean walk it did not perform. A flag
     that silently checked nothing would read as "no ruling covers this".

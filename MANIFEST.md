@@ -11,6 +11,8 @@ Listed in the order the loop runs.
 | `skills/harden-issues/SKILL.md` | `~/.claude/skills/harden-issues/SKILL.md` |
 | `skills/harden-issues/decisions.md` | `~/.claude/skills/harden-issues/decisions.md` |
 | `skills/harden-issues/test_skill_structure.py` | `~/.claude/skills/harden-issues/test_skill_structure.py` (refuses a slim that carries a rule out with its story) |
+| `skills/harden-issues/check_criteria_edit.py` | `~/.claude/skills/harden-issues/check_criteria_edit.py` (refuses a hardening edit that adds a criterion beside a reset one, or writes a count nobody measured; imports the criterion reader from `run-issues/check_issue_ready.py`) |
+| `skills/harden-issues/test_check_criteria_edit.py` | `~/.claude/skills/harden-issues/test_check_criteria_edit.py` (32 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |
@@ -59,9 +61,19 @@ Listed in the order the loop runs.
 | `skills/run-issues/check_run_journal.py` | `~/.claude/skills/run-issues/check_run_journal.py` (refuses a run journal that has fallen behind its own ledger; imports the table parser from `check_commit_order.py`) |
 | `skills/run-issues/check_drill_coverage.py` | `~/.claude/skills/run-issues/check_drill_coverage.py` (refuses a gate verdict that grades a drill-carrying criterion on the implementation record's evidence without saying so) |
 | `skills/run-issues/seams_from_commits.py` | `~/.claude/skills/run-issues/seams_from_commits.py` (the files more than one issue of a run touched, taken from the commits rather than from what the issue files predicted; the script `agents/run-issues-finale.md` names) |
+| `skills/run-issues/criteria_ids.py` | `~/.claude/skills/run-issues/criteria_ids.py` (the one reader of an issue's criterion and invariant names, and of the names a text cites) |
+| `skills/run-issues/charge_round.py` | `~/.claude/skills/run-issues/charge_round.py` (decides what one gate round charges from both gates' per-item grades, so a strike lands only on a named criterion; imports `retry_brief.py` and `issue_level.py`) |
+| `skills/run-issues/retry_brief.py` | `~/.claude/skills/run-issues/retry_brief.py` (composes a retry implementer's spawn prompt, or refuses to; shipped from 2026-09-29; the `retry_brief.py` paragraphs under this table say why) |
+| `skills/run-issues/issue_level.py` | `~/.claude/skills/run-issues/issue_level.py` (reads the level an issue runs at fresh from its file on every call; imports `lib/set_level.py`) |
+| `skills/run-issues/check_briefing_blocked.py` | `~/.claude/skills/run-issues/check_briefing_blocked.py` (refuses a merge briefing that leaves out an issue the run blocked) |
+| `skills/run-issues/finale_reds.py` | `~/.claude/skills/run-issues/finale_reds.py` (turns the finale suite's red files into register rows, one row per file) |
+| `skills/run-issues/make_copy.py` | `~/.claude/skills/run-issues/make_copy.py` (makes a gate's private copy of the run tree, with its history, its uncommitted work and a linked `node_modules`) |
+| `skills/run-issues/move_verdicts.py` | `~/.claude/skills/run-issues/move_verdicts.py` (moves gate verdicts out of issue files and into the runs that wrote them; dry run unless `--apply`) |
+| `skills/run-issues/run_suite.py` | `~/.claude/skills/run-issues/run_suite.py` (the wrapper every whole-suite reading goes through: logs it, hashes the tree, refuses a repeat) |
+| `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, plus the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (38 files, 1,585 cases, grading the skill text and its scripts; 28 of them skip themselves where a corpus of real ledgers is absent, which is every machine but the author's) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (51 files, 2,063 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-29 by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -81,14 +93,14 @@ Listed in the order the loop runs.
 | `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
 | `skills/lib/run_python_suites.py` | `~/.claude/skills/lib/run_python_suites.py` (runs every `test_*.py` under `~/.claude/skills` and `~/.claude/hooks` from its own directory, and refuses a suite that executed fewer checks than it defines) |
-| `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (54 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
+| `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (65 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
 | `skills/lib/next_batch.py` | `~/.claude/skills/lib/next_batch.py` (orders the next batch of issues so every blocker lands first, and refuses an order it cannot honour) |
-| `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (48 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (120 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/check_claude_home.py` | `~/.claude/skills/lib/check_claude_home.py` (refuses a python file that resolves `~/.claude` by climbing parents from `__file__`, which a git worktree breaks) |
 | `skills/lib/check_issue_size.py` | `~/.claude/skills/lib/check_issue_size.py` (counts an issue file's acceptance criteria and refuses one bigger than any issue this pipeline has finished; the count replaces a judgement, and the docstring carries the measured spans it was chosen on) |
 | `skills/lib/test_check_issue_size.py` | `~/.claude/skills/lib/test_check_issue_size.py` (23 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/rulings.py` | `~/.claude/skills/lib/rulings.py` (the rulings file and its reader, so a pass cannot queue a question the human has already answered; `check_queue_shard.py` imports it, and the `ruled` and `record` refusals are off without it) |
-| `skills/lib/test_rulings.py` | `~/.claude/skills/lib/test_rulings.py` (79 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/test_rulings.py` | `~/.claude/skills/lib/test_rulings.py` (85 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/sweep_parked.py` | `~/.claude/skills/lib/sweep_parked.py` (lists the parked issues that want a human's eye again — those past thirty days, and those some open issue now names as a blocker — so `parked` is a door rather than a deletion with a nicer name; it changes no file) |
 | `skills/lib/test_sweep_parked.py` | `~/.claude/skills/lib/test_sweep_parked.py` (20 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/board.py` | `~/.claude/skills/lib/board.py` (draws the whole tracker as one self-contained page from the issue files and the run ledgers, generated the way `register.md` is generated and thrown away the same way; it calls `next_batch.schedule` rather than re-deriving the order, stores nothing and requests nothing) |
@@ -100,6 +112,16 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_queue_shard.py` | `~/.claude/skills/lib/test_check_queue_shard.py` |
 | `skills/lib/clean_worktrees.py` | `~/.claude/skills/lib/clean_worktrees.py` (removes the worktrees and branches a merge finished, and refuses every tree it cannot prove is finished: the main checkout, the tree it runs in, dirty, detached, a branch that is not an ancestor of the base ref, and a tree a live session holds) |
 | `skills/lib/test_clean_worktrees.py` | `~/.claude/skills/lib/test_clean_worktrees.py` (15 cases, 13 of them about a refusal, on a real git fixture built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/set_level.py` | `~/.claude/skills/lib/set_level.py` (sets an issue's `Level:` from the paths it touches and the repo's risk file) |
+| `skills/lib/test_set_level.py` | `~/.claude/skills/lib/test_set_level.py` (27 cases on fixtures built in `tmp`; one skips, because it reads a risk file this pack does not carry) |
+| `skills/lib/check_overlap.py` | `~/.claude/skills/lib/check_overlap.py` (refuses a drafted issue that does not name each open issue whose paths it meets) |
+| `skills/lib/test_check_overlap.py` | `~/.claude/skills/lib/test_check_overlap.py` (28 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/check_promotion.py` | `~/.claude/skills/lib/check_promotion.py` (refuses a promotion past half the week's closed issues, at the moment a human turns a register row into an issue file) |
+| `skills/lib/test_check_promotion.py` | `~/.claude/skills/lib/test_check_promotion.py` (21 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/class_only_edit.py` | `~/.claude/skills/lib/class_only_edit.py` (decides whether a change to a file only edits styling class names) |
+| `skills/lib/test_class_only_edit.py` | `~/.claude/skills/lib/test_class_only_edit.py` (75 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/retire_done_rows.py` | `~/.claude/skills/lib/retire_done_rows.py` (retires every done row of a register, so the register holds only the inbox; imports `run-issues/check_register_status.py`) |
+| `skills/lib/test_retire_done_rows.py` | `~/.claude/skills/lib/test_retire_done_rows.py` (10 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/panel-review/SKILL.md` | `~/.claude/skills/panel-review/SKILL.md` |
 | `skills/panel-review/references/deriving-a-panel.md` | `~/.claude/skills/panel-review/references/deriving-a-panel.md` |
 | `skills/panel-review/references/running-a-panel.md` | `~/.claude/skills/panel-review/references/running-a-panel.md` |
@@ -149,15 +171,26 @@ those other sessions' work in the same file, unread. That is one sync decision, 
 two, and it is the human's. The drill travels with the script because it imports it.
 Recorded 2026-09-13, from run `batch-d67136`.
 
+**On 2026-09-29 the script went out and `SKILL.md` stayed, and the two are no longer one
+decision.** The premise above was that nothing in the pack invokes `retry_brief.py`. That
+stopped being true when `charge_round.py` arrived: it imports `retry_brief` for the
+criterion reader and the owned-text split, and the published gate briefs and
+`check_attempt_cap.py` call `charge_round.py`. Withholding the script would have meant
+withholding everything downstream of it. So the script and its drill ship on rule 3, and
+`skills/run-issues/SKILL.md` stays at its published version, because holding that file
+was the human's word and is still his to lift.
+
 **Three things travel as part of a file rather than as a file, and the 2026-09-20 sync
 records them here so a reader is not left comparing line counts.**
 
-`skills/run-issues/decisions.md` withholds one section, "The retry brief states the
-invariant", 56 lines. It is the decision record for `retry_brief.py`, which is withheld
-directly above, and a decision record for a script nobody has is a reference to nothing.
+`skills/run-issues/decisions.md` withheld one section, "The retry brief states the
+invariant", 56 lines, until 2026-09-29. It is the decision record for `retry_brief.py`,
+and a decision record for a script nobody has is a reference to nothing. The script ships
+now, so the section does too.
 
-`skills/run-issues/test_skill_structure.py` carries 25 of the 46 cases its live copy
-gained and holds 21. Every held case grades a sentence of `SKILL.md` that this pack does
+`skills/run-issues/test_skill_structure.py` carries 204 of the 238 cases in its live copy
+and holds 41, 22 of them added by the 2026-09-29 sync. `test_model_map.py` holds one case
+and `test_finale_reds.py` holds one, for the same reason. Every held case grades a sentence of `SKILL.md` that this pack does
 not publish — 24 failures were measured by driving them against the published text — so
 carrying them would turn the pack red for every reader while proving nothing about the
 file they would be reading. The reasons are written above the classes that kept them.
@@ -230,15 +263,24 @@ the age of the file. The heading it searches for carries a person's name, and it
 literal in the code and in both of its refusals, so the name is what the tool matches on
 rather than something the prose says. That is the `memory_dir.py` case again: renaming it
 changes what the script finds, and nothing here defines a heading for a new name to match.
-It also ships no drill of its own. A later sync that takes the heading as an argument
+Its drill, `test_check_rulings_reach.py`, arrived after 2026-09-21 and is withheld with it,
+because it drives a script this pack does not have. A later sync that takes the heading as an argument
 publishes it, and writing that argument is authoring. `skills/harden-issues/SKILL.md`
 carries the duty the script guards, and says in as many words that this pack ships no
 refusal for it.
 
+**`check_run_silences.py` is withheld with its drill, and the reason is the history it
+reads.** It checks that a run's ledger records every charge the gates made, and to place a
+ledger it reads the author's skills repository at fixed commits. A ledger fingerprinted
+anywhere else is unreadable to it, and nothing in this pack calls it. Its drill pins four
+real commits of that repository; 22 of its 24 cases failed when driven from another git
+repository. A later sync that reads the fingerprint from the reader's own tree publishes
+both, and writing that is authoring.
+
 ```withheld
 ~/.claude/skills/run-issues/test_run_isolation.py
-~/.claude/skills/run-issues/retry_brief.py
-~/.claude/skills/run-issues/test_retry_brief.py
+~/.claude/skills/run-issues/check_run_silences.py
+~/.claude/skills/run-issues/test_check_run_silences.py
 ~/.claude/skills/parallel-hunt/test_hunt_isolation.py
 ~/.claude/skills/run-issues/panel-review-*.md
 ~/.claude/skills/run-issues/workflow-redesign-*.md
@@ -249,6 +291,7 @@ refusal for it.
 ~/.claude/skills/lib/memory_dir.py
 ~/.claude/skills/lib/test_memory_dir.py
 ~/.claude/skills/lib/check_rulings_reach.py
+~/.claude/skills/lib/test_check_rulings_reach.py
 ~/.claude/skills/run-issues/grade_transcripts.py
 ~/.claude/skills/run-issues/test_grade_transcripts.py
 ~/.claude/skills/run-issues/check_run_isolation.py
@@ -300,7 +343,7 @@ than the four that govern everything else here.
 | `hooks/retired-phrases-gate.py` | `~/.claude/hooks/retired-phrases-gate.py` (refuses a write that puts retired wording into a steering file) |
 | `hooks/test_retired_phrases_gate.py` | `~/.claude/hooks/test_retired_phrases_gate.py` |
 | `hooks/git-shared-state-guard.py` | `~/.claude/hooks/git-shared-state-guard.py` (refuses the git commands that reach across sessions sharing one checkout) |
-| `hooks/test_git_shared_state_guard.py` | `~/.claude/hooks/test_git_shared_state_guard.py` (68 behavioural cases against a real git fixture, mutation-tested, added 2026-09-08) |
+| `hooks/test_git_shared_state_guard.py` | `~/.claude/hooks/test_git_shared_state_guard.py` (79 behavioural cases against a real git fixture, mutation-tested, added 2026-09-08) |
 | `hooks/run-issues-brief-cap.py` | `~/.claude/hooks/run-issues-brief-cap.py` (refuses a first-attempt implementer brief longer than the part that varies) |
 | `hooks/test_run_issues_brief_cap.py` | `~/.claude/hooks/test_run_issues_brief_cap.py` |
 | `hooks/run-issues-typecheck-gate.py` | `~/.claude/hooks/run-issues-typecheck-gate.py` (refuses a gate spawn while the run's own tree does not typecheck) |
@@ -311,6 +354,8 @@ than the four that govern everything else here.
 | `hooks/test_machine_wide_kill_guard.py` | `~/.claude/hooks/test_machine_wide_kill_guard.py` (19 cases on command strings alone; carries no corpus and skips nothing) |
 | `hooks/rulings-write-guard.py` | `~/.claude/hooks/rulings-write-guard.py` (refuses a write that would leave an entry `rulings.py` cannot read, and a write that empties a rulings file holding entries) |
 | `hooks/test_rulings_write_guard.py` | `~/.claude/hooks/test_rulings_write_guard.py` (14 cases, the malformed entry copied from the real one; rewritten under rule 3 to drive the hook beside it rather than one in the reader's `~/.claude/hooks`) |
+| `hooks/run-issues-suite-gate.py` | `~/.claude/hooks/run-issues-suite-gate.py` (refuses a whole suite in a run that does not go through `run_suite.py` at a stage the caller owns) |
+| `hooks/test_run_issues_suite_gate.py` | `~/.claude/hooks/test_run_issues_suite_gate.py` (56 cases; one skips where no `settings.json` sits beside `hooks/`, as in the pack) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**
@@ -454,6 +499,23 @@ a compiled binary, a tool nobody has used yet. Closing that needs the position o
 command line, which is the parser. The gap is a consequence of refusing to guess, not a fault
 in the guard, and naming it is what lets a reader judge the trade rather than inherit it.
 
+**Three hooks and a reader that arrived after 2026-09-21 are withheld, and the reason is
+an import rather than a message.** `gate-issue-write-guard.py` refuses a subagent that
+creates an issue file or writes a gate's verdict into one. `run-issues-risk-path-guard.py`
+refuses a light issue's write to a path the repo's risk file names, and it reads that file
+through `risk_path_reader.py`. Both guards import `gate-source-write-guard.py`, which is
+withheld below, and through it `generated-file-guard.py`. Without them the gate-issue guard
+fails open on every call, so it would ship as a hook that refuses nothing. The risk-path
+guard is also unregistered in the author's own setup until a planned change is built, and
+a pack should not ship a control its author has switched off. The reader goes with the
+guard, because nothing else imports it. Both drills drive a withheld hook, and one of them
+asserts a file exists at the author's absolute hooks path. The briefs and skill text that
+name either guard now say what it refuses and that this pack does not ship it.
+
+`run-issues-suite-gate.py` arrived in the same stretch and ships. Its refusal cited a step
+of `run-issues/SKILL.md` by number; H3 moved that citation to `check_diff_coverage.py`,
+which says the same thing in a file this pack carries.
+
 The rest of the live hooks directory stays unpublished for the original reason. Each
 of those files carries state that is true of one machine or one repo and false
 everywhere else — a disk and
@@ -492,6 +554,11 @@ have, which is worse than having no hook:
 ~/.claude/hooks/test_worktree_base_drift.py
 ~/.claude/hooks/test_settings_env.py
 ~/.claude/hooks/TOOL-SET-PROBE.md
+~/.claude/hooks/gate-issue-write-guard.py
+~/.claude/hooks/test_gate_issue_write_guard.py
+~/.claude/hooks/run-issues-risk-path-guard.py
+~/.claude/hooks/test_run_issues_risk_path_guard.py
+~/.claude/hooks/risk_path_reader.py
 ```
 
 ## The coverage check

@@ -53,7 +53,9 @@ carries your recommended answer marked `[reversible]` or `[irreversible]` — th
 allows it, and carrying the measurement that establishes its blast radius,
 because the session refuses an unmeasured mark. The
 recommendation is what happens if nobody answers, written into the file as a
-default rather than a decision.
+default rather than a decision. A default that changes a criterion is written
+inside it as ``Default (`q-<pass>-<issue>-<n>`)``, the one mark
+`check_issue_ready.py` reads (issue 43b).
 
 **Never touch `Status:` or `Hardened:`.** The orchestrating session owns those.
 Skip any issue whose row in ANY `runs/<batch-id>/run.md` in the same directory
