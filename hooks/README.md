@@ -14,6 +14,7 @@ cp hooks/run-issues-foreground-gate.py hooks/run-issues-evidence-gate.py \
    hooks/run-issues-brief-cap.py hooks/run-issues-typecheck-gate.py \
    hooks/machine-wide-kill-guard.py hooks/gate-commit-guard.py \
    hooks/rulings-write-guard.py hooks/run-issues-suite-gate.py \
+   hooks/run-issues-wakeup-gate.py \
    ~/.claude/hooks/
 ```
 
@@ -49,6 +50,10 @@ its `PreToolUse` array rather than replacing the array.
           {
             "type": "command",
             "command": "python3 /ABSOLUTE/PATH/TO/run-issues-typecheck-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 /ABSOLUTE/PATH/TO/run-issues-wakeup-gate.py"
           }
         ]
       },
@@ -443,6 +448,34 @@ had changed. `run_suite.py` refuses that repeat only when a suite goes through
 it, and without this hook nothing makes a suite go through it. That is what you
 lose: the only road to a whole suite becomes one road among several.
 
+## run-issues-wakeup-gate.py, on `Agent|Task`
+
+It refuses a `run-issues-*` spawn from inside a live run's tree until that run's
+ledger carries a header line `Wakeup cron: <job id> pid <process id>` naming the
+`claude` process that asks. `skills/run-issues/wakeup_cron.py record` writes that
+line after the runner makes the cron with `CronCreate`. A cron job lives in the
+memory of the process that made it, so a resume in a new process is refused until
+it makes a new job. The refusal prints the three steps: look in `CronList`, make
+the job from what `wakeup_cron.py args` prints, and record it in every copy of the
+ledger.
+
+Every other spawn passes before the hook reads anything, and so does a run spawn
+outside a live run's tree. A hook environment with no `CLAUDE_PID` passes any line
+that names a job. It cannot catch a line written by hand for a job never made. It
+writes nothing.
+
+**It needs six files from this pack**: `find_live_ledger.py`, `wakeup_cron.py`,
+`check_finale_stage.py`, `check_issue_ready.py` in `skills/run-issues/`, and
+`skills/lib/set_level.py` with `skills/lib/next_batch.py`, which
+`find_live_ledger.py` imports. The hook looks for them at `../skills/run-issues/`
+relative to itself, which is `~/.claude/skills/run-issues` once installed as
+above. Where it cannot read them, or the live ledgers, the spawn passes and the
+hook says so on stderr.
+
+Skip it and the wakeup cron is a step in `SKILL.md` that a runner can forget. The
+author saw runs forget it, and a run that stops with no cron stays stopped until
+somebody looks.
+
 ## Check it worked
 
 `run-issues-evidence-gate.py` ships its test, `test_run_issues_evidence_gate.py`.
@@ -480,6 +513,10 @@ the four sibling files above at `../skills/` and the three role files it pins at
 `../agents/`, so run it from this directory inside the pack. One case, the
 registration check, skips itself when no `settings.json` sits beside the hooks
 directory, which is every copy of the pack that has not been installed.
+`run-issues-wakeup-gate.py` ships `test_run_issues_wakeup_gate.py`, 25 cases; its
+ledgers and git repositories are built in a temporary directory, and it imports
+the skill files above from `../skills/`, so run it from this directory inside the
+pack. Its registration check skips the same way.
 
 Only `coderules-gate.py` ships no test, because it has none in the tree it came
 from. It carries a drill in its docstring instead: pipe a JSON payload on stdin

@@ -2295,9 +2295,10 @@ class TheDetailsLeftByDestination(unittest.TestCase):
 # present in the home and absent from SKILL.md, and a paste-back goes red.
 
 SITTING_SIX_ANCHORS = [
-    # M1 -- the cron's usage-limit interval. The rescue is the story.
-    "cannot prevent a call that was never made, so shortening the interval"
-    " buys nothing",
+    # M1 -- the cron's one rescue. Its second clause, "so shortening the
+    # interval buys nothing", was overruled on 2026-09-29 when the human set the
+    # cron to every 30 minutes; `decisions.md` holds why.
+    "cannot prevent a call that was never made",
     # M2 -- the foreground gate. The two measurements are already in the hook's
     # own docstring, which SCRIPT_MARKS pins; the skill kept a summary of them.
     "its message says how to reissue",
@@ -3341,6 +3342,69 @@ class EachGateHasItsOwnVerdictFile(unittest.TestCase):
                 self.assertNotIn("attempt-<N>.md", brief)
                 self.assertIn(ending, brief)
         self.assertNotIn("Append only", read(AGENTS / "run-issues-verify-gate.md"))
+
+
+# --- The wakeup cron ruling (the human, 2026-09-29) -------------------------
+#
+# Every 30 minutes, resume only a run idle for more than 20, delete at
+# awaiting-merge or halt, and a forgotten cron is refused by a hook rather than
+# reminded. The cadence and the idle test live in `wakeup_cron.py` and its own
+# tests; these pin that each loaded file sends the runner to the machinery.
+
+WAKEUP = RUN_ISSUES / "wakeup_cron.py"
+WAKEUP_GATE = HOOKS / "run-issues-wakeup-gate.py"
+
+
+class TheWakeupCronIsMadeRecordedAndDeleted(unittest.TestCase):
+    def test_the_script_and_the_hook_are_on_disk(self):
+        self.assertTrue(WAKEUP.is_file())
+        self.assertTrue(WAKEUP_GATE.is_file())
+
+    def test_the_skill_makes_the_cron_from_the_script_and_names_the_hook(self):
+        skill = squash(read(SKILL))
+        self.assertIn("wakeup_cron.py args --ledger <run.md>", skill)
+        self.assertIn("wakeup_cron.py record --ledger <run.md> --id <job id>", skill)
+        self.assertIn("run-issues-wakeup-gate.py", skill)
+        self.assertIn("at launch and on every resume, before spawn 1", skill)
+
+    def test_the_skill_deletes_the_cron_where_it_clears_the_owner_line(self):
+        skill = squash(read(SKILL))
+        at = skill.index("The owner line is cleared, and the cron deleted")
+        window = skill[at:at + 500]
+        self.assertIn("CronDelete", window)
+        self.assertIn("wakeup_cron.py clear", window)
+
+    def test_the_overruled_interval_claim_is_gone(self):
+        self.assertNotIn("shortening the interval buys nothing", read(SKILL))
+        self.assertNotIn("at its usage-limit interval", read(SKILL))
+
+    def test_the_preflight_allows_all_three_cron_tools(self):
+        skill = squash(read(SKILL))
+        at = skill.index("**The runner itself**")
+        for tool in ("CronList", "CronCreate", "CronDelete"):
+            self.assertIn(tool, skill[at:at + 200])
+
+    def test_the_finale_deletes_the_cron_before_awaiting_merge(self):
+        finale = squash(read(FINALE))
+        self.assertIn("**Before `awaiting-merge`, `CronDelete` the wakeup cron", finale)
+        self.assertIn("wakeup_cron.py clear --ledger <run.md>", finale)
+
+    def test_the_resume_recreates_without_doubling(self):
+        resume = squash(read(RESUME))
+        self.assertIn("Recreate it, never double it.", resume)
+        self.assertIn("Run `CronList` first.", resume)
+
+    def test_decisions_holds_the_ruling_and_the_option_taken(self):
+        decisions = squash(read(DECISIONS))
+        self.assertIn("The wakeup cron fires every 30 minutes and cannot be"
+                      " forgotten (2026-09-29)", decisions)
+        self.assertIn("Taken: the first, with the process id on the line.",
+                      decisions)
+
+    def test_the_round_header_reason_moved_and_did_not_stay(self):
+        mark = "settlement parity into a structural fact"
+        self.assertIn(mark, squash(read(DECISIONS)))
+        self.assertNotIn(mark, squash(read(SKILL)))
 
 
 if __name__ == "__main__":

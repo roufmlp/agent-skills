@@ -728,6 +728,90 @@ class StatusesTheTrackerWrites(Base):
         self.assertIn("09-assign.md", out.stdout + out.stderr)
 
 
+RUN_ISSUES = HERE.parent / "run-issues"
+
+
+def statuses_the_runner_writes() -> set:
+    """Every ledger status the run-issues skill says its runner writes, read from
+    the skill rather than copied, so a status the skill gains is tested the day it
+    is written down.
+
+    Two sources. `SKILL.md`'s `Ledger statuses:` sentence names the chain and its
+    two side statuses. A `blocked` row carries its reason in brackets, and the
+    reasons are written in two shapes: the literal `blocked (criteria)` and
+    `blocked (depends on NN)` in `SKILL.md`, and "ledger it `blocked` with the
+    reason `light: two attempts spent`" in `check_attempt_cap.py`, which run
+    `batch-e2c4ee` wrote to its ledger as `blocked (light: two attempts spent)`.
+    """
+    skill = (RUN_ISSUES / "SKILL.md").read_text(encoding="utf-8")
+    sentence = re.search(r"Ledger statuses:(.*?)\.\s", skill, re.S).group(1)
+    found = set()
+    for token in re.findall(r"`([^`]+)`", sentence):
+        found.update(word.strip() for word in token.split("→"))
+    found.update(re.findall(r"`(blocked \([^)`]+\))`", skill))
+    for source in sorted(RUN_ISSUES.glob("*.py")) + sorted(RUN_ISSUES.glob("*.md")):
+        if source.name.startswith("test_"):
+            continue
+        text = " ".join(source.read_text(encoding="utf-8").split())
+        found.update(f"blocked ({reason})" for reason in re.findall(
+            r"`blocked` with the reason `([^`]+)`", text))
+    return {status.replace("NN", "11") for status in found}
+
+
+class LedgerStatusesTheRunnerWrites(Base):
+    """Run `batch-e2c4ee` wrote `blocked (light: two attempts spent)` for issue
+    281, a light issue that spent its two attempts, and on 2026-09-30 the board
+    refused one project's whole tracker over that one cell. A blocked row is not
+    held: the run kept the work off its branch and built nothing into main."""
+
+    def test_the_skill_names_every_blocked_form_measured_so_far(self):
+        """The collector must find something, or the test below passes on an
+        empty set. These are the forms the skill carried on 2026-09-30."""
+        self.assertLessEqual(
+            {"queued", "in-progress", "gates", "done", "correction", "blocked",
+             "blocked (criteria)", "blocked (depends on 11)",
+             "blocked (light: two attempts spent)"},
+            statuses_the_runner_writes())
+
+    def test_the_board_draws_over_every_status_the_runner_writes(self):
+        statuses = sorted(statuses_the_runner_writes())
+        rows = []
+        for number, status in enumerate(statuses, start=10):
+            write_issue(self.issues, f"{number}-issue", "ready-for-agent")
+            rows.append((str(number), status))
+        write_ledger(self.feature, "batch-e2c4ee", rows)
+        out = run(self.issues, self.out)
+        self.assertEqual(out.returncode, 0, out.stderr)
+
+    def test_a_light_issue_that_spent_its_attempts_is_not_held(self):
+        write_issue(self.issues, "281-sheet-asks", "ready-for-agent")
+        write_ledger(self.feature, "batch-e2c4ee",
+                     [("281", "blocked (light: two attempts spent)")])
+        card = self.cards(self.build())["281"]
+        self.assertEqual(card["column"], "ready-for-agent")
+        self.assertEqual(card["run"], "")
+
+    def test_a_blocked_row_with_a_reason_nobody_wrote_yet_is_not_held(self):
+        """The next reason the runner gives a `blocked` row is still `blocked`."""
+        write_issue(self.issues, "07-rounding", "ready-for-agent")
+        write_ledger(self.feature, "batch-e2c4ee",
+                     [("07", "blocked (full: three attempts spent)")])
+        card = self.cards(self.build())["07"]
+        self.assertEqual(card["column"], "ready-for-agent")
+        self.assertEqual(card["run"], "")
+
+    def test_a_status_outside_the_runners_grammar_still_refuses(self):
+        for status in ("blocked by 176", "blocked-on-someone", "blocked ()",
+                       "blocked (criteria) again", "finished"):
+            with self.subTest(status=status):
+                write_issue(self.issues, "07-rounding", "ready-for-agent")
+                write_ledger(self.feature, "batch-e2c4ee", [("07", status)])
+                out = run(self.issues, self.out)
+                self.assertNotEqual(out.returncode, 0)
+                self.assertIn("does not know", out.stdout + out.stderr)
+                self.assertIn(repr(status), out.stdout + out.stderr)
+
+
 class WhatTheFilesSay(Base):
     def test_a_sentence_that_carries_html_is_escaped_not_run(self):
         write_issue(self.issues, "07-rounding", "ready-for-agent",

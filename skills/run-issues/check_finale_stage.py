@@ -37,6 +37,11 @@ still unrun in three consecutive runs -- `dc132b`, `cab74e` and `fd4fa2`, the
 last at 15:10 on 2026-08-20, where the runner put the state back by hand.
 Promotion is what turns register rows into issue files, so a resume that skips
 it loses them. The human approved the refusal on 2026-08-21.
+
+**One refusal more, on the human's ruling of 2026-09-29:** `awaiting-merge` is refused
+while the ledger's `Wakeup cron:` line still names a job (`cron-still-live`). The
+cron is deleted when the run stops owning the tree, and this write is the moment it
+stops. `wakeup_cron.py`'s docstring holds the ruling.
 """
 
 from __future__ import annotations
@@ -98,6 +103,23 @@ def judge(current: str | None, target: str) -> tuple[bool, str]:
     return True, f"ok: '{current}' -> '{target}'"
 
 
+def cron_still_live(text: str, target: str) -> str | None:
+    """The refusal when `target` ends the run while a wakeup cron is still named."""
+    if target != "awaiting-merge":
+        return None
+    # Imported here: `wakeup_cron` imports `read_state` from this module.
+    from wakeup_cron import read_wakeup
+    wakeup = read_wakeup(text) or {}
+    if not wakeup.get("job"):
+        return None
+    return (
+        f"cron-still-live: the ledger still names wakeup cron {wakeup['job']}. "
+        f"Delete it with CronDelete {wakeup['job']}, then run `python3 "
+        f"~/.claude/skills/run-issues/wakeup_cron.py clear --ledger <run.md>`, "
+        f"then write awaiting-merge"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Refuse a finale ledger state that skips a step.")
     parser.add_argument("--ledger", required=True, help="path to the run ledger")
@@ -112,6 +134,10 @@ def main() -> int:
         return 2
 
     allowed, reason = judge(read_state(text), args.to)
+    if allowed:
+        live = cron_still_live(text, args.to)
+        if live:
+            allowed, reason = False, live
     if allowed:
         print(reason)
         return 0

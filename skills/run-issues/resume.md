@@ -31,3 +31,11 @@ and chasing it cost 25 minutes.
 
 Only then: read that ledger, then `run-journal.md` once, then re-run pre-flight
 before spawning anything, and recreate the cron.
+
+**Recreate it, never double it.** Run `CronList` first. A job whose prompt names
+this batch is still alive, because this is the process that made it: keep it,
+and run `wakeup_cron.py record` with its id if the ledger's `Wakeup cron:` line
+names another. Otherwise make one exactly as "Resume across usage limits" in
+`SKILL.md` says. A job dies with the process that made it, so a resume in a new
+session always makes one, and `~/.claude/hooks/run-issues-wakeup-gate.py` refuses
+the first spawn until it has.

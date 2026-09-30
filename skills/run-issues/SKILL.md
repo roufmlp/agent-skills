@@ -57,9 +57,8 @@ docstring holds the two measurements behind the shape: the stall claim against
 background spawns, refuted the day after it was made, and the run that never once
 spawned both gates in one message.
 
-**The cron stays, at its usage-limit interval.** It rescued one run exactly once,
-from a spawn the runner announced and never made; `run_in_background: false`
-cannot prevent a call that was never made, so shortening the interval buys nothing.
+**The wakeup cron stays:** its one rescue was a spawn announced and never made,
+and `run_in_background: false` cannot prevent a call that was never made.
 
 **This is also what row 23 guards.** A runner that does not block can mark an
 issue done before the work lands, and `skills/lib/check_verdict.py` refuses on a
@@ -284,10 +283,6 @@ before spawn 1 (see Run state), and every role a round spawns is sent to that
 header by its own agent file. A brief that restates them is refused by
 `~/.claude/hooks/run-issues-brief-cap.py` at 400 words on a first attempt.
 
-**Why a block and not a rule** (`decisions.md`). The block turns naming the place
-into a field you fill and settlement parity into a structural fact: one text, one
-paste, every agent in the round. Adopted by the human 2026-08-16.
-
 ## Per-issue loop
 
 1. **Branch on the issue's `Level:` line first**, read fresh by `issue_level.py
@@ -390,7 +385,6 @@ paste, every agent in the round. Adopted by the human 2026-08-16.
    ```
 
    The same inode means the write will land in the run's own worktree: stop.
-   (Adopted by the human 2026-08-27 as B5.)
 
    *The gate copy's `node_modules` symlink is a TWO-WAY DOOR.* A path that
    resolves through it reaches the real directory, and nothing warns. Delete
@@ -847,9 +841,18 @@ nowhere else. The run ends at `awaiting-merge`, and the merge is the human's.
 
 ## Resume across usage limits
 
-**The ledger resumes a run. The cron only saves short waits** — it reaches no
-further than a five-hour window the same session sits through. A weekly limit
-resetting days out is resumed by a human re-invoking `/run-issues resume`.
+**The ledger resumes a run. The wakeup cron revives an idle one**, and it dies
+with the session, so a weekly limit resetting days out is resumed by a human
+re-invoking `/run-issues resume`. **Make the cron at launch and on every resume,
+before spawn 1:** keep a job `CronList` shows naming this batch, or pass what
+`args` prints to `CronCreate` unchanged, then `record` the job id:
+
+  ```
+  python3 ~/.claude/skills/run-issues/wakeup_cron.py args --ledger <run.md>
+  python3 ~/.claude/skills/run-issues/wakeup_cron.py record --ledger <run.md> --id <job id>
+  ```
+`~/.claude/hooks/run-issues-wakeup-gate.py` refuses every `run-issues-*` spawn
+until the ledger names a job THIS process made; `wakeup_cron.py` holds the ruling.
 
 **The ledger carries an owner line; staleness is the FILE's mtime, never a
 handwritten timestamp.** One line at the top: `Owner: <session>`. Every
@@ -858,9 +861,10 @@ which the handwritten field it replaced could be (`decisions.md`). A long
 implement attempt moves no status line for an hour, so "no progress" cannot mean
 "dead" — only a stale mtime can.
 
-**The owner line is cleared the moment the run stops owning the tree.** Reaching
-`awaiting-merge`, or halting, rewrites it to `Owner: none — <awaiting-merge|HALTED>
-<date> <HH:MM>`.
+**The owner line is cleared, and the cron deleted, the moment the run stops owning
+the tree.** Reaching `awaiting-merge`, or halting, runs `CronDelete` and
+`wakeup_cron.py clear --ledger <run.md>`, then rewrites the owner line to
+`Owner: none — <awaiting-merge|HALTED> <date> <HH:MM>`.
 
 **The stall watch is a separate PROCESS, and the cron cannot replace it.** A
 `CronCreate` job fires only while the REPL is idle, and a session behind a modal
@@ -874,8 +878,8 @@ at launch; it exits itself when the run ends:
   ```
 It resumes nothing. On a frozen ledger it tests whether a `claude` process still
 sits in the run's worktree: alive is STALLED and says do not resume, gone is DEAD
-and prints the resume command. Keep the cron for the idle usage-limit wait it does
-cover, and remind once that the machine must stay awake (`caffeinate -dimsu`).
+and prints the resume command. Remind once that the machine must stay awake
+(`caffeinate -dimsu`).
 
 **Every halt writes a HALT BLOCK into the ledger before the session stops.** It is
 the only resume document — a second copy goes stale. In order: why it halted and
@@ -887,11 +891,10 @@ remaining queue in the order given.
 
 **Pick the ledger before you read one, and `resume.md` beside this file says
 how.** Read it on every `resume` invocation and on every revival from a halt,
-before opening any `run.md`. It holds the script that chooses between the copies
-every worktree carries, what a refusal from that script means, and the reading
-order that follows. A guess here is why the procedure is a script and not a
-judgement (`resume.md` holds what one cost). Resume keys on the current directory
-(ticket 38, the layout ticket, ruling 11); `resume.md` says how.
+before opening any `run.md`, and before the wakeup cron is made. A guess here is
+why the procedure is a script and not a judgement (`resume.md` holds what one
+cost), and it keys on the current directory (ticket 38, the layout ticket, ruling
+11).
 
 ## Pre-flight
 
@@ -983,15 +986,13 @@ judgement (`resume.md` holds what one cost). Resume keys on the current director
   that this reading and the phase's repair are about the same files: a worktree
   freezes the tracker at the moment it was cut. **Where a scoped file is missing
   from the worktree, bring it onto the branch before the phase runs**; the
-  criteria gate below refuses it either way (`decisions.md` holds the drive that
-  met it).
+  criteria gate below refuses it either way (`decisions.md`).
 
   **The verdict is the file's own summary line and the `MOVED`, `GONE` and
   `AMBIGUOUS` rows that NAME it — never the exit code.** The decision pass cannot
   be turned off, so one stale `Touches:` line anywhere in the repository makes the
   process exit 1, and a runner reading that code names every scoped file as
-  broken — which since ruling 9 the phase WRITES on (`decisions.md` holds the
-  measurement).
+  broken — which since ruling 9 the phase WRITES on (`decisions.md`).
 
   **A zero from that check is a fact about the FILE, not about the instrument.**
   Report it as "this file carries no parsed citations at this moment", never as a
@@ -1000,8 +1001,7 @@ judgement (`resume.md` holds what one cost). Resume keys on the current director
 - **Re-derive every fact the run will carry into its spawns, from source, and
   name the source beside it.** Carry-forward entries, batch-plan sentences,
   anything a previous session wrote down — none of it is evidence. Read the
-  function, run the query, open the migration. `decisions.md` holds the nine-hour
-  instance (209-215).
+  function, run the query, open the migration (209-215: `decisions.md`).
 - **Every spawn carries its own role's model, read off the ledger.** Read
   `Model map at launch:` in `run.md`, take this role's value, and pass it in
   the Agent call's `model` field. Every spawn, every role, every attempt.
@@ -1157,8 +1157,8 @@ judgement (`resume.md` holds what one cost). Resume keys on the current director
     where a raw `curl` is allowed as an exact string and prompts again on the
     next port, path or label. The script refuses any target that is not this
     machine.
-  - **The runner itself** — `CronCreate`, for the resume wakeup, on any run that
-    could meet a usage limit.
+  - **The runner itself** — `CronList`, `CronCreate` and `CronDelete`, for the
+    wakeup cron every run keeps.
 - **An unattended run may delete only rows it marked as its own, and the scope of
   the delete is that marker.** It stamps a run-owned marker column on every row
   it writes and deletes on that marker alone. It never widens its database

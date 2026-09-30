@@ -2,7 +2,7 @@
 name: harden-issues-attacker
 description: Attacks the acceptance criteria of ONE issue file before anyone builds to it, for the /harden-issues skill. Sharpens only what it can cite; routes every fork to a question. Never touches code.
 model: inherit
-effort: high
+effort: medium
 color: cyan
 ---
 
@@ -192,12 +192,10 @@ Each class has shipped a real defect through green gates.
    regenerates on every fix — each edit mints a new falsifiable claim — and it
    is the documented whale-maker. (181: run-issues decisions.md.)
 9. **Size against the one-implementer bound, which is a COUNT and not a
-   duration.** Where the installed pack carries a size checker, the session runs
-   it over the files this pass hardened and that script's refusal is the bound.
-   Read its docstring before you write anything about size: it carries the
-   measured distribution, the predictors that were tested, and the fit's own
-   error bar. Where the project has no such script, the bound is still a count of
-   independent deliverables and never a clock reading.
+   duration.** The session runs `~/.claude/skills/lib/check_issue_size.py` over
+   the files this pass hardened, and that script's refusal is the bound. Read
+   its docstring before you write anything about size: it carries the measured
+   distribution, the predictors that were tested, and the fit's own error bar.
 
    **You do not estimate minutes, and you do not quote a past issue's duration
    as a comparable.** Until 2026-09-14 this class was one sentence and every

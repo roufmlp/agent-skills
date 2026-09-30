@@ -21,8 +21,10 @@ python3 ~/.claude/skills/run-issues/check_finale_stage.py --ledger <run.md> --to
 
 It permits the next stage in the chain and a repeat of the current one, and refuses a
 jump, a reversal and a ledger with no state; its docstring holds the three runs that
-earned it. `finale_reds.py` is safe to re-enter — it writes no row twice — and the board
-render is safe to repeat:
+earned it. **Before `awaiting-merge`, `CronDelete` the wakeup cron and run
+`wakeup_cron.py clear --ledger <run.md>`**, or the guard refuses that write.
+`finale_reds.py` is safe to re-enter — it writes no row twice — and the board render
+is safe to repeat:
 
 1. **Mechanical.** Full typecheck, full test suite, and a build from a **cold
    cache** (delete `.next` / `dist` first — a warm cache agrees with whatever it
@@ -52,8 +54,7 @@ render is safe to repeat:
    up, correctly, so the row becomes a numbered action on the human. (Adopted by the human
    2026-08-30; `decisions.md` holds the probe that wrote.)
 
-   **Two guards run here, and a refusal from either stops the finale** (the human,
-   2026-08-25).
+   **Two guards run here (the human, 2026-08-25). A refusal from either stops the finale.**
 
    ```
    python3 ~/.claude/skills/run-issues/check_commit_order.py --ledger <run.md> --repo .
@@ -144,8 +145,7 @@ render is safe to repeat:
    a business rule.** A number read off today's input is a fact about one import,
    not a rule about the business, so the header names it as measured and the
    issue lists it in `## Must still be true` as an assumption a later issue may
-   lift. (Adopted by the human 2026-08-10; `decisions.md` holds the migration that
-   had to lift a measured ceiling and the model header that came of it.)
+   lift. (Adopted by the human 2026-08-10; `decisions.md` holds the migration.)
 
    **A published checksum expires the moment the file moves.** A correction
    round re-stamps every checksum a gate published for a file it touched, and

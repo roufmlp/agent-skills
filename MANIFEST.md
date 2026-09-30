@@ -70,10 +70,12 @@ Listed in the order the loop runs.
 | `skills/run-issues/make_copy.py` | `~/.claude/skills/run-issues/make_copy.py` (makes a gate's private copy of the run tree, with its history, its uncommitted work and a linked `node_modules`) |
 | `skills/run-issues/move_verdicts.py` | `~/.claude/skills/run-issues/move_verdicts.py` (moves gate verdicts out of issue files and into the runs that wrote them; dry run unless `--apply`) |
 | `skills/run-issues/run_suite.py` | `~/.claude/skills/run-issues/run_suite.py` (the wrapper every whole-suite reading goes through: logs it, hashes the tree, refuses a repeat) |
+| `skills/run-issues/wakeup_cron.py` | `~/.claude/skills/run-issues/wakeup_cron.py` (makes the run's 30-minute wakeup cron from its ledger, records the job with the process that made it, clears it, and judges each firing idle or busy) |
+| `skills/run-issues/test_wakeup_cron.py` | `~/.claude/skills/run-issues/test_wakeup_cron.py` |
 | `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, plus the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (51 files, 2,095 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-29 by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (52 files, 2,133 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-30 by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -189,13 +191,14 @@ and a decision record for a script nobody has is a reference to nothing. The scr
 now, so the section does too, and the file travels whole.
 
 `skills/run-issues/test_skill_structure.py` carried 204 of its live copy's 238 cases while
-`SKILL.md` was held, and 235 once it was published on 2026-09-29. It still holds four,
+`SKILL.md` was held, and 235 once it was published on 2026-09-29; the 2026-09-30 sync
+brought it to 244 of 247. It still holds four,
 which grade the withheld `memory_dir.py` and a pending-actions file this pack does not
 have; a published inverse, `TestCitationsResolveAnywhere`, asserts that no skill cites a
-machine-local path. `test_model_map.py` holds one case for a different reason: it pins
+machine-local path. `test_model_map.py` held one case for a different reason: it pins
 each agent file's effort to the skill table that spawns it, and the committed
-`harden-issues-attacker.md` disagrees with its table until the author commits a change
-already made in the live tree. Before 2026-09-29 every held case graded a sentence of `SKILL.md` that this pack did not
+`harden-issues-attacker.md` said `high` against its table's `medium` until the author
+committed the live fix. It travels from 2026-09-30. Before 2026-09-29 every held case graded a sentence of `SKILL.md` that this pack did not
 publish — 24 failures were measured by driving them against the published text — so
 carrying them would have turned the pack red for every reader. The reasons for the cases
 still held are written above the classes that keep them.
@@ -363,6 +366,8 @@ than the four that govern everything else here.
 | `hooks/test_rulings_write_guard.py` | `~/.claude/hooks/test_rulings_write_guard.py` (14 cases, the malformed entry copied from the real one; rewritten under rule 3 to drive the hook beside it rather than one in the reader's `~/.claude/hooks`) |
 | `hooks/run-issues-suite-gate.py` | `~/.claude/hooks/run-issues-suite-gate.py` (refuses a whole suite in a run that does not go through `run_suite.py` at a stage the caller owns) |
 | `hooks/test_run_issues_suite_gate.py` | `~/.claude/hooks/test_run_issues_suite_gate.py` (56 cases; one skips where no `settings.json` sits beside `hooks/`, as in the pack) |
+| `hooks/run-issues-wakeup-gate.py` | `~/.claude/hooks/run-issues-wakeup-gate.py` (refuses a `run-issues-*` spawn until the run's ledger names a wakeup cron made by this `claude` process) |
+| `hooks/test_run_issues_wakeup_gate.py` | `~/.claude/hooks/test_run_issues_wakeup_gate.py` (25 cases; one skips where no `settings.json` sits beside `hooks/`, as in the pack) |
 | `hooks/README.md` | written for this repo; no live source (the install note) |
 
 **`git-shared-state-guard.py` is here on a ruling, and it cost the sync three scrubs.**

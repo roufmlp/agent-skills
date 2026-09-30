@@ -126,9 +126,9 @@ answers two separate questions per issue:
                                          see WHAT AN UNMERGED BRANCH MEANS
     HELD      (never offered)            a row reads `done`, `in-progress`, `gates`
                                          or `correction`
-    RELEASED  (offered again)            `queued`, `blocked (criteria)`, or plain
-                                         `blocked` — the run gave up without
-                                         building it; not satisfied
+    RELEASED  (offered again)            `queued`, plain `blocked`, or
+                                         `blocked (<reason>)` — the run gave up
+                                         without building it; not satisfied
 
 Any other row status is a REFUSAL naming the status, the run and the issue. The
 vocabulary is the run-issues skill's and it grows; a tool that guessed an unknown
@@ -148,6 +148,19 @@ draft store and the first browser flow, after three attempts and three rejection
 Plain `blocked` was not in `LEDGER_KNOWN`, so this tool REFUSED THE WHOLE TRACKER over
 one row: no batch at all, for 178 issue files, because one cell of one merged run's
 ledger used a word from the same family. That is the fault this entry closes.
+
+A BLOCKED ROW CARRIES ITS REASON IN BRACKETS, AND EVERY REASON RELEASES. The runner
+writes `blocked` alone or `blocked (<reason>)`, and the reasons grow: `criteria`,
+`depends on NN` (a dependency went `blocked` first) and, from the light attempt cap
+of tracker-tooling issue 40, `light: two attempts spent`. Every one ends the way
+plain `blocked` ends — the run keeps the work off its branch and builds nothing into
+main. So the form is `BLOCKED_ROW`, not a list of reasons. Run `batch-e2c4ee` wrote
+`blocked (light: two attempts spent)` for issue 281, and on 2026-09-30 the board
+refused one project's whole tracker over it; `blocked (depends on NN)` refused the
+same way and had simply not been written yet. The form is exact: `blocked by 176`,
+`blocked-on-someone`, `blocked ()` and a bracket followed by more words stay refusals.
+`test_board.py` reads the statuses from the run-issues skill itself and drives the
+board over each, so a status the skill gains fails a test before it fails a board.
 
 WHAT A RELEASE DOES NOT SAY, and where the reader gets it. A `blocked` row often
 leaves a diff on a side branch — issue 08d's three attempts sit on that run's own
@@ -300,13 +313,21 @@ BLOCKED = "blocked"
 KNOWN_STATUSES = SATISFIED + CANDIDATES + (PARKED, BLOCKED)
 
 # Ledger row statuses, from the run-issues skill: `queued -> in-progress -> gates ->
-# done`, plus `correction`, `blocked (criteria)` and plain `blocked`. Anything else is
-# a refusal. The membership tests below are EXACT, so `blocked` and `blocked (criteria)`
-# stay two entries and neither shadows the other; see THE TWO BLOCKED STATUSES above.
+# done`, plus `correction` and `blocked`, which may carry a reason in brackets.
+# Anything else is a refusal. The membership tests below are EXACT, and a bracketed
+# reason must match `BLOCKED_ROW` whole; see A BLOCKED ROW CARRIES ITS REASON above.
 LEDGER_SATISFIES = ("done",)
 LEDGER_HOLDS = ("done", "in-progress", "gates", "correction")
-LEDGER_RELEASES = ("queued", "blocked (criteria)", "blocked")
-LEDGER_KNOWN = LEDGER_HOLDS + LEDGER_RELEASES
+LEDGER_RELEASES = ("queued", "blocked")
+LEDGER_KNOWN = LEDGER_HOLDS + LEDGER_RELEASES + ("blocked (<reason>)",)
+BLOCKED_ROW = re.compile(r"blocked \((?=[^()]*\S)[^()]+\)")
+
+
+def ledger_status_known(status: str) -> bool:
+    """True for a status this tool can place: one of `LEDGER_HOLDS` or
+    `LEDGER_RELEASES`, or `blocked (<reason>)` for any non-blank reason."""
+    return (status in LEDGER_HOLDS or status in LEDGER_RELEASES
+            or BLOCKED_ROW.fullmatch(status) is not None)
 
 # THE TWO READINGS OF A LEDGER `done`, separated on 2026-09-14. See the module
 # docstring, WHAT AN UNMERGED BRANCH MEANS.
@@ -722,7 +743,7 @@ def load_ledgers(runs_dir: Path, issues: dict) -> list:
                 raise Refusal(
                     f"run {run_id}: ledger row for issue {issue_id}, and no file carries "
                     "that number")
-            if status not in LEDGER_KNOWN:
+            if not ledger_status_known(status):
                 raise Refusal(
                     f"run {run_id}: issue {issue_id} has ledger status {status!r}, which "
                     f"this tool does not know ({', '.join(LEDGER_KNOWN)}); it will not "
@@ -746,7 +767,7 @@ def ledger_rows(text: str):
 
     THE STATUS COMES BACK WITHOUT ITS EMPHASIS. `*` and backticks are stripped the
     way `run_is_merged` strips them from a `State:` line, and nothing else is: the
-    word under them still meets `LEDGER_KNOWN` by exact membership, so an unknown
+    word under them still meets `ledger_status_known` exactly, so an unknown
     status refuses as it always did. One run wrote `**blocked**` for issues 151,
     152 and 53, and on 2026-09-23 this tool refused the whole tracker
     over the asterisks. A holding status is stripped the same way, so a formatted

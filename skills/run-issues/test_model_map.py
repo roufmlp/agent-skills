@@ -372,12 +372,28 @@ class RoleEfforts(unittest.TestCase):
     """Ruling 7: effort stays in the agent file and the ledger records it. The
     Agent tool has no effort field, so this is read, never set."""
 
-    # HELD from this class: `test_every_agent_file_states_the_effort_its_skill_table_states`,
-    # which pins each agent file's `effort:` to the Effort column of the skill
-    # table that spawns it. On 2026-09-29 the committed `harden-issues-attacker.md`
-    # still says `high` while `harden-issues/SKILL.md` says `medium`; the author's
-    # change to the brief was not yet committed, and this pack publishes committed
-    # files only. The case travels with the next sync that carries that brief.
+    def test_every_agent_file_states_the_effort_its_skill_table_states(self):
+        """Effort has two homes: the agent file's frontmatter, which the ledger
+        reads, and the Effort column of the skill that spawns the role, which
+        the human reads. This pins the two together and pins no value, so a ruled
+        change of effort edits the agent file and the table and never this test.
+        It replaced two tests that pinned literal values: those broke on
+        2026-09-25 when commit `58b0c8c` moved three roles to `medium`, on any
+        branch cut before it, because the agent files live in `~/.claude/agents`
+        and a branch of this repo carries only the old literals."""
+        stated = skill_table_efforts()
+        self.assertEqual(UNSPAWNED & set(stated), set(),
+                         "a role named unspawned still has a skill table row")
+        self.assertEqual(set(ROLES.values()) - set(stated) - UNSPAWNED, set(),
+                         "a role no skill table gives an effort for")
+        got = role_efforts()
+        for role, agent_type in ROLES.items():
+            if agent_type in UNSPAWNED:
+                continue
+            with self.subTest(role=role):
+                self.assertEqual(got[role], stated[agent_type],
+                                 f"~/.claude/agents/{agent_type}.md and its skill table disagree")
+
     def test_an_unreadable_agent_file_reads_unmeasured_never_a_guess(self):
         got = role_efforts(agents_dir="/nonexistent")
         self.assertEqual(set(got.values()), {"unmeasured"})

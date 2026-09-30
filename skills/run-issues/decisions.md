@@ -2421,3 +2421,73 @@ runner commits each issue after its gates; an implementer that commits its
 own work hides its paths from this check, and the finale's run catches them.
 The harness suite runs without coverage, so a changed line only a harness
 file executes is not graded.
+
+## The wakeup cron fires every 30 minutes and cannot be forgotten (2026-09-29)
+
+The human ruled this mid-run in `batch-e2c4ee`, and it stands for every run:
+
+1. The wakeup cron fires every 30 minutes. Launches had been creating it at the
+   usage-limit interval, `17 */5 * * *`, which is what `batch-e2c4ee` made at launch
+   and replaced once they ruled.
+2. A firing resumes the run only when the run has been idle for more than 20 minutes:
+   the ledger's mtime is older than that and no agent of the run is still running.
+   Otherwise it does nothing.
+3. The cron is deleted when the run reaches `awaiting-merge` or halts.
+4. The human has seen runs forget to create the cron at all, and wants that refused, not
+   reminded.
+
+This overrules one sentence `SKILL.md` carried since the 2026-08-17 rescue: "shortening
+the interval buys nothing". That was true of the job it was then, a usage-limit resume.
+With an idle test the cron becomes a reviver for a run that stopped for any reason, and
+a five-hour gap is five hours of a stopped run. The rescue itself still stands, and
+still sits beside `run_in_background`, because the rescued spawn was one the runner
+announced and never made.
+
+**What was built.** `wakeup_cron.py` prints the `CronCreate` arguments from the ledger,
+records the job, clears it, and judges each firing. The firing's test is code: the
+prompt runs `wakeup_cron.py check` and does what its one line says. The prompt the
+ruling came with grepped `^State: awaiting-merge`, and the pilot's ledgers have carried
+`State: **awaiting-merge, reached 15:45.**`, which that grep misses, so `check` uses
+`check_finale_stage.read_state` instead. The one test no script can make is whether an
+agent of the run is still running: agents are session state, so the IDLE line hands it
+to the session the cron wakes.
+
+**How "forgot the cron" became refusable.** Two shapes were weighed.
+
+- A header line `Wakeup cron: <job id>`, and a hook that refuses a `run-issues-*` spawn
+  while the live ledger lacks it. This catches a launch that never made the cron. It
+  does not catch a resume: the line survives in the ledger after the job has died with
+  the session that made it, and a stale line passes.
+- A `PostToolUse` hook on `CronCreate` that stamps each job into a state file, read by
+  the spawn gate. This also catches a hand-written line for a job never made, but it is
+  a second hook and a second store of run state, for a lie rather than the lapse the human
+  has seen.
+
+Taken: the first, with the process id on the line. `wakeup_cron.py record` writes
+`Wakeup cron: <job id> pid <CLAUDE_PID>`, and `run-issues-wakeup-gate.py` refuses a
+spawn unless the line names a job made by the process asking. A `CronCreate` job is held
+in memory by the `claude` process and dies with it, and `CLAUDE_PID` is set in the Bash
+tool and in every hook, so a resume in a new process is refused until it makes a job.
+The session id would not do: `--resume` keeps it and loses the jobs. The hook is new
+rather than a clause in `run-issues-foreground-gate.py`, because that gate is a pure
+function of the payload and this check needs git and a ledger read, which is the
+typecheck gate's shape.
+
+The deletion is refusable at the finale: `check_finale_stage.py` refuses
+`awaiting-merge` while the line still names a job. A halt has no script to refuse it,
+so the cron is its own backstop there: its next firing reads `Owner: none` and tells
+the session to delete it.
+
+**What left `SKILL.md` to pay for the lines.** The file sat at 1199 against a ceiling
+of 1200, so every line the new rules added was paid for by a line moved out. Most were
+second copies: the B5 stamp and three pointers into this file lost the story this file
+already holds, the pointer to `resume.md` stopped describing its target's contents,
+and the cron's own paragraph beside `run_in_background` lost its overruled clause. One
+reason had no other home and lives here now, word for word:
+
+> **Why a block and not a rule.** The block turns naming the place into a field you fill
+> and settlement parity into a structural fact: one text, one paste, every agent in the
+> round. Adopted by the human 2026-08-16.
+
+`finale.md`'s new sentence was paid for by two pointers shortened in place, so the file
+stays at the count `master` left it.
