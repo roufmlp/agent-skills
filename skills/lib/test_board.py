@@ -434,9 +434,17 @@ class InABrowser(Base):
         tidier and hangs: a fresh profile starts the component updater, which
         holds the process open past the DOM. Measured 2026-09-14, three flag
         sets, every one over sixty seconds against under a second here.
+
+        The next four flags keep Chrome away from the macOS keychain and the
+        media keys. Without them a run from the Claude Code sandbox put a
+        "Keychain Not Found" dialog in front of the human, and probably opened
+        Apple Music, until 2026-09-30. Any shell wrapper that starts Chrome
+        needs the same four.
         """
         result = subprocess.run(
             [chrome(), "--headless", "--disable-gpu", "--no-sandbox",
+             "--use-mock-keychain", "--password-store=basic", "--mute-audio",
+             "--disable-features=HardwareMediaKeyHandling",
              "--incognito", "--disable-extensions", "--no-first-run",
              "--no-default-browser-check", "--disable-component-update",
              "--host-resolver-rules=MAP * ~NOTFOUND",

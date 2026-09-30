@@ -47,6 +47,12 @@ Usage:
     collect_shards.py --kind register --feature F --check    # drift or a blinding byte, exit 1
     collect_shards.py --kind register --feature F --mtime    # newest shard mtime
     collect_shards.py --kind register --feature F --my-shard # where to write
+    collect_shards.py --kind register --feature F --print    # the board on stdout
+
+The board is written into the main checkout whichever tree the call comes from,
+so a write from a linked worktree is refused unless `--write-main` says that is
+the intent (ruling `q-fin-44052e-02`). The read-only modes answer from anywhere,
+and `--print` is how a reader in a worktree reads the board without writing it.
 """
 
 import argparse
@@ -666,6 +672,12 @@ def main(argv=None):
                              "retire_done_rows.py's `closed`. Nothing else may.")
     parser.add_argument("--split", action="store_true",
                         help="one-off: move the generated file into 00-history.md")
+    parser.add_argument("--write-main", action="store_true",
+                        help="write the main checkout's board from a linked "
+                             "worktree; refused without it")
+    parser.add_argument("--print", action="store_true",
+                        help="print the board to stdout and write nothing; "
+                             "answers from any tree")
     args = parser.parse_args(argv)
 
     board = GENERATED[args.kind]
@@ -703,6 +715,24 @@ def main(argv=None):
                   file=sys.stderr)
             return 1
         print(stamp)
+        return 0
+
+    if args.print:
+        # The board as a write would build it, on stdout, and no file touched.
+        # A reader in a worktree takes this rather than `--write-main`, which
+        # changes main's tracked board under whatever run is live there.
+        chosen = collect(board, trees, args.feature)
+        if not chosen:
+            # An empty print reads as a board with no rows, which it is not.
+            print(f"no shard under {board.shards(main_tree, args.feature)} or any "
+                  "worktree's copy of it, so there is no board to print. Check "
+                  "--feature and --repo.", file=sys.stderr)
+            return 1
+        poison = control_bytes(chosen)
+        if poison:
+            print(f"REFUSED — {poison}", file=sys.stderr)
+            return 1
+        sys.stdout.write(render(chosen, board))
         return 0
 
     if args.split:
@@ -743,6 +773,27 @@ def main(argv=None):
             print(report, file=sys.stderr)
             return 1
         return 0
+
+    # The board is main's, whichever tree the call comes from. The human's ruling
+    # `q-fin-44052e-02` (2026-09-30): in issue 301 of run
+    # batch-44052e the runner ran this from its linked worktree and main's
+    # tracked `register.md` changed under a live run. A memory entry already
+    # named the hazard and did not stop the call, so the refusal is here. The
+    # read-only modes above never write, and the brief stands in main.
+    here = args.cwd or os.getcwd()
+    linked = sorted({writer_name(place, trees) for place in (here, args.repo)
+                     if place} - {"", MAIN})
+    if linked and not args.write_main:
+        print(f"REFUSED — this call stands in linked worktree {linked[0]}, and "
+              f"the board it writes is the main checkout's: "
+              f"{board.generated(main_tree, args.feature)}. Nothing was "
+              "written, and this tree's own board is not what it would "
+              "rebuild. To read the board, use --print. To learn where to "
+              "write, use --my-shard. To regenerate main's board, run from the "
+              "main checkout. Pass --write-main only when your brief names this "
+              "write from a worktree.",
+              file=sys.stderr)
+        return 1
 
     try:
         written = write(board, main_tree, trees, args.feature)

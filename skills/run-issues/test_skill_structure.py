@@ -341,8 +341,10 @@ class TestTheClassBPassagesWereNotTouched(unittest.TestCase):
     CLASS_B = [
         # The cron's own justification.
         "cannot prevent a call that was never made",
-        # The recoverability test and the standing xhigh refusal.
-        "No value in the effort column was measured against a lower one",
+        # The recoverability test and the xhigh refusal were here. The human
+        # deleted both on 2026-09-30, when they set the finale to high and kept
+        # the implementer and verify gate at medium; the author's rulings file
+        # keeps the evidence.
         # The INTERIM R2 block was here. Its expiry was met: issue 379 shipped in
         # run batch-375cbf, merged 2026-09-01, and the block was replaced with the
         # pinned background pass on the human's ruling of the same day. A guard that
@@ -404,12 +406,6 @@ class TestEffortTableCarriesItsEvidence(unittest.TestCase):
                     len(seen[role]) > 10,
                     f"{role}'s justification cell says nothing: {seen[role]!r}",
                 )
-
-    def test_downgrade_safety_is_stated_as_recoverability(self):
-        """The measured rule: a downgrade is safe where a wrong verdict is
-        recoverable, not where the model looks strong enough."""
-        skill = read(SKILL).lower()
-        self.assertIn("recoverab", skill)
 
 
 class TestCitationsResolveAnywhere(unittest.TestCase):

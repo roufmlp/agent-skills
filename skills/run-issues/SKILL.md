@@ -71,15 +71,7 @@ gate that returned no verdict.
 | Verify | `run-issues-verify-gate` | medium | A wrong pass ships behaviour nobody drove, and the finale is the first thing after it that looks |
 | Review | `run-issues-review-gate` | high | Same: no catcher until the finale, and it is the only reader of the whole diff before then |
 | Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high | A wrong pass is money, auth or a secret, which is the class the variant exists for |
-| Coherence finale, once per run | `run-issues-finale` | max | Once per run, and the last fresh eyes before the merge read |
-
-**A role is safe to downgrade where its wrong verdict is recoverable, never
-because the model looks strong enough.** Verify at `medium` is the human's
-ruling of 2026-09-25, made against it (`decisions.md`). `xhigh` in place of `max` on the finale stays
-refused: it runs once per run, so the saving is one spawn and what it buys is a
-cheaper last look before a merge. No value in the effort column was measured
-against a lower one before 2026-09-25 (`decisions.md`). What the last column states is what a wrong answer costs,
-because that is the evidence a downgrade has to beat.
+| Coherence finale, once per run | `run-issues-finale` | high | Once per run, and the last fresh eyes before the merge read |
 
 Spawn prompts carry **only** what varies — issue ID, paths, rejection reasons.
 Everything stable already lives in the agent file, where it caches.

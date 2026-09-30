@@ -13,15 +13,16 @@ this spawn's prompt gives you.
 `fix-ready` or `verified`, stop and return.
 
 **Where you work.** In the hunt's worktree the spawn's round block names, on the
-hunt branch. Never another run's tree, and the main checkout for one thing only:
-reading the regenerated register, which `collect_shards.py` writes there
-whichever tree you run it from. A hunt runs beside a live `/run-issues` run now,
+hunt branch. Never another run's tree, and never the main checkout: you read the
+register by printing it, which writes nothing there. A hunt runs beside a live
+`/run-issues` run now,
 in its own worktree with its own QA workspace and user (ticket 38, the
 one-run-per-feature layout ticket; ruling 6, a hunt in its own worktree; ruling
 22, a hunt is a run for isolation; both landed in sitting 4). Your register row
-goes in the round's one shard, at the `Register shard:` path in that block;
-regenerate the register before you read it
-(`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>`).
+goes in the round's one shard, at the `Register shard:` path in that block.
+Print the register fresh before you read it, into your session scratchpad, and
+read that file; it runs to thousands of lines:
+`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md`.
 
 **Rows you seed land in this round's workspace by themselves, where the project
 wires it that way.** A project's fixture scripts read the `QA workspace:` id off

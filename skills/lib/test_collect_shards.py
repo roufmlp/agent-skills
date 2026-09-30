@@ -917,6 +917,132 @@ class SplitInAWorktreeTest(TreeFixture):
             self.assertEqual(handle.read(), "main's own\n")
 
 
+class WorktreeWriteRefusalTest(TreeFixture):
+    """The human's ruling `q-fin-44052e-02`, 2026-09-30, in one project's `rulings.md`.
+
+    The board is always written into the main checkout. During issue 301 of run
+    batch-44052e the runner ran the collector from its linked worktree, and
+    main's TRACKED `register.md` changed under a live run; the runner restored
+    it from git. A memory entry recorded the hazard before the run and did not
+    stop the call, so the answer is a refusal and not a second reminder.
+    """
+
+    def test_a_board_write_from_a_linked_worktree_is_refused(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a)
+
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("REFUSED", err)
+        self.assertIn("--write-main", err)
+        self.assertFalse(os.path.exists(REGISTER.generated(self.main, self.feature)))
+
+    def test_a_directory_inside_a_linked_worktree_is_refused_too(self):
+        inside = os.path.join(self.tree_a, "lib")
+        os.makedirs(inside)
+        code, _, err = self.run_main("--kind", "queue", "--cwd", inside)
+        self.assertEqual(code, 1)
+        self.assertIn("run-a", err)
+
+    def test_a_repo_naming_a_linked_worktree_is_refused(self):
+        """The form one project's memory entry records: `--repo .` from the worktree."""
+        code, _, _ = self.run_main(
+            "--kind", "queue", "--cwd", self.tmp.name, "--repo", self.tree_a)
+        self.assertEqual(code, 1)
+
+    def test_an_existing_board_is_left_as_it_was(self):
+        board = make(self.main, ".scratch/decisions-queue.md", "main's own\n")
+        make(self.tree_a, ".scratch/decisions-queue.d/run-a/rg1.md", "new\n")
+        self.run_main("--kind", "queue", "--cwd", self.tree_a)
+        with open(board, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "main's own\n")
+
+    def test_the_flag_names_the_intent_and_the_board_is_written(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a,
+            "--write-main")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.strip(), REGISTER.generated(self.main, self.feature))
+
+    def test_the_main_checkout_writes_without_the_flag(self):
+        """The daily brief stands in main and must never meet the refusal."""
+        self.shard(self.main, HISTORY, "a\n")
+        code, _, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.main,
+            "--repo", self.main)
+        self.assertEqual(code, 0, err)
+
+    def test_a_caller_outside_every_tree_naming_main_writes(self):
+        """The brief's `--repo <repo>` form, run from wherever its session is."""
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md", "queued\n")
+        code, _, err = self.run_main(
+            "--kind", "queue", "--cwd", self.tmp.name, "--repo", self.main)
+        self.assertEqual(code, 0, err)
+
+    def test_the_read_only_modes_still_answer_from_a_linked_worktree(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+        self.run_main("--kind", "register", "--feature", self.feature, "--cwd", self.main)
+        for mode in ("--my-shard", "--check", "--mtime"):
+            with self.subTest(mode=mode):
+                code, _, err = self.run_main(
+                    "--kind", "register", "--feature", self.feature,
+                    "--cwd", self.tree_a, mode)
+                self.assertEqual(code, 0, err)
+
+
+class PrintModeTest(TreeFixture):
+    """The human said yes on 2026-10-01 to a mode that prints the board and writes
+    nothing. The hunt's finder and fixer read the whole register from the hunt's
+    worktree, and with `--write-main` that read still changed main's tracked
+    `register.md` under a live run. Printing lets them read without it.
+    """
+
+    def test_print_from_a_linked_worktree_prints_the_board_and_writes_nothing(self):
+        self.shard(self.main, HISTORY, "| r1 | old |\n")
+        self.shard(self.tree_a, "rg1", "| r2 | new |\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a,
+            "--print")
+
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "| r1 | old |\n| r2 | new |\n")
+        self.assertFalse(os.path.exists(REGISTER.generated(self.main, self.feature)))
+
+    def test_a_poisoned_shard_is_refused_rather_than_printed(self):
+        """The same refusal the write carries: a reader must not be blinded."""
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 | a \x00 byte | open |\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--print")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("REFUSED", err)
+
+    def test_no_shard_anywhere_is_a_failure_and_never_an_empty_board(self):
+        """A wrong `--feature` or `--repo` finds nothing. An empty print would
+        read as a register with no rows, and a finder would hunt covered ground."""
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--print")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("no shard", err)
+
+    def test_a_board_with_every_item_answered_prints_empty_and_passes(self):
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md",
+             "## Item `q-main-01`\n\nbody\n")
+        make(self.main, f".scratch/decisions-queue.d/main/{ANSWERED}.md", "q-main-01\n")
+        code, out, err = self.run_main("--kind", "queue", "--print")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("q-main-01", out)
+
+
 class QueueIdTest(TreeFixture):
     """Ruling 18: every queue item carries an id, so the brief can answer it."""
 

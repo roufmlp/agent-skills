@@ -441,7 +441,7 @@ class HeaderLines(unittest.TestCase):
         self.assertLessEqual(len(self.text.splitlines()), 4)
 
     def test_the_effort_it_writes_is_the_agent_files_own(self):
-        self.assertIn("finale=max", self.text)
+        self.assertIn("finale=high", self.text)
         self.assertIn("promotion=medium", self.text)
 
     def test_a_ledger_reads_back_exactly_what_the_launch_wrote(self):

@@ -72,10 +72,10 @@ Listed in the order the loop runs.
 | `skills/run-issues/run_suite.py` | `~/.claude/skills/run-issues/run_suite.py` (the wrapper every whole-suite reading goes through: logs it, hashes the tree, refuses a repeat) |
 | `skills/run-issues/wakeup_cron.py` | `~/.claude/skills/run-issues/wakeup_cron.py` (makes the run's 30-minute wakeup cron from its ledger, records the job with the process that made it, clears it, and judges each firing idle or busy) |
 | `skills/run-issues/test_wakeup_cron.py` | `~/.claude/skills/run-issues/test_wakeup_cron.py` |
-| `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, plus the repo-wide checks, and records it the way `run_suite.py` does) |
+| `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, every test that lists a directory, and the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (52 files, 2,133 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-30 by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (52 files, 2,143 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-01 by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -90,7 +90,7 @@ Listed in the order the loop runs.
 | `skills/lib/test_check_decision_ledger.py` | `~/.claude/skills/lib/test_check_decision_ledger.py` |
 | `skills/lib/claim_number.py` | `~/.claude/skills/lib/claim_number.py` (claims an issue or migration number atomically across every worktree) |
 | `skills/lib/test_claim_number.py` | `~/.claude/skills/lib/test_claim_number.py` |
-| `skills/lib/collect_shards.py` | `~/.claude/skills/lib/collect_shards.py` (generates `register.md` and `decisions-queue.md` from one shard per writer, and hides a retired queue item on either of two reserved shards: the brief's `answered` and an attended session's `ruled`) |
+| `skills/lib/collect_shards.py` | `~/.claude/skills/lib/collect_shards.py` (generates `register.md` and `decisions-queue.md` from one shard per writer, and hides a retired queue item on either of two reserved shards: the brief's `answered` and an attended session's `ruled`; refuses to write the main checkout's board from a linked worktree without `--write-main`, and prints the board with `--print`, writing nothing) |
 | `skills/lib/test_collect_shards.py` | `~/.claude/skills/lib/test_collect_shards.py` |
 | `skills/lib/retired_phrases.py` | `~/.claude/skills/lib/retired_phrases.py` (the retired-wording denylist; one home, shared by the test and the hook) |
 | `skills/lib/test_retired_phrases.py` | `~/.claude/skills/lib/test_retired_phrases.py` (reports a superseded sentence that reached a steering file) |
@@ -106,7 +106,7 @@ Listed in the order the loop runs.
 | `skills/lib/sweep_parked.py` | `~/.claude/skills/lib/sweep_parked.py` (lists the parked issues that want a human's eye again — those past thirty days, and those some open issue now names as a blocker — so `parked` is a door rather than a deletion with a nicer name; it changes no file) |
 | `skills/lib/test_sweep_parked.py` | `~/.claude/skills/lib/test_sweep_parked.py` (20 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/board.py` | `~/.claude/skills/lib/board.py` (draws the whole tracker as one self-contained page from the issue files and the run ledgers, generated the way `register.md` is generated and thrown away the same way; it calls `next_batch.schedule` rather than re-deriving the order, stores nothing and requests nothing) |
-| `skills/lib/test_board.py` | `~/.claude/skills/lib/test_board.py` (41 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/test_board.py` | `~/.claude/skills/lib/test_board.py` (46 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/test_check_claude_home.py` | `~/.claude/skills/lib/test_check_claude_home.py` |
 | `skills/lib/check_issue_links.py` | `~/.claude/skills/lib/check_issue_links.py` (refuses a `[[link]]` in an issue file that names no issue) |
 | `skills/lib/test_check_issue_links.py` | `~/.claude/skills/lib/test_check_issue_links.py` |
@@ -192,7 +192,8 @@ now, so the section does too, and the file travels whole.
 
 `skills/run-issues/test_skill_structure.py` carried 204 of its live copy's 238 cases while
 `SKILL.md` was held, and 235 once it was published on 2026-09-29; the 2026-09-30 sync
-brought it to 244 of 247. It still holds four,
+brought it to 244 of 247, and the 2026-10-01 sync, which took the deleted downgrade case
+out of both copies, to 243 of 246. It still holds four,
 which grade the withheld `memory_dir.py` and a pending-actions file this pack does not
 have; a published inverse, `TestCitationsResolveAnywhere`, asserts that no skill cites a
 machine-local path. `test_model_map.py` held one case for a different reason: it pins
@@ -528,6 +529,19 @@ name either guard now say what it refuses and that this pack does not ship it.
 of `run-issues/SKILL.md` for the coverage re-run after a correction round. That was false
 of the pack for the few hours `SKILL.md` stayed held, and true again once it was published.
 
+**`headless-chrome-guard.py` arrived on 2026-09-30 and is withheld with its drill, and the
+reason is the road its refusal sends a reader down.** It refuses a Bash command that runs a
+Chrome binary from inside an app bundle without four flags: the two that keep Chrome off the
+macOS keychain, and the two that keep it off the media keys. The fault is real on any Mac
+running agents in a sandbox. But the refusal's only remedy is `~/.claude/bin/headless-chrome`,
+a wrapper script in the author's tool directory that this pack does not ship, and the drill
+asserts that path is in the message. A refusal that names a file the reader does not have is
+the stale line H3 exists for, and rule 3 bars the dependency. The message also names a person
+and a date, which H2 refuses. Shipping the wrapper beside it would open a `bin/` class this map
+does not have, and rewriting the refusal to list the flags instead is authoring rather than
+scrubbing. `skills/lib/test_board.py` carries the four flags in its own Chrome call, so the
+fix itself is public.
+
 The rest of the live hooks directory stays unpublished for the original reason. Each
 of those files carries state that is true of one machine or one repo and false
 everywhere else — a disk and
@@ -571,6 +585,8 @@ have, which is worse than having no hook:
 ~/.claude/hooks/run-issues-risk-path-guard.py
 ~/.claude/hooks/test_run_issues_risk_path_guard.py
 ~/.claude/hooks/risk_path_reader.py
+~/.claude/hooks/headless-chrome-guard.py
+~/.claude/hooks/test_headless_chrome_guard.py
 ```
 
 ## The coverage check

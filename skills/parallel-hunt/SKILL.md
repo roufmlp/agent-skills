@@ -63,24 +63,28 @@ python3 ~/.claude/skills/lib/collect_shards.py --kind register \
     --feature <feature> --my-shard --prefix <your row prefix>
 ```
 
-Read the whole register by regenerating it first. Run this from anywhere; it
-writes the generated file into the main checkout, and reading that one file
-there is the only thing a hunt's worker does in the main checkout:
+Read the whole register by printing it from the shards into your session
+scratchpad, then read that file. The print writes nothing, so a hunt's worker
+never touches the main checkout. The collector refuses to write main's board
+from a worktree (ruling `q-fin-44052e-02`, 2026-09-30), and a write from here
+would change main's tracked `register.md` under whatever run is live there. The
+register runs to thousands of lines, so read the file rather than the output:
 
 ```bash
-python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature>
+python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md
 ```
 
-**Writers append to a shard. Readers regenerate, then read.** A write to
-`register.md` itself is refused by `generated-file-guard.py` in the hooks, which
-names your shard in the refusal.
+**Writers append to a shard. Readers print, then read.** Never write
+`register.md` itself. In the author's setup `generated-file-guard.py` refuses that
+write and names your shard; this pack does not ship it, so without it the rule is
+yours to hold.
 
 Five paths, split on one test: a thing belongs in the register only if another
 agent must read it to do its own job.
 
 ```
 <hunt-worktree>/.scratch/<feature>/register.d/<hunt-id>/<prefix>.md  # this round's rows, one shard
-<main-repo-root>/.scratch/<feature>/register.md           # generated: every shard, in order
+<main-repo-root>/.scratch/<feature>/register.md           # generated: every shard, in order; a worker prints it instead
 <hunt-worktree>/.scratch/<feature>/round-brief.md         # this round's ledger: header, round block, brief, scope, sweep groups
 <hunt-worktree>/.scratch/<feature>/round-journal.md       # lock waits and breaks, halts, anything the brief must not carry
 <hunt-worktree>/.scratch/<feature>/leads.md               # standing leads and rulings; reaches main at merge
@@ -93,9 +97,9 @@ directory after the worktree's own directory name, and the worktree is cut at
 with it.
 
 Everything a round writes lives in the hunt's own worktree and lands in main when
-The human merges the hunt branch (ticket 38, the one-run-per-feature layout ticket,
-ruling 6, sitting 4). The one exception is the generated register, which the
-collector always writes into the main checkout and which nobody commits. A hunt
+the human merges the hunt branch (ticket 38, the one-run-per-feature layout ticket,
+ruling 6, sitting 4). The one exception is the generated register, which sits in
+the main checkout; a worker reads it with `--print` and never writes it. A hunt
 cut from main before a run merges hunts the code as main holds it, without that
 run's fixes; that is a fact about the cut, not a wait. Name any run at
 `awaiting-merge` in the brief text at launch, so a finder that reproduces one of
@@ -239,7 +243,7 @@ one rule a run's ledger already follows. Then the block:
 
 ```
 Hunt:             <hunt-id>
-Worktree:         <absolute path of the hunt's worktree; every role works here, and reads the regenerated register in the main checkout>
+Worktree:         <absolute path of the hunt's worktree; every role works here, and reads the register with collect_shards.py --print>
 Branch:           hunt/<hunt-id>
 QA workspace:     <the id on round-brief.md's QA workspace: line, seeded for this round alone; every fixture script run in this worktree reads it off round-brief.md itself>
 Sign-in user:     <the email on round-brief.md's Sign-in user: line>

@@ -25,6 +25,8 @@ import run_suite  # noqa: E402  (for `LOCK_ENV` only)
 
 # `list --filesOnly --changed=<since> --json=<path>` writes FAKE_LIST, a comma
 # list of repo-relative files, as vitest's JSON, and exits FAKE_LIST_EXIT.
+# `list` without `--changed` names every test file the same way, from FAKE_ALL,
+# and exits FAKE_ALL_EXIT.
 # `run` appends its argv to `argv.jsonl`, writes a report where
 # `--coverage.reportsDirectory=` points, prints a FAIL line per FAKE_FAILING
 # and exits FAKE_EXIT.
@@ -36,10 +38,12 @@ FAKE_VITEST = textwrap.dedent("""\
         handle.write(json.dumps(args) + "\\n")
     if args[0] == "list":
         out = next(a.split("=", 1)[1] for a in args if a.startswith("--json="))
-        files = [f for f in os.environ.get("FAKE_LIST", "").split(",") if f]
+        changed = any(a.startswith("--changed") for a in args)
+        key = "FAKE_LIST" if changed else "FAKE_ALL"
+        files = [f for f in os.environ.get(key, "").split(",") if f]
         pathlib.Path(out).write_text(json.dumps(
             [{"file": str(pathlib.Path.cwd() / f)} for f in files]))
-        sys.exit(int(os.environ.get("FAKE_LIST_EXIT", "0")))
+        sys.exit(int(os.environ.get(key + "_EXIT", "0")))
     where = next(a.split("=", 1)[1] for a in args
                  if a.startswith("--coverage.reportsDirectory="))
     pathlib.Path(where).mkdir(parents=True, exist_ok=True)
@@ -149,6 +153,162 @@ class TheSet(Repo):
 
     def test_a_list_that_fails_is_refused_and_nothing_runs(self):
         done = self.scoped(env={"FAKE_LIST_EXIT": "1"})
+        self.assertEqual(done.returncode, 3, done.stdout)
+        self.assertEqual(self.runs(), [])
+
+
+class TheTreeReaders(Repo):
+    """The human's ruling `q-fin-44052e-01`, road A, 2026-09-30. Issue 304 moved two
+    sheets that `tests/controls/popup-sheet-changed.test.ts` names by line, and
+    issue 299 broke `tests/controls/layout/skeleton.test.tsx`, which scans the
+    tree. Both list the source tree through a helper and import nothing the
+    issue changed, so the import closure missed them and both reached the
+    finale red. Every test that lists a directory now joins the scoped run."""
+
+    def write(self, name, text):
+        path = self.repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    def run_files(self):
+        [run] = self.runs()
+        root = self.repo.resolve()
+        return {str(pathlib.Path(arg).relative_to(root)) for arg in run
+                if arg.startswith(str(root))}
+
+    def test_a_test_that_lists_the_tree_through_a_helper_joins(self):
+        self.write("tests/build-checks/walk.ts",
+                   'import { readdirSync } from "node:fs";\n'
+                   "export const sourceFiles = (d: string) => readdirSync(d);\n")
+        self.write("tests/controls/sheet.test.ts",
+                   'import { sourceFiles } from "../build-checks/walk";\n')
+        self.write("tests/plain.test.ts", 'import { a } from "../a";\n')
+        done = self.scoped(env={"FAKE_ALL": "tests/controls/sheet.test.ts,tests/plain.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.run_files(), {"tests/controls/sheet.test.ts"})
+        self.assertEqual(self.records()[-1]["tree_readers"], ["tests/controls/sheet.test.ts"])
+
+    def test_a_test_that_lists_a_directory_itself_joins(self):
+        self.write("tests/tree.test.ts",
+                   'import fs from "node:fs";\nconst names = fs.readdir(".", () => {});\n')
+        self.scoped(env={"FAKE_ALL": "tests/tree.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/tree.test.ts"})
+
+    def test_the_walk_follows_the_repo_alias_and_a_js_specifier(self):
+        self.write("tsconfig.json", json.dumps(
+            {"compilerOptions": {"paths": {"@/*": ["./src/*"]}}}))
+        self.write("src/lib/scan.ts", 'export { globSync } from "node:fs";\n')
+        self.write("src/lib/index.ts", 'export * from "./scan.js";\n')
+        self.write("tests/alias.test.ts", 'import { globSync } from "@/lib";\n')
+        self.scoped(env={"FAKE_ALL": "tests/alias.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/alias.test.ts"})
+
+    def test_a_name_that_lists_nothing_does_not_join(self):
+        """22 of one project's tests import only `REPO` from
+        `tests/scaffold/database-modules.ts`, beside a `sourceFiles` they
+        never call. Importing a module that can list is not listing."""
+        self.write("tests/scaffold/modules.ts", textwrap.dedent("""\
+            import { readdirSync } from "node:fs";
+            export const REPO = "/repo/";
+            export function sourceFiles(dir: string): string[] {
+              return readdirSync(dir);
+            }
+            export function modulesUnder(dir: string) {
+              return sourceFiles(dir).map((file) => ({ file }));
+            }
+            """))
+        self.write("tests/db.test.ts", 'import { REPO } from "./scaffold/modules";\n')
+        self.write("tests/walks.test.ts", textwrap.dedent("""\
+            import {
+              REPO,
+              modulesUnder,
+            } from "./scaffold/modules";
+            """))
+        self.scoped(env={"FAKE_ALL": "tests/db.test.ts,tests/walks.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/walks.test.ts"})
+
+    def test_a_name_reaches_a_listing_through_another_module(self):
+        self.write("tests/checks/walk.ts",
+                   'import { readdirSync } from "node:fs";\n'
+                   "export const sourceFiles = (d: string) => readdirSync(d);\n")
+        self.write("tests/checks/scan.ts",
+                   'import { sourceFiles as files } from "./walk";\n'
+                   "export const RULE = 1;\n"
+                   "export function literalsIn(root: string) {\n"
+                   "  return files(root);\n}\n")
+        self.write("tests/checks/index.ts",
+                   'export * from "./scan";\nexport { sourceFiles as walk } from "./walk";\n')
+        self.write("tests/uses-scan.test.ts", 'import { literalsIn } from "./checks/scan";\n')
+        self.write("tests/uses-rule.test.ts", 'import { RULE } from "./checks/scan";\n')
+        self.write("tests/via-star.test.ts", 'import { literalsIn } from "./checks";\n')
+        self.write("tests/via-rename.test.ts", 'import { walk } from "./checks";\n')
+        self.write("tests/via-namespace.test.ts", 'import * as scan from "./checks/scan";\n')
+        names = ["uses-scan", "uses-rule", "via-star", "via-rename", "via-namespace"]
+        self.scoped(env={"FAKE_ALL": ",".join(f"tests/{n}.test.ts" for n in names)})
+        self.assertEqual(self.run_files(), {f"tests/{n}.test.ts" for n in names
+                                            if n != "uses-rule"})
+
+    def test_comments_template_bodies_and_types_are_not_imports_or_uses(self):
+        """`tests/scaffold/module-imports.ts` quotes `import("./rights")` in
+        its comments, and a helper can hold fixture code in a template
+        string at column 0. Neither is an import. A type has no runtime."""
+        self.write("tests/helpers/walk.ts", textwrap.dedent("""\
+            import { readdirSync } from "node:fs";
+            // `import("./gone").then((r) => r.permit)` never produces a name.
+            /* require("./gone") */
+            export interface Walked { file: string }
+            export const FIXTURE = `
+            import { gone } from "./gone";
+            `;
+            const cell = /^`([^`\\s/]+)`$/.exec("x"), half = 4 / 2 / 1;
+            export const quoted = ['await import("./gone")', "sourceFiles"];
+            export function sourceFiles(dir: string): Walked[] {
+              return readdirSync(dir).map((file) => ({ file }));
+            }
+            """))
+        self.write("tests/fixture.test.ts", 'import { FIXTURE } from "./helpers/walk";\n')
+        self.write("tests/quoted.test.ts",
+                   'import { quoted } from "./helpers/walk";\n'
+                   "const text = 'await import(\"./gone\")';\n")
+        self.write("tests/typed.test.ts", 'import type { Walked } from "./helpers/walk";\n')
+        self.scoped(env={"FAKE_ALL": "tests/fixture.test.ts,tests/typed.test.ts,"
+                                     "tests/quoted.test.ts"})
+        self.assertEqual(self.run_files(), set())
+
+    def test_a_file_the_walk_cannot_read_to_its_end_joins(self):
+        self.write("tests/helpers/open.ts", "export const A = 1;\nexport const B = `\n")
+        self.write("tests/open.test.ts", 'import { A } from "./helpers/open";\n')
+        done = self.scoped(env={"FAKE_ALL": "tests/open.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/open.test.ts"})
+        self.assertIn("tests/helpers/open.ts", done.stdout)
+
+    def test_a_cycle_of_imports_hides_no_reader(self):
+        self.write("tests/lib/a.ts", 'import "./b";\nimport "./c";\n')
+        self.write("tests/lib/b.ts", 'import "./a";\n')
+        self.write("tests/lib/c.ts", 'import { opendirSync } from "node:fs";\n')
+        self.write("tests/one.test.ts", 'import "./lib/a";\n')
+        self.write("tests/two.test.ts", 'import "./lib/b";\n')
+        self.scoped(env={"FAKE_ALL": "tests/one.test.ts,tests/two.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/one.test.ts", "tests/two.test.ts"})
+
+    def test_a_test_with_an_import_it_cannot_place_joins(self):
+        """A walk that cannot follow an import cannot say the test lists
+        nothing, so the test runs."""
+        self.write("tests/lost.test.ts", 'import { x } from "./gone";\n')
+        self.write("tests/unknown.test.ts", 'import { y } from "~lib/y";\n')
+        done = self.scoped(env={"FAKE_ALL": "tests/lost.test.ts,tests/unknown.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/lost.test.ts", "tests/unknown.test.ts"})
+        self.assertIn("tests/lost.test.ts", done.stdout)
+
+    def test_a_reader_the_checks_already_run_is_not_named_twice(self):
+        self.write("tests/build-checks/nul.test.ts",
+                   'import { readdirSync } from "node:fs";\n')
+        self.scoped(env={"FAKE_ALL": "tests/build-checks/nul.test.ts"})
+        self.assertEqual(self.run_files(), set())
+        self.assertEqual(self.records()[-1]["tree_readers"], [])
+
+    def test_a_list_of_every_test_that_fails_is_refused_and_nothing_runs(self):
+        done = self.scoped(env={"FAKE_ALL_EXIT": "1"})
         self.assertEqual(done.returncode, 3, done.stdout)
         self.assertEqual(self.runs(), [])
 

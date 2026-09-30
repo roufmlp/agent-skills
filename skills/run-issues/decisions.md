@@ -2491,3 +2491,46 @@ reason had no other home and lives here now, word for word:
 
 `finale.md`'s new sentence was paid for by two pointers shortened in place, so the file
 stays at the count `master` left it.
+
+## A light issue's scoped run takes every test that lists a directory (2026-10-01)
+
+The human ruled `q-fin-44052e-01` on 2026-09-30, road A, in the attended session that read
+run `batch-44052e`'s merge briefing. Two runs in a row shipped one finale red
+each, and both were the same class: issue 299 broke
+`tests/controls/layout/skeleton.test.tsx`, and issue 304 broke
+`tests/controls/popup-sheet-changed.test.ts`. Each test lists the source tree through a
+helper in `tests/build-checks/` and imports nothing the issue changed, so neither the
+import closure nor the `tests/build-checks/` filter reached it. The finale counted 46
+such files and ran them in 36.00 s at 8 workers.
+
+`scoped_suite.py` now asks `vitest list` for every test and adds each one that lists a
+directory. The finale never wrote down how it counted its 46, so the detector had to
+earn its set by measurement against that project at main `e7703fd4`:
+
+| Walk | Tests outside the checks |
+|---|---|
+| By file, loose import regex | 118 |
+| By file, import statements only | 102 |
+| By name | 62 |
+
+The walk by file over-joined because 61 tests reach
+`tests/scaffold/database-modules.ts` through the database harness, and at least 22 of
+them import only its `REPO`. So the walk follows names: a test joins when its own text
+lists, or a name it imports is declared by text that lists, through the names that text
+uses. It resolves `tsconfig.json`'s `paths`, because the project imports through `@/`
+2,308 times. Comments and string bodies are blanked before imports are read, because
+the project's helpers quote `import("./rights")` in comments and carry fixture code in
+strings; regular expression literals are stepped over, because the project's hold
+backticks. What the walk cannot place, it runs, and says why.
+
+The 62 are the finale's 46 and 16 more. Fourteen of the 16 call `migrate()` in
+`scripts/migrate.mjs`, which lists `supabase/migrations/` to build the database they
+check. They meet the rule as written, so they run. Nobody has timed them: they are
+database tests, and the session that built the walk did not run the project's database
+suite from the main checkout to find out. Whether they stay is the human's call; nothing
+in the walk tells a migration directory from a source directory without a hand list.
+
+The walk adds about 4 s to each scoped run. Eleven cases in `test_scoped_suite.py`'s
+`TheTreeReaders` drive it, among them a listing through a helper, names that list
+nothing, names through another module and its re-exports, an import cycle, comments and
+strings that are not imports, and a file the walk cannot finish.

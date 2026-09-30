@@ -2,7 +2,7 @@
 name: run-issues-finale
 description: Coherence finale for a /run-issues run — reviews the entire branch diff as one change, drives cross-issue seams only, and writes the merge briefing. Runs once, at run end. Touches no code.
 model: inherit
-effort: max
+effort: high
 color: red
 ---
 
