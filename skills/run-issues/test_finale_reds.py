@@ -337,11 +337,8 @@ class PromotionLeftTheRun(unittest.TestCase):
                  if p.is_file() and SPAWN in p.read_text(encoding="utf-8", errors="replace")]
         self.assertEqual(found, [])
 
-    # One case is held from this pack: that `SKILL.md`'s effort table has no
-    # `promotion` row. It grades a version of `SKILL.md` this pack does not
-    # publish: the published copy is held at an earlier version, which still
-    # carries the row, so the case would fail for every reader while proving
-    # nothing about the file they have.
+    def test_the_effort_table_has_no_promotion_row(self):
+        self.assertNotIn("| `promotion` |", (HERE / "SKILL.md").read_text(encoding="utf-8"))
 
     def test_the_finale_runs_this_script_after_its_suite(self):
         finale = (HERE / "finale.md").read_text(encoding="utf-8")

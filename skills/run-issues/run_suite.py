@@ -52,8 +52,8 @@ A red run is never refused, so a flake can be re-run.
 ## The stages, and whose each one is
 
 `issue` is an implementer's. `baseline`, `correction` and `finale` are the
-runner's: before spawn 1, the coverage re-run after a correction round (the one
-`check_diff_coverage.py` describes), and `finale.md` step 1. Issue 06 of this set rules those
+runner's: before spawn 1, the coverage re-run `SKILL.md` step 5 orders after a
+correction round, and `finale.md` step 1. Issue 06 of this set rules those
 three runner readings. `verify` is the verify gate's, in the copy
 `make_copy.py` made. `scoped` is `scoped_suite.py`'s, which writes to the
 same store. The refusal is per stage, so a finale that reads the

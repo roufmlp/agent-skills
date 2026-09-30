@@ -73,7 +73,7 @@ Listed in the order the loop runs.
 | `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, plus the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (51 files, 2,063 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-29 by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (51 files, 2,095 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-09-29 by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -171,14 +171,14 @@ those other sessions' work in the same file, unread. That is one sync decision, 
 two, and it is the human's. The drill travels with the script because it imports it.
 Recorded 2026-09-13, from run `batch-d67136`.
 
-**On 2026-09-29 the script went out and `SKILL.md` stayed, and the two are no longer one
-decision.** The premise above was that nothing in the pack invokes `retry_brief.py`. That
-stopped being true when `charge_round.py` arrived: it imports `retry_brief` for the
-criterion reader and the owned-text split, and the published gate briefs and
-`check_attempt_cap.py` call `charge_round.py`. Withholding the script would have meant
-withholding everything downstream of it. So the script and its drill ship on rule 3, and
-`skills/run-issues/SKILL.md` stays at its published version, because holding that file
-was the human's word and is still his to lift.
+**On 2026-09-29 both went out, in two steps.** The script went first, on rule 3. The
+premise above was that nothing in the pack invokes `retry_brief.py`, and that stopped
+being true when `charge_round.py` arrived: it imports `retry_brief` for the criterion
+reader and the owned-text split, and the published gate briefs and `check_attempt_cap.py`
+call `charge_round.py`. Later the same day the human lifted the hold on `SKILL.md`, and
+it went out in the sync's second commit, read end to end beside the live copy. Every
+reference in it to a withheld script or hook became a conditional that names the
+author's file and says this pack does not ship it.
 
 **Three things travel as part of a file rather than as a file, and the 2026-09-20 sync
 records them here so a reader is not left comparing line counts.**
@@ -186,14 +186,19 @@ records them here so a reader is not left comparing line counts.**
 `skills/run-issues/decisions.md` withheld one section, "The retry brief states the
 invariant", 56 lines, until 2026-09-29. It is the decision record for `retry_brief.py`,
 and a decision record for a script nobody has is a reference to nothing. The script ships
-now, so the section does too.
+now, so the section does too, and the file travels whole.
 
-`skills/run-issues/test_skill_structure.py` carries 204 of the 238 cases in its live copy
-and holds 41, 22 of them added by the 2026-09-29 sync. `test_model_map.py` holds one case
-and `test_finale_reds.py` holds one, for the same reason. Every held case grades a sentence of `SKILL.md` that this pack does
-not publish — 24 failures were measured by driving them against the published text — so
-carrying them would turn the pack red for every reader while proving nothing about the
-file they would be reading. The reasons are written above the classes that kept them.
+`skills/run-issues/test_skill_structure.py` carried 204 of its live copy's 238 cases while
+`SKILL.md` was held, and 235 once it was published on 2026-09-29. It still holds four,
+which grade the withheld `memory_dir.py` and a pending-actions file this pack does not
+have; a published inverse, `TestCitationsResolveAnywhere`, asserts that no skill cites a
+machine-local path. `test_model_map.py` holds one case for a different reason: it pins
+each agent file's effort to the skill table that spawns it, and the committed
+`harden-issues-attacker.md` disagrees with its table until the author commits a change
+already made in the live tree. Before 2026-09-29 every held case graded a sentence of `SKILL.md` that this pack did not
+publish — 24 failures were measured by driving them against the published text — so
+carrying them would have turned the pack red for every reader. The reasons for the cases
+still held are written above the classes that keep them.
 This is the same rule the two withheld isolation drills sit under: a drill that pins text
 this pack does not ship grades a machine nobody else has.
 
@@ -215,8 +220,8 @@ told to write a human's pending actions into the first one's list. But the two f
 can print are named in the CODE, not in prose: `--pending` and `--closed` append one
 person's pending-actions filename, which rule 2 refuses and which nothing in this pack
 has. Renaming them is not a scrub, because it changes what the script prints, and there
-is nothing here for a new name to point at — `run-issues/SKILL.md` already carries the
-shape `<the project's memory directory>` for a reader to fill by hand. Its drill is
+is nothing here for a new name to point at — `run-issues/SKILL.md` tells a reader to pass the
+project's memory directory, if it keeps one, by hand. Its drill is
 further away still: three of its cases read two named client checkouts by absolute path.
 A later sync that takes the filename as an argument publishes both, and writing that
 argument is authoring.
@@ -236,11 +241,13 @@ real-corpus class is pinned to one absolute checkout.
 **`check_run_isolation.py` is withheld, and the reason is the pair rather than the
 pinning.** It refuses a run launch whose worktree has not claimed its own database, and
 the fault under it is real anywhere: two suites that truncate every table between tests,
-pointed at one database, wipe each other and read as regressions. The published
-`SKILL.md` carries no isolation step, so the script would be an exit-1 refuser that
-nothing in this pack invokes, demanding a contract file no published prose asks for.
-That is the `retry_brief.py` decision arriving a second time: script and skill text are
-one sync decision, and it is the human's. Its drill is already withheld above, and a
+pointed at one database, wipe each other and read as regressions. Until
+2026-09-29 the published `SKILL.md` carried no isolation step, so the script would have
+been an exit-1 refuser nothing in this pack invokes. It carries the step now, with a
+conditional where the live copy calls this script. What holds the script back today is
+its text: the docstring tells the fault as one project's story, by name, from its first
+line, and its drill's fixtures are that project's database names. Rewriting both is
+authoring rather than scrubbing. Its drill is already withheld above, and a
 refusing script whose test cannot run is worse evidence than no script.
 
 **`run-isolation-2026-09-15.md` is withheld as a session record, which is a class this
@@ -512,9 +519,9 @@ guard, because nothing else imports it. Both drills drive a withheld hook, and o
 asserts a file exists at the author's absolute hooks path. The briefs and skill text that
 name either guard now say what it refuses and that this pack does not ship it.
 
-`run-issues-suite-gate.py` arrived in the same stretch and ships. Its refusal cited a step
-of `run-issues/SKILL.md` by number; H3 moved that citation to `check_diff_coverage.py`,
-which says the same thing in a file this pack carries.
+`run-issues-suite-gate.py` arrived in the same stretch and ships. Its refusal cites step 5
+of `run-issues/SKILL.md` for the coverage re-run after a correction round. That was false
+of the pack for the few hours `SKILL.md` stayed held, and true again once it was published.
 
 The rest of the live hooks directory stays unpublished for the original reason. Each
 of those files carries state that is true of one machine or one repo and false

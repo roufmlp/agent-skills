@@ -339,18 +339,45 @@ class TheDefaultFile(unittest.TestCase):
 
 
 
-# WITHHELD from this class: the case that pins each agent file's `effort:` to
-# the Effort column of the skill table that spawns it, with the table reader
-# and the `UNSPAWNED` set it needs. It grades the text of `run-issues/SKILL.md`,
-# and the `SKILL.md` this pack ships is deliberately behind the live one: its
-# table still carries a `promotion` row and states `high` for two roles the
-# agent files now run at `medium`, so the case would turn the pack red for
-# every reader. It travels with `SKILL.md` when that travels. The two cases it
-# replaced pinned literal values and are gone upstream.
+SKILL_TABLES = ("run-issues/SKILL.md", "harden-issues/SKILL.md", "parallel-hunt/SKILL.md")
+
+
+def skill_table_efforts(root=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+    """`{agent type: effort}` read off the Effort column of each spawning skill's
+    table. A row names its agent type in backticks; the column is found by its
+    header, so a table that moves its columns is still read."""
+    stated = {}
+    for relative in SKILL_TABLES:
+        column = None
+        with open(os.path.join(root, relative), encoding="utf-8") as handle:
+            for line in handle:
+                if not line.startswith("|"):
+                    column = None
+                    continue
+                cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+                if "Effort" in cells and "Agent type" in cells:
+                    column = (cells.index("Agent type"), cells.index("Effort"))
+                elif column and cells[column[0]].startswith("`"):
+                    stated[cells[column[0]].strip("`")] = cells[column[1]]
+    return stated
+
+
+# Mapped roles no skill spawns, so no Effort column states them. `promotion`
+# left `/parallel-hunt` with tracker-tooling issue 36 and the `/run-issues`
+# finale with issue 39; the ledger's model map still carries it.
+UNSPAWNED = {"promotion"}
+
+
 class RoleEfforts(unittest.TestCase):
     """Ruling 7: effort stays in the agent file and the ledger records it. The
     Agent tool has no effort field, so this is read, never set."""
 
+    # HELD from this class: `test_every_agent_file_states_the_effort_its_skill_table_states`,
+    # which pins each agent file's `effort:` to the Effort column of the skill
+    # table that spawns it. On 2026-09-29 the committed `harden-issues-attacker.md`
+    # still says `high` while `harden-issues/SKILL.md` says `medium`; the author's
+    # change to the brief was not yet committed, and this pack publishes committed
+    # files only. The case travels with the next sync that carries that brief.
     def test_an_unreadable_agent_file_reads_unmeasured_never_a_guess(self):
         got = role_efforts(agents_dir="/nonexistent")
         self.assertEqual(set(got.values()), {"unmeasured"})

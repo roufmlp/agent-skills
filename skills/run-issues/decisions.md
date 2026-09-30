@@ -2175,11 +2175,6 @@ quotation is the load-bearing part, and `correction_brief.py` beside it records
 the same division: the runner names the items, the script refuses a brief that
 would not work.
 
-**The published `SKILL.md` does not carry that line yet.** It is held at an earlier
-version, so step 7 here still states the not-yours rule in prose. `retry_brief.py`
-ships because `charge_round.py` imports it, and the line reaches step 7 when
-`SKILL.md` travels.
-
 ---
 
 ## The coverage check moves before the correction round (2026-09-13)
@@ -2317,11 +2312,6 @@ ceiling — "That is the correct way, no need story in skill." And one measureme
 had no home and is written here rather than deleted: **run `batch-200d42` lost 5.7
 hours of 9.22 to two permission prompts nobody was there to press.** That is why
 the launch mode is part of the launch line and not an option.
-
-**Those two lists are not reproduced in this pack.** They grade the text of a
-`SKILL.md` this pack ships at an earlier version, so they would report a move
-that has not happened here. `test_skill_structure.py` records the withholding
-beside the cases it kept, and the lists travel when `SKILL.md` travels.
 
 ## Implementer, verify gate and attacker drop to `medium` (2026-09-25)
 
