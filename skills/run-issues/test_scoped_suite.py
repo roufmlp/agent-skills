@@ -313,6 +313,76 @@ class TheTreeReaders(Repo):
         self.assertEqual(self.runs(), [])
 
 
+class TheNamingTests(TheTreeReaders):
+    """The human's ruling `q-07853b-05`, 2026-10-01. Issue 310 changed
+    `src/controls/picker/picker.tsx`, and `tests/bills/bill-form-invariants.test.ts`
+    reads that file as text by its path. Neither the import closure nor the
+    tree-reader walk named it, so it rode red through 311 and 312 to the
+    finale. Every test whose text holds a changed file's path now joins."""
+
+    PICKER = "src/controls/picker/picker.tsx"
+    INVARIANTS = "tests/bills/bill-form-invariants.test.ts"
+
+    def setUp(self):
+        super().setUp()
+        self.write(self.PICKER, "export const Picker = 1;\n")
+        self.write(self.INVARIANTS,
+                   'import { readFileSync } from "node:fs";\n'
+                   "const codeOf = (p: string) => readFileSync(p, 'utf8');\n"
+                   f'codeOf("{self.PICKER}");\n')
+        self.write("tests/other.test.ts", 'codeOf("src/controls/picker/compact.tsx");\n')
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "picker")
+
+    def every(self, *more):
+        return {"FAKE_ALL": ",".join([self.INVARIANTS, "tests/other.test.ts", *more])}
+
+    def test_issue_310s_missed_test_joins_on_the_picker_change(self):
+        self.write(self.PICKER, "export const Picker = 2;\n")
+        done = self.scoped(env=self.every())
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.run_files(), {self.INVARIANTS})
+        self.assertEqual(self.records()[-1]["named"], [self.INVARIANTS])
+        self.assertIn(self.INVARIANTS, done.stdout)
+
+    def test_a_test_naming_an_unchanged_file_does_not_join(self):
+        self.write("a.ts", "export const a = 3;\n")
+        self.scoped(env=self.every())
+        self.assertEqual(self.run_files(), set())
+        self.assertEqual(self.records()[-1]["named"], [])
+
+    def test_run_state_and_changed_tests_are_not_sources(self):
+        self.write(".scratch/run.md", "x\n")
+        self.write("tests/helper.ts", "export const h = 1;\n")
+        self.write("tests/names-them.test.ts",
+                   'const a = ".scratch/run.md", b = "tests/helper.ts";\n')
+        self.scoped(env=self.every("tests/names-them.test.ts"))
+        self.assertEqual(self.records()[-1]["named"], [])
+
+    def test_since_takes_committed_changes_too(self):
+        self.write(self.PICKER, "export const Picker = 2;\n")
+        git(self.repo, "commit", "-qam", "change the picker")
+        self.scoped("--since", "HEAD~1", env=self.every())
+        self.assertEqual(self.records()[-1]["named"], [self.INVARIANTS])
+
+    def test_a_test_the_closure_already_runs_is_not_named_twice(self):
+        self.write(self.PICKER, "export const Picker = 2;\n")
+        self.scoped(env={**self.every(), "FAKE_LIST": self.INVARIANTS})
+        [run] = self.runs()
+        self.assertEqual(run.count(str(self.repo.resolve() / self.INVARIANTS)), 1)
+        self.assertEqual(self.records()[-1]["named"], [])
+
+    def test_an_e2e_spec_naming_the_change_is_reported_not_run(self):
+        """vitest does not run a Playwright spec, so the scoped run names it
+        for the browser harness and records it."""
+        self.write("e2e/picker.spec.ts", f'const source = "{self.PICKER}";\n')
+        self.write(self.PICKER, "export const Picker = 2;\n")
+        done = self.scoped(env=self.every())
+        self.assertEqual(self.run_files(), {self.INVARIANTS})
+        self.assertEqual(self.records()[-1]["named_e2e"], ["e2e/picker.spec.ts"])
+        self.assertIn("e2e/picker.spec.ts", done.stdout)
+
+
 class TheReading(Repo):
 
     def test_it_runs_with_coverage_and_records_a_scoped_reading(self):

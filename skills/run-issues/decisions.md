@@ -2534,3 +2534,28 @@ The walk adds about 4 s to each scoped run. Eleven cases in `test_scoped_suite.p
 `TheTreeReaders` drive it, among them a listing through a helper, names that list
 nothing, names through another module and its re-exports, an import cycle, comments and
 strings that are not imports, and a file the walk cannot finish.
+
+## A spec red at the fork refuses its issue, and the scoped run takes tests that name a changed file (2026-10-01)
+
+The human ruled `q-07853b-04` and `q-07853b-05` from forks F3 and F4 of one project's run
+`batch-07853b`. Issue 313's criterion 6 said `e2e/contrast-and-targets.spec.ts` passes,
+and the spec was red at the fork `9587b5a8` in four cases no diff could reach. The gate
+graded it `fault`, and 313 stopped five of the eight issues. Separately,
+`tests/bills/bill-form-invariants.test.ts` reads `src/controls/picker/picker.tsx` by its
+path; issue 310 changed that file and the test rode red through 311 and 312, because
+neither the import closure nor the directory walk names a test that reads a file as text.
+
+`fork_specs.py` runs at launch, after the database claim and before spawn 1. It runs
+every spec a criterion names, not only the ones a criterion calls passing. Of 14
+criteria in that project naming an e2e spec, 12 use a pass word and 2 name a spec to copy. A
+reader of pass words is a list of spellings and passes the one it missed, so the default
+runs all of them, at about 35 s a spec. That default is queued as `q-ff01-1`. A spec
+absent at the fork is not run, because the issue writes it. A spec whose every case
+skips refuses: one project's `browserSkipReason()` turns a missing road into a green exit.
+
+`scoped_suite.py` now greps every file `vitest list` names, and every spec under `e2e/`,
+for the path of each changed file that is not a test or run state. Over 310's ten changed
+source files and that project's 753 test files it took 0.13 s and found twelve, the
+missed test among them. A Playwright spec it finds is printed as `NOT RUN` and recorded
+as `named_e2e`, because vitest cannot run it; the implementer brief tells the implementer
+to run it through the browser harness. That default is queued as `q-ff01-2`.

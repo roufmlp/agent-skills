@@ -69,9 +69,12 @@ through one script, once, at the end:
 python3 ~/.claude/skills/run-issues/scoped_suite.py
 ```
 
-It runs every test whose imports reach your change and the repo-wide checks
-(`tests/build-checks/`, every `standing-rules` sweep), with coverage, and records
-the reading. Three light-issue reds reached the finale through a touched-files run
+It runs every test whose imports reach your change, every test that lists a
+directory, every test whose text names a changed file's path, and the repo-wide
+checks (`tests/build-checks/`, every `standing-rules` sweep), with coverage, and
+records the reading. A line `NOT RUN, a browser spec that names a changed file`
+names a Playwright spec vitest cannot run: run it through the ledger's `Browser
+harness:` before you hand over. Three light-issue reds reached the finale through a touched-files run
 (the perf audit of 2026-09-28). The runner's commit waits for a green scoped
 reading of the tree you hand over, so a red here is yours to fix.
 

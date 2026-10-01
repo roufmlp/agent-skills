@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the scoped suite: every test whose imports reach a changed file, every
-test that lists a directory, and the repo-wide checks, with coverage, logged and
-recorded as `run_suite.py` records.
+test that lists a directory, every test that names a changed file, and the
+repo-wide checks, with coverage, logged and recorded as `run_suite.py` records.
 
     python3 ~/.claude/skills/run-issues/scoped_suite.py [--since <ref>]
 
@@ -26,7 +26,7 @@ and three reds escaped to the finale: issue 181 broke
 `tests/sessions/standing-rules.test.ts`, repo-wide checks that read source as
 text and import nothing either changed.
 
-So the set is three parts:
+So the set is four parts:
 
 1. **The import closure.** `vitest list --filesOnly --changed=<since>` names
    every test file that transitively imports a changed file, changed test
@@ -82,6 +82,23 @@ Measured on that project on 2026-10-01, at main `e7703fd4`: 597 test files,
 finale's 46 and 16 more, 14 of them tests that call `migrate()` in
 `scripts/migrate.mjs`, which lists `supabase/migrations/`. Their run time
 was not measured.
+
+## How a test that names a changed file is found
+
+The human's ruling `q-07853b-05` of 2026-10-01, the fourth part of the set.
+`tests/bills/bill-form-invariants.test.ts` reads
+`src/controls/picker/picker.tsx` as text by its path. Issue 310 changed that
+file, the import closure and the walk both missed the test, and it rode red
+through 311 and 312 to the finale (run `batch-07853b`, fork F4).
+
+`naming_tests` reads every file `vitest list` names, and every Playwright spec
+under `e2e/`, for the repo-relative path of each changed file that is not a
+test path and not run state. A vitest file that holds one joins the run. A
+spec under `e2e/` that vitest does not list is named in the output and the
+record as `named_e2e`, for the browser harness: vitest cannot run it. Changed
+means `git diff --name-only <since>` plus untracked files, so a deleted file
+still counts. Measured on that project on 2026-10-01: 0.04 s for 310's ten
+changed source files, ten tests, the missed one among them.
 
 The harness suite runs after it where the diff touches a path the harness
 contract names (`run_suite.harness_wanted`).
@@ -596,6 +613,43 @@ def tree_readers(tree: pathlib.Path, tests: list[str], builtins: frozenset[str]
     return joined, unplaced
 
 
+def changed_sources(tree: pathlib.Path, since: str) -> list[str]:
+    """The repo-relative paths changed since `since`, uncommitted and
+    untracked work included, that are neither a test path nor run state."""
+    changed = run_suite.git(tree, "diff", "--name-only", since).splitlines()
+    changed += run_suite.git(tree, "ls-files", "--others",
+                             "--exclude-standard").splitlines()
+    found = []
+    for path in changed:
+        if path and path not in found and not run_suite.is_test_path(path) \
+                and not path.startswith(tuple(f"{part}/" for part in run_suite.RUN_STATE)):
+            found.append(path)
+    return found
+
+
+def e2e_specs(tree: pathlib.Path) -> list[str]:
+    """Every Playwright spec under `e2e/`, tracked or untracked."""
+    listed = run_suite.git(tree, "ls-files", "--cached", "--others",
+                           "--exclude-standard", "--", "e2e").splitlines()
+    return [path for path in listed if re.search(r"\.spec\.[cm]?[jt]sx?$", path)]
+
+
+def naming_tests(tree: pathlib.Path, candidates: list[str],
+                 sources: list[str]) -> list[str]:
+    """The candidates whose text holds the path of one of `sources`."""
+    if not sources:
+        return []
+    found = []
+    for name in candidates:
+        try:
+            text = (tree / name).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if any(source in text for source in sources):
+            found.append(name)
+    return found
+
+
 def light_commit_refusal(tree: pathlib.Path, level: str) -> str | None:
     """Why the runner may not commit a light issue's tree yet, or None.
 
@@ -623,7 +677,8 @@ def light_commit_refusal(tree: pathlib.Path, level: str) -> str | None:
     return (f"no scoped reading exists for tree {tree_id}, the tree this commit "
             f"stages. A light issue commits only on a green one, which runs every "
             f"test whose imports reach the change, every test that lists a "
-            f"directory, and the repo-wide checks:\n"
+            f"directory, every test that names a changed file, and the "
+            f"repo-wide checks:\n"
             f"  {SCOPED}")
 
 
@@ -665,13 +720,24 @@ def main(argv=None) -> int:
         return refuse(f"the tests that list a directory could not be named. {error}")
     readers = [name for name in readers if name not in files
                and not any(check in name for check in sweep)]
+    try:
+        sources = changed_sources(tree, args.since)
+        named = [name for name in naming_tests(tree, every, sources)
+                 if name not in files and name not in readers
+                 and not any(check in name for check in sweep)]
+        named_e2e = naming_tests(
+            tree, [spec for spec in e2e_specs(tree) if spec not in every], sources)
+    except (subprocess.CalledProcessError, OSError) as error:
+        detail = getattr(error, "stderr", None) or str(error)
+        return refuse(f"git could not name the files changed since {args.since} "
+                      f"({str(detail).strip()}).")
 
     started = run_suite.now()
     stem = f"{started:%Y%m%dT%H%M%S.%fZ}-{STAGE}-{tree_id[:12]}"
     log = store / "logs" / f"{stem}.log"
     kept = store / "coverage" / stem
     command, reports = run_suite.with_coverage(
-        [*vitest, "run", *(str(tree / name) for name in files + readers), *sweep,
+        [*vitest, "run", *(str(tree / name) for name in files + readers + named), *sweep,
          "--passWithNoTests"], kept)
     suite_exit, text = run_suite.run_logged(command, log)
     report = run_suite.keep_report(reports, started, kept)
@@ -687,6 +753,7 @@ def main(argv=None) -> int:
               "exit": exit_code,
               "suite_exit": suite_exit, "harness": harness, "command": command,
               "files": files, "tree_readers": readers, "unplaced": unplaced,
+              "named": named, "named_e2e": named_e2e,
               "sweep": sweep, "since": args.since,
               "asked": queue.asked.isoformat(), "waited": queue.waited,
               "lock": queue.lock, "lock_holder": queue.holder,
@@ -700,7 +767,13 @@ def main(argv=None) -> int:
 
     print(f"scoped suite exit {suite_exit}, tree {tree_id}: {len(files)} files "
           f"whose imports reach the change since {args.since}, {len(readers)} "
-          f"more that list a directory, and the checks {', '.join(sweep)}")
+          f"more that list a directory, {len(named)} more that name a changed "
+          f"file, and the checks {', '.join(sweep)}")
+    for name in named:
+        print(f"  joined, it names a changed file: {name}")
+    for name in named_e2e:
+        print(f"  NOT RUN, a browser spec that names a changed file; run it through "
+              f"the browser harness: {name}")
     for name, why in unplaced.items():
         if name in readers:
             print(f"  joined, an import it cannot place: {name}: {why}")

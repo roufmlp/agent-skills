@@ -1117,6 +1117,13 @@ cost), and it keys on the current directory (ticket 38, the layout ticket, rulin
   it takes). A typecheck can exit 0 against a global install and never load the
   repo's types. **A green produced without dependencies on disk is a false green**
   (208-202 run: decisions.md).
+- **Fork specs — REFUSE an issue whose criteria name an e2e spec red at the
+  fork.** In the worktree, after the claim and the status table, before spawn 1:
+  `python3 ~/.claude/skills/run-issues/fork_specs.py --tree <worktree> --harness
+  "<RUN FACTS' Browser harness>" --ledger <run.md> --briefing <merge-briefing.md>
+  --issue <path> ...`. Exit 1: spawn none it names, and block their dependents;
+  the rest run. Exit 3 blocks the launch. `--override <id>` needs the human's word.
+  Its docstring holds the rest (ruling `q-07853b-04`).
 - **Verify the allowlist, never assert it.** Dry-run every command class this run
   will use, in no-op form, before spawn #1. A miss is a launch-time blocker;
   mid-run it is a worker blocked on a prompt, stalling silently. **Refuse to
