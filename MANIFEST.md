@@ -310,6 +310,22 @@ both, and writing that is authoring.
 ~/.claude/skills/run-issues/run-isolation-2026-09-15.md
 ```
 
+**Three tools that arrived after 2026-10-01 are withheld, and the reason is their text.**
+`check_walk_closed.py` and the two hooks `fixed-sleep-guard.py` and `issue-size-guard.py`
+each tell their fault as one project's story, by name, and their drills carry that
+project's fixtures. Rewriting them is authoring rather than scrubbing. The published
+`harden-issues/SKILL.md` names the walk check as a script this pack does not ship. Decided
+in the 2026-10-04 sync; a later sync may publish them:
+
+```withheld
+~/.claude/skills/harden-issues/check_walk_closed.py
+~/.claude/skills/harden-issues/test_check_walk_closed.py
+~/.claude/hooks/fixed-sleep-guard.py
+~/.claude/hooks/test_fixed_sleep_guard.py
+~/.claude/hooks/issue-size-guard.py
+~/.claude/hooks/test_issue_size_guard.py
+```
+
 **The run harness is withheld, and this is the decision rather than an oversight.**
 `~/.claude/skills/run-issues/harness/` is a fixture project plus a driver that runs a
 real `/run-issues` batch against it, so a workflow change can be measured before and
