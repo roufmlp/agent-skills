@@ -26,7 +26,7 @@ the eight issues.
 4. A spec is green on exit 0 with at least one passed case and no failed one.
    Anything else is red: a failed case, a red exit with no case it can read,
    and a spec whose every case skipped (one project's `browserSkipReason()`
-   turns a missing road into a green exit).
+   turns a missing road into a green exit). One exception, below.
 5. Refuses each issue that names a red spec, exit 1. It sets that issue's row
    in the ledger's status table to `blocked (fork spec red)`, and writes the
    spec and its red cases under `## Refused at the fork <sha>` in the ledger
@@ -40,6 +40,17 @@ criterion calls passing. Of 14 criteria in one project naming an e2e spec on
 reader of pass words is a list of spellings, and it passes the spelling it
 missed. A red spec an issue copies from is worth knowing before spawn too.
 Measured cost: about 35 s per spec (313's gate log).
+
+## A spec that skips itself
+
+A spec whose every case skipped, on exit 0, is not red when another spec in
+the same reading passed a case. A missing road skips every spec that needs
+it, so a passed case proves the road open, and the skip is the spec's own
+gate. That spec is printed as `skipped`, and nothing is known about it.
+Run `batch-471bd4`, fork `920c03a9`: issue 362's criterion 2 named
+`e2e/fidelity-shots.spec.ts`, which skips unless `npm run fidelity:shots --
+<row-id>` sets `FIDELITY_ROW`. Two other specs passed, and 362 was refused.
+With no passed case anywhere in the reading, the skip stays red.
 
 ## The override
 
@@ -70,6 +81,7 @@ REFUSED = 1
 UNKNOWN = 3
 RUN_STATE = (".scratch/",)
 TIMEOUT = 900
+EVERY_CASE_SKIPPED = "no case passed, every case skipped"
 SPEC = re.compile(r"\be2e/[\w./-]*?\.spec\.[cm]?[jt]sx?\b")
 ID_FROM_NAME = re.compile(r"^(\d+[a-z]?)(?:[-_.]|$)")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -100,8 +112,9 @@ def named_specs(body: str) -> list[tuple[str, str]]:
     return found
 
 
-def read_spec(text: str, exit_code: int) -> tuple[bool, list[str], str]:
-    """Whether the run is green, its red cases, and why it is red."""
+def read_spec(text: str, exit_code: int) -> tuple[bool, list[str], str, int]:
+    """Whether the run is green, its red cases, why it is red, and how many
+    cases passed."""
     counts: dict[str, int] = {}
     cases: list[str] = []
     in_failed = False
@@ -114,17 +127,20 @@ def read_spec(text: str, exit_code: int) -> tuple[bool, list[str], str]:
         case = CASE.match(line) if in_failed else None
         if case:
             cases.append(case.group(1))
-    if exit_code == 0 and counts.get("passed", 0) > 0 and not counts.get("failed"):
-        return True, [], ""
+    passed = counts.get("passed", 0)
+    if exit_code == 0 and passed > 0 and not counts.get("failed"):
+        return True, [], "", passed
     if cases:
-        return False, cases, f"{len(cases)} red cases"
+        return False, cases, f"{len(cases)} red cases", passed
+    if exit_code == 0 and counts.get("skipped", 0) > 0 and not passed:
+        return False, [], EVERY_CASE_SKIPPED, passed
     if exit_code == 0:
-        return False, [], "no case passed"
-    return False, [], f"exit {exit_code} and no red case it can read"
+        return False, [], "no case passed", passed
+    return False, [], f"exit {exit_code} and no red case it can read", passed
 
 
 def run_spec(command: list[str], tree: pathlib.Path, spec: str,
-             log: pathlib.Path) -> tuple[bool, list[str], str]:
+             log: pathlib.Path) -> tuple[bool, list[str], str, int]:
     """Run one spec through the harness, logged. Raises OSError when the
     harness cannot start."""
     try:
@@ -136,7 +152,7 @@ def run_spec(command: list[str], tree: pathlib.Path, spec: str,
         if isinstance(text, bytes):
             text = text.decode(errors="replace")
         log.write_text(text, encoding="utf-8")
-        return False, [], f"timed out after {TIMEOUT} s"
+        return False, [], f"timed out after {TIMEOUT} s", 0
     log.write_text(text, encoding="utf-8")
     return read_spec(text, exit_code)
 
@@ -217,20 +233,42 @@ def main(argv=None) -> int:
     logs = ledger.parent / "fork-specs"
     logs.mkdir(parents=True, exist_ok=True)
     readings: dict[str, tuple[bool, list[str], str, str]] = {}
+    proof: list[str] = []
     for spec in dict.fromkeys(spec for pairs in wanted.values() for _, spec in pairs):
         if not (tree / spec).is_file():
             print(f"not run, absent at the fork {fork}; the issue writes it: {spec}")
             continue
         log = logs / (spec.replace("/", "__") + ".log")
         try:
-            green, cases, why = run_spec(command, tree, spec, log)
+            green, cases, why, passed = run_spec(command, tree, spec, log)
         except OSError as error:
             print(f"REFUSED: the harness `{args.harness}` could not start ({error}). "
                   f"Nothing is known about any spec.")
             return UNKNOWN
         readings[spec] = (green, cases, why, str(log))
+        if passed:
+            proof.append(spec)
+
+    # A passed case anywhere, in a green spec or a red one, proves the road
+    # open, so a spec that skipped every case skipped on its own gate. It is
+    # neither green nor red.
+    skipped = []
+    for spec, (green, cases, why, log) in list(readings.items()):
+        if why != EVERY_CASE_SKIPPED:
+            continue
+        if proof:
+            skipped.append(spec)
+            del readings[spec]
+        else:
+            readings[spec] = (green, cases, why + "; no spec in this reading passed a "
+                              "case, so the road may be missing", log)
+    for spec, (green, _cases, why, _log) in readings.items():
         print(f"{'green' if green else 'RED'} at the fork {fork}: {spec}"
               + ("" if green else f" ({why})"))
+    for spec in skipped:
+        print(f"skipped at the fork {fork}: {spec} (every case skipped while "
+              f"{proof[0]} passed a case, so the skip is the spec's own gate; "
+              f"nothing is known about it)")
 
     heading = f"## Refused at the fork {fork}"
     refused, lines = [], []

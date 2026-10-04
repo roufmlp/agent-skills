@@ -444,6 +444,27 @@ count and a rewrite rather than an addition on a reset criterion, and
 count rule flagged 123 of 269 ready criteria, mostly fixture sizes, so it reads only the
 sentences the pass wrote.
 
+## An accepted default is recorded, and the walk closes on a check (2026-10-02)
+
+Pass `h1001pk` in one project, 1 October 2026. The human walked the 33 queued defaults of the
+picker run at the keyboard, flipped two (`q-h1001pk-seam-3`, the cut of 335 and 338, and
+`q-h1001pk-315-2`, the Used-before rule) and accepted 31: "All other default is ok", then
+"Ok thats fine" for the laptop count's "0+". The session wrote the two flips into
+`.scratch/rulings.md` (commit `ec682f60`) and nothing for the 31. SKILL.md said "a ruling
+the human gives at the keyboard goes into the rulings file", and an acceptance read as no
+ruling. The 31 stayed open on the queue, all ten issues kept `Hardened (provisional)`, and
+`/run-issues`' criteria gate refused issue 334 (level full) on `q-h1001pk-334-2` and
+`q-h1001pk-334-4`. Run `batch-f32961` launched under `--override 334`. The 31 entries were
+written a day later from the session transcript (that project's commit `c523bc11`).
+
+A second sentence in SKILL.md would have asked the next session to remember what the first
+one failed to make it remember. `check_walk_closed.py` refuses instead. The `Walk:` line is
+the fact it needs: without it the check cannot tell a pass nobody walked from a walk that
+recorded nothing, which is the h1001pk state. Driven on that project's own trees: the tree at
+`ec682f60` with `Walk: 2026-10-01` added is refused on exactly the 31 items; the tree at
+`c523bc11` passes. This pack does not ship `check_walk_closed.py`, so `SKILL.md` states the
+rule the check holds, and the pass holds it by hand.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel, taken by the human: three personas

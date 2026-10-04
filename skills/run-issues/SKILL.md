@@ -66,9 +66,9 @@ gate that returned no verdict.
 
 | Stage | Agent type | Effort | What a wrong answer here costs |
 |---|---|---|---|
-| Implement | `run-issues-implementer` | medium | A weak diff is paid for twice, by the gate round that rejects it and by the attempt it burns against the cap |
+| Implement | `run-issues-implementer` | high | A weak diff is paid for twice, by the gate round that rejects it and by the attempt it burns against the cap |
 | Third attempt after two rejections | `run-issues-implementer-escalated` | high | Two attempts have already failed on this issue, so the next exit is `blocked`: the issue leaves the run and comes back as one of the human's answers |
-| Verify | `run-issues-verify-gate` | medium | A wrong pass ships behaviour nobody drove, and the finale is the first thing after it that looks |
+| Verify | `run-issues-verify-gate` | high | A wrong pass ships behaviour nobody drove, and the finale is the first thing after it that looks |
 | Review | `run-issues-review-gate` | high | Same: no catcher until the finale, and it is the only reader of the whole diff before then |
 | Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high | A wrong pass is money, auth or a secret, which is the class the variant exists for |
 | Coherence finale, once per run | `run-issues-finale` | high | Once per run, and the last fresh eyes before the merge read |
@@ -786,7 +786,8 @@ briefing lists every such entry:
 Handoff documents are never the home for any of this.
 
 **Nothing in a run writes an issue file.** Not the runner, not an implementer, not
-a gate. The one runner write allowed is step 2's `Level:` rewrite to `full`. Findings go to the register and wait there for the human: the finale spawns no
+a gate. The one runner write allowed is step 2's `Level:` rewrite to `full`. An implementer may also edit the `Claims:` line, and only that line, of an issue outside the run's scope when its own criterion names the edit;
+the finale counts the changed lines (`q-fin-c62d38-06`; decisions.md). Findings go to the register and wait there for the human: the finale spawns no
 promotion, and its red suite files become rows too (issue 39). A finding is out by
 default; their ruling is what gets it in. The register, the row format and the promotion rule are
 specified once, in `parallel-hunt/SKILL.md`, and a run uses them unchanged — one
@@ -1187,12 +1188,12 @@ the resume reads; it carries no time, per the rule above.
 
 ## Mid-run directives
 
-A directive arriving mid-run is **this run only** unless the user says it is
-standing. Record it in Carry-forward with its scope written on it and re-brief it
-from there. Do not write it to a memory file in-session — the test is whether it
-would still be true if this run had never happened. At run close, route "should
-this become standing?" to the finale's `## Decide` heading, and from there into
-the run's own queue shard, where `/daily-brief` collects it — a chat question
-at session end dies with the session. It goes under `## Decide` rather than
-`## Ruled` because nobody has answered it. Write it in the form
-`~/.claude/questionrules.md` sets.
+A directive arriving mid-run is **this run only** unless the user says it is standing.
+Record it in Carry-forward with its scope written on it and re-brief it from there. Do
+not write it to a memory file in-session — the test is whether it would still be true if
+this run had never happened. At run close, route "should this become standing?" to the
+finale's `## Decide` heading, and from there into the run's own queue shard, where
+`/daily-brief` collects it — a chat question at session end dies with the session. It
+goes under `## Decide` rather than `## Ruled` because nobody has answered it. Write it in
+the form `~/.claude/questionrules.md` sets. A message reaches a running subagent only at
+its next tool round: to free one blocked in a long call, stop the process it waits on.

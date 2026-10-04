@@ -131,7 +131,10 @@ Each class has shipped a real defect through green gates.
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
    reintroduced" — where cheap. (Eleven guards that could not fail in fourteen
-   issues.)
+   issues.) A criterion that keeps a message owed until it is sent names whom the
+   send must name, so a gate can drive a send to the wrong person. (345 of
+   `batch-c62d38` cleared an owed brief on a send to another designer;
+   `q-fin-c62d38-07`.)
 
    **A criterion that names a mutation must have that mutation driven once before
    the issue ships.** Not described, driven: make the change, watch the test red,
@@ -181,6 +184,15 @@ Each class has shipped a real defect through green gates.
 6. **Empty or missing hostile data.** Does QA or production hold data that can
    exercise each criterion? If not, say so and name the fixture to create.
    Otherwise the gates validate over an empty set. (118: five tables, zero rows.)
+
+   **A fixture that names a server action is driven through that action once.**
+   Before you leave a criterion whose fixture calls a server action, call that
+   action with the fixture, in a private copy, and confirm it reaches the code
+   the criterion grades. A criterion whose fixture you did not drive carries
+   `Fixture not driven: <why>` beside it. (Issue 395 of `batch-c590c3` graded a
+   six-file raise for a job number, and the raise refuses six files before it
+   makes a job. It cost a criteria-check gate and a ruling at the keyboard.
+   Adopted by the human 2026-10-04, `q-fin-c590c3-02`.)
 7. **Deploy and boundary reality.** Migration ordering — one-way? code-first or
    db-first? — the client/server module boundary, platform caps. (The worst defect
    of one run was a server page importing a client module.)

@@ -2559,3 +2559,49 @@ source files and that project's 753 test files it took 0.13 s and found twelve, 
 missed test among them. A Playwright spec it finds is printed as `NOT RUN` and recorded
 as `named_e2e`, because vitest cannot run it; the implementer brief tells the implementer
 to run it through the browser harness. That default is queued as `q-ff01-2`.
+
+## Implementer and verify gate go back to `high` (2026-10-03)
+
+The human's ruling. `run-issues-implementer.md` and `run-issues-verify-gate.md` now read
+`effort: high`, and the effort table in `SKILL.md` says the same. This reverses the
+2026-09-25 drop to `medium` for those two roles. The hardening attacker and promotion
+stay at `medium`. The escalated implementer and both review gates stay at `high`, and
+so does the finale.
+
+The 2026-09-25 entry named its judge: effort-shaped implementer rejects, and faults a
+driven acceptance path would have caught. No count of either was taken before this
+ruling, so nothing here measures what `medium` missed. Read the next batch's rejects
+against the `medium` batches `batch-ea4cfa` and `batch-d70be9` if the question comes back.
+
+## An implementer may edit a later issue's `Claims:` line when its criterion names it (2026-10-04)
+
+The human's ruling `q-fin-c62d38-06`, adopted 2026-10-04 in the walk of one project's run
+`batch-c62d38`. Issue 356 of that run put the fidelity rows OPS-S101 to OPS-S137 in
+the inventory table, and its criterion had each row's ID join the `Claims:` line of
+the issue that builds it. That meant 22 issue files, 357 to 388, none of them in the
+run. The runner settled the edits as 356's own deliverable and checked by hand that
+no other line changed: 22 files, 0 other lines. The ruling keeps that road open for
+the `Claims:` line alone, and moves the hand check into the finale as a count.
+Evidence: that run's `merge-briefing.md`, issue 356's section and "## Decide".
+
+## A spec that skips itself no longer refuses its issue (2026-10-04)
+
+The human overrode the fork check's refusal of issue 362 at the launch of one project's run
+`batch-471bd4`, fork `920c03a9`, and ruled that the skip-as-red reading be fixed.
+Issue 362's criterion 2 named `e2e/fidelity-shots.spec.ts`. That spec is a tool, not a
+test: it skips unless `npm run fidelity:shots -- <row-id>` sets `FIDELITY_ROW`. Run by
+itself it printed `1 skipped`, and the 2026-10-01 rule read every-case-skipped as red.
+Two other specs, `e2e/phone-keyboard.spec.ts` (8 passed) and
+`e2e/your-move-at-three-widths.spec.ts` (3 passed), ran in the same reading.
+
+The 2026-10-01 rule stays for the case it was written for. A missing road makes
+`browserSkipReason()` skip every spec that needs it, so no case passes anywhere. A
+passed case in any spec of the reading, green or red, proves the road open, and a spec
+that skipped every case beside it skipped on its own gate. `fork_specs.py` now prints
+that spec as `skipped`, records nothing and refuses nothing for it. With no passed case
+anywhere, every-case-skipped is still red, and the reason now says the road may be
+missing. Replayed on the three `batch-471bd4` logs: fidelity-shots reads as skipped,
+the other two green, and 362 would have run. Four new cases in `test_fork_specs.py`.
+
+What it cannot tell: a spec that skips on a gate of its own that is a real fault, with
+the road open. The fork has no reading of such a spec, and the gates still grade it.

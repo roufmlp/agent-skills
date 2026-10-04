@@ -345,6 +345,7 @@ class TestTheClassBPassagesWereNotTouched(unittest.TestCase):
         # deleted both on 2026-09-30, when they set the finale to high and kept
         # the implementer and verify gate at medium; the author's rulings file
         # keeps the evidence.
+        # They raised the implementer and verify gate to high on 2026-10-03.
         # The INTERIM R2 block was here. Its expiry was met: issue 379 shipped in
         # run batch-375cbf, merged 2026-09-01, and the block was replaced with the
         # pinned background pass on the human's ruling of the same day. A guard that

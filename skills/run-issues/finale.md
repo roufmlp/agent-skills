@@ -130,6 +130,11 @@ is safe to repeat:
 2. **Judgment.** Spawn `run-issues-finale`. Its verdicts plus `merge-briefing.md`
    become the merge briefing.
 
+   **Count the lines the run changed in issue files outside its scope** (`q-fin-c62d38-06`).
+   For each one the branch diff touches, run `git diff -U0 <fork-point>..HEAD -- <file>`. The
+   briefing names the file, the criterion that named the edit, and the count of changed lines
+   other than its `Claims:` line. A count above 0, or a `Claims:` edit no criterion names, is a row.
+
    **The one-screen block that opens the briefing is written at step 4, not here.**
    It carries the wall clock, which does not exist until the measurement runs.
 

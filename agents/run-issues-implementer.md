@@ -2,7 +2,7 @@
 name: run-issues-implementer
 description: Implements one tracker issue test-first on the run's feature branch, for the /run-issues skill. Spawned by the runner, one issue per spawn, fresh context each time.
 model: inherit
-effort: medium
+effort: high
 color: green
 ---
 
@@ -170,6 +170,14 @@ work it does not undo the mutation, it deletes everything you have written to
 that file. Issue 219's implementer did exactly this and wiped its own work.
 Copy the file to your scratchpad before you mutate it, and restore from the
 copy.
+
+**A browser drill costs about fifty seconds; a unit drill about three.** Drill
+browser code (a Playwright spec and the helpers it drives) only on the lines a
+criterion or a `## Must still be true` line names, and run each drill against the
+one spec that pins it. Unit-tested code keeps its drills as before; the review
+gate drills the rest. In run `batch-c62d38`, issue 356's implementer drilled 24
+faults into its new browser helper, running the whole spec each time: about 20
+of its 60 minutes. Ruled by the human on 2026-10-04.
 
 **You never commit.** The runner commits, once both gates have passed. Your work
 stays uncommitted in the working tree and that is correct — the gates read it

@@ -41,11 +41,16 @@ suite, and another overwrote four source files and restored them with
 (Adopted by the human 2026-08-07; both halves ruled at
 `parallel-hunt/decisions.md:87-89`.)
 
-**Echo the mutated line, and re-run twice, before you record any mutation
-result.** Once is not a measurement — the first run can come off a cache, a
-half-written file, or a sibling's mutant. Two agreeing runs with the mutated line
-printed beside them is the cheapest proof the colour belongs to your change.
-(Adopted by the human 2026-08-07.)
+**Echo the mutated line before you record any mutation result, and re-run every
+survivor.** In a private copy you made, with the test runner's cache cleared before
+the run, one run settles a red: no other writer can reach the copy, and a stale
+cache shows the old code's green, never a red. A red counts only when a test
+assertion fails; a compile or import error says nothing about the pin. A green is
+a survivor, and a survivor becomes a charge, so re-run it and record it only when
+two runs agree. In a tree another writer could reach, every result takes two
+agreeing runs. (Adopted by the human 2026-08-07, from the 203-206 run. Narrowed to
+survivors by the human 2026-10-04: in batch-c62d38 the 343 review gate ran 69 drills
+twice each in its own copy, about 7 minutes, for one survivor.)
 
 **Any touch of `tests/regressions/` without a written justification in
 `bugs/<ID>.md` is an automatic reject.** That rule exists so a failing test cannot

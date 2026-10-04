@@ -247,12 +247,42 @@ class GreenAndOther(Fork):
         self.assertIn("REFUSED 313", done.stdout)
         self.assertIn("no red case", done.stdout)
 
-    def test_a_spec_whose_every_case_skips_refuses(self):
+    def test_a_spec_whose_every_case_skips_refuses_when_no_spec_proves_the_road(self):
         """A skip is not a pass: one project's `browserSkipReason()` turns a
-        missing road into a green exit."""
-        done = self.check(specs={CONTRAST: {"skipped": 13}, CONFIG: {"passed": 4}})
+        missing road into a green exit, and a missing road skips every spec."""
+        done = self.check(specs={CONTRAST: {"skipped": 13}, CONFIG: {"skipped": 4}})
         self.assertEqual(done.returncode, 1, done.stdout)
         self.assertIn("no case passed", done.stdout)
+        self.assertIn("no spec in this reading passed a case", done.stdout)
+
+    def test_a_spec_named_alone_whose_every_case_skips_refuses(self):
+        other = self.issue.parent / "322-alone.md"
+        other.write_text(f"## Acceptance criteria\n\n1. `{CONTRAST}` passes.\n")
+        done = self.check(specs={CONTRAST: {"skipped": 13}}, issues=[other])
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("REFUSED 322", done.stdout)
+
+    def test_a_skipped_spec_runs_its_issue_when_another_spec_proves_the_road(self):
+        """Run `batch-471bd4`, fork `920c03a9`: issue 362's criterion 2 named
+        `e2e/fidelity-shots.spec.ts`, which skips itself unless
+        `npm run fidelity:shots -- <row-id>` sets `FIDELITY_ROW`. Two other
+        specs passed in the same reading, so the road was open and the skip
+        was the spec's own gate. 362 was refused all the same."""
+        done = self.check(specs={CONTRAST: {"skipped": 1}, CONFIG: {"passed": 4}})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn("REFUSED", done.stdout)
+        self.assertIn(f"skipped at the fork {self.fork}: {CONTRAST}", done.stdout)
+        self.assertIn(CONFIG, done.stdout.split(f"skipped at the fork {self.fork}: {CONTRAST}")[1])
+        self.assertNotIn("Refused at the fork", self.ledger.read_text())
+        self.assertIn("| 2 | 313 — other pickers go compact | queued |", self.ledger.read_text())
+
+    def test_a_red_spec_still_refuses_beside_a_skipped_one(self):
+        """Its three passed cases prove the road open all the same."""
+        done = self.check(specs={CONTRAST: {"skipped": 1},
+                                 CONFIG: {"exit": 1, "passed": 3, "failed": RED_AT_FORK[:1]}})
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn(f"`{CONFIG}`, red at the fork", done.stdout)
+        self.assertNotIn(f"`{CONTRAST}`, red at the fork", done.stdout)
 
     def test_an_override_runs_the_issue_and_says_so(self):
         done = self.check("--override", "313", specs=self.red_at_fork())

@@ -214,7 +214,9 @@ sharpened (with evidence), question (for the human), or clean.
    incident.)
 4. **Guards that cannot fail.** Each criterion states how a violation would be
    observed. Prefer mutation-shaped criteria — "reds when X is deliberately
-   reintroduced" — where cheap.
+   reintroduced" — where cheap. A criterion that keeps a message owed until it is
+   sent names whom the send must name, so a gate can drive a send to the wrong
+   person (`q-fin-c62d38-07`).
 
    **A criterion that names a mutation must have that mutation driven once
    before the issue ships.** Not described, driven: make the change, watch the
@@ -601,7 +603,9 @@ Every defaulted question is also appended to this pass's own queue shard —
 each item's heading, because `decisions-queue.md` is generated and refuses a
 direct write. The queue is the one place `/to-prd`, `/to-issues`, `/triage` and
 this pass all queue decisions, so they reach the human in a single list rather
-than scattered across issue files.
+than scattered across issue files. The shard states its walk on one line above the
+first item: `Walk: none` when it is written, changed to `Walk: <date>` when the human
+walks it at the keyboard.
 Before the pass finishes, run `python3 ~/.claude/skills/lib/check_queue_shard.py <that
 shard>` and stop on exit 1: a heading with no backticked `q-` id is an item the brief can
 never retire, and it comes back to the human after they have ruled. Three groups of
@@ -621,6 +625,20 @@ names, and refuses a RISE in that count rather than the count itself — a track
 rulings written before the rule, and a flat refusal would block every stamp on it. The
 sibling fault, an entry the reader cannot parse, IS refused at write time, by
 `hooks/rulings-write-guard.py` in this pack.
+
+**An accepted default is a ruling too, and the walk closes on a check.** Its entry reads
+`Ruled: AS DEFAULTED.`, and its id goes into this tree's `ruled.md` beside every flip,
+through `collect_shards.py --kind queue --my-shard --prefix ruled --machinery`. An item the
+human waves off carries a `Left for the brief` line in its body. After the walk, and before
+the pass's branch merges to main, every item on the shard has an outcome on record — a
+flip, an accepted default, or a `Left for the brief` line — and the shard's `Walk:` line
+carries a date.
+
+The author's setup refuses the merge otherwise, with `check_walk_closed.py`, which this
+pack does not ship; without it the pass holds the rule. That check runs after the walk and
+`check_queue_shard.py` before it; in the other order the first refuses every item the walk
+ruled. Adopted by the human 2026-10-02, after pass `h1001pk`; `decisions.md` holds the
+incident.
 
 Where an answer needs input nobody here has — a third party, a credential, a
 product call with no defensible default — set `needs-harden` instead, so the issue
