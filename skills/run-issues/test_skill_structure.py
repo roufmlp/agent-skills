@@ -2987,9 +2987,11 @@ class TheVerifyGateStatesTheMeasuredSuiteTime(unittest.TestCase):
         start = brief.index("RUN THE WHOLE SUITE IN THAT COPY")
         passage = brief[start:start + 1200]
         self.assertIn("2026-09-23", passage)
-        # The live drill pins the project's name here; the published brief
-        # names it by role, and this pins that wording instead.
-        self.assertIn("On one project", passage)
+        # The figure names where it was measured. Any name passes, because the
+        # published pack runs this against the briefs installed in
+        # `~/.claude/agents`: a reader's hold the scrubbed "one project", and the
+        # author's hold the live project name, and both must pass.
+        self.assertRegex(passage, r"On [\w ]+? it took about \d+ seconds")
 
 
 # --------------------------------------------------------------------------
