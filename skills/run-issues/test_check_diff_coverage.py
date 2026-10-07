@@ -299,6 +299,67 @@ class Uncovered(unittest.TestCase):
         self.assertEqual([p.kind for p in problems], ["uncovered"])
 
 
+class ZeroStatementFiles(unittest.TestCase):
+    """Ruling `q-fin-e39c34-05`, 2026-10-07: a file the report maps with zero
+    statements is not unexecuted code.
+
+    Run batch-e39c34 refused issues 373, 377 and 380 on one-line re-export
+    index files that `@vitest/coverage-v8` writes with an empty statement map,
+    and the finale filed two `high` rows on files holding no code. Real
+    untested code beside such a file is still refused."""
+
+    REEXPORT = "src/controls/index.ts"
+
+    def report(self, a_hits: dict[int, int]) -> str:
+        data = json.loads(istanbul("src/a.ts", a_hits))
+        data[self.REEXPORT] = {"path": self.REEXPORT, "statementMap": {}, "s": {}}
+        return json.dumps(data)
+
+    def build(self, body: str):
+        root = tree(
+            {"src/a.ts": "x\n", self.REEXPORT: "x\n", "coverage/coverage-final.json": body}
+        )
+        age(root / "src/a.ts", 600)
+        age(root / self.REEXPORT, 600)
+        return run(
+            root,
+            diff(("src/a.ts", 1, 2), (self.REEXPORT, 1, 1), ("src/a.test.ts", 1, 1)),
+        )
+
+    def test_a_reexport_mapped_with_no_statement_passes(self):
+        problems, facts = self.build(self.report({1: 1, 2: 1}))
+        self.assertEqual(problems, [])
+        self.assertEqual(facts["changed_lines"], 2)
+
+    def test_untested_code_beside_it_is_still_refused(self):
+        problems, facts = self.build(self.report({1: 1, 2: 0}))
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        rendered = guard.render(problems, facts)
+        self.assertIn("src/a.ts:2", rendered)
+        self.assertNotIn(self.REEXPORT, rendered)
+
+    def test_an_lcov_record_with_no_line_passes(self):
+        body = lcov("src/a.ts", {1: 1, 2: 1}) + (
+            f"SF:{self.REEXPORT}\nLF:0\nLH:0\nend_of_record\n"
+        )
+        problems, _ = self.build(body)
+        self.assertEqual(problems, [])
+
+    def test_an_entry_with_no_statement_map_key_is_still_absent(self):
+        data = json.loads(istanbul("src/a.ts", {1: 1, 2: 1}))
+        data[self.REEXPORT] = {"path": self.REEXPORT, "lines": 1}
+        problems, facts = self.build(json.dumps(data))
+        self.assertEqual([p.kind for p in problems], ["uncovered"])
+        self.assertIn("absent from the report", guard.render(problems, facts))
+
+    def test_a_report_of_empty_maps_only_still_cannot_be_read(self):
+        body = json.dumps(
+            {self.REEXPORT: {"path": self.REEXPORT, "statementMap": {}, "s": {}}}
+        )
+        problems, _ = self.build(body)
+        self.assertEqual([p.kind for p in problems], ["unreadable-report"])
+
+
 class ReportPaths(unittest.TestCase):
     def test_an_absolute_path_in_the_report_finds_the_diff_path(self):
         root = tree({"src/a.ts": "x\n"})

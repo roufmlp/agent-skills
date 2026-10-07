@@ -310,12 +310,18 @@ sharpened (with evidence), question (for the human), or clean.
    installed Tailwind ships 26. Put the command in backticks in the same
    criterion. A number that is a design choice or a fixture size, not a
    measurement, is quoted on a `Not measured:` line with the reason.
+   **An example input and outcome the pass writes carries its command in the
+   same clause.** The launch pass of run batch-ce5d7b wrote "`4` finds no bill"
+   and "`04 39` returns nothing" into issue 381, and both gates measured both
+   false. Measure it, with the command beside it in backticks, or remove it.
+   There is no `Not measured:` line for an example. (Ruled by the human 2026-10-07,
+   `q-fin-ce5d7b-03`, road A2.)
 
    **A criterion a run has reset is rewritten, never only added to.** Issue 139c
    gained a broad rule beside the narrow one and kept both: "Both implementers
    built the first. Both gates graded the second." Replace the sentence the run
    found at fault, or strike it with `~~ ~~` where it stands.
-   `check_criteria_edit.py` refuses both faults before the stamp. (Tracker-tooling
+   `check_criteria_edit.py` refuses all three faults before the stamp. (Tracker-tooling
    issue 23, fix F9.)
 6. **Empty or missing hostile data.** Does QA/production hold data that can
    exercise each criterion? If not, say so and name the fixture to create —
@@ -551,8 +557,9 @@ here.
     ```
 
     The first refuses a guard criterion with no measured `Forms:` list (class 4).
-    The second refuses a count with no command, and an edit that only added to a
-    criterion a run has reset (class 5). Run the second before the commit that
+    The second refuses a count with no command, an example with no command in
+    its clause, and an edit that only added to a criterion a run has reset
+    (class 5). Run the second before the commit that
     holds the pass's edits, because it compares against `HEAD`; after that
     commit, pass `--base <the commit before it>`.
 - Then stamp the issue, one line under `Status:`:

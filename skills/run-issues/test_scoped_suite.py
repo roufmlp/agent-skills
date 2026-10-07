@@ -248,6 +248,36 @@ class TheTreeReaders(Repo):
         self.assertEqual(self.run_files(), {f"tests/{n}.test.ts" for n in names
                                             if n != "uses-rule"})
 
+    def test_a_name_spread_into_a_value_is_a_use(self):
+        """Ruling `q-fin-ce5d7b-05`, road A2, 2026-10-07. Issue 388 of run
+        batch-ce5d7b committed green on the scoped suite with
+        `tests/documents/route-tracing.test.ts` red. It imports `MODULES` from
+        `tests/scaffold/module-imports.ts`, declared as
+        `[...sourceFiles("src"), ...sourceFiles("scripts")]`, and the walk
+        read the spread `...sourceFiles` as the property `.sourceFiles`. A
+        property of another object stays no use."""
+        self.write("tests/scaffold/module-imports.ts", textwrap.dedent("""\
+            import { readdirSync } from "node:fs";
+            export function sourceFiles(dir: string): string[] {
+              return readdirSync(dir);
+            }
+            export function paperFiles(dir: string): string[] {
+              return readdirSync(dir);
+            }
+            export const MODULES = [...sourceFiles("src"), ...sourceFiles("scripts")].map(
+              (file) => ({ file }),
+            );
+            const other = globalThis as never;
+            export const NAMES = [other.paperFiles, other?.paperFiles];
+            """))
+        self.write("tests/documents/route-tracing.test.ts",
+                   'import { MODULES } from "../scaffold/module-imports";\n')
+        self.write("tests/names.test.ts",
+                   'import { NAMES } from "./scaffold/module-imports";\n')
+        self.scoped(env={"FAKE_ALL": "tests/documents/route-tracing.test.ts,"
+                                     "tests/names.test.ts"})
+        self.assertEqual(self.run_files(), {"tests/documents/route-tracing.test.ts"})
+
     def test_comments_template_bodies_and_types_are_not_imports_or_uses(self):
         """`tests/scaffold/module-imports.ts` quotes `import("./rights")` in
         its comments, and a helper can hold fixture code in a template

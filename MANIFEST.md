@@ -11,8 +11,8 @@ Listed in the order the loop runs.
 | `skills/harden-issues/SKILL.md` | `~/.claude/skills/harden-issues/SKILL.md` |
 | `skills/harden-issues/decisions.md` | `~/.claude/skills/harden-issues/decisions.md` |
 | `skills/harden-issues/test_skill_structure.py` | `~/.claude/skills/harden-issues/test_skill_structure.py` (refuses a slim that carries a rule out with its story) |
-| `skills/harden-issues/check_criteria_edit.py` | `~/.claude/skills/harden-issues/check_criteria_edit.py` (refuses a hardening edit that adds a criterion beside a reset one, or writes a count nobody measured; imports the criterion reader from `run-issues/check_issue_ready.py`) |
-| `skills/harden-issues/test_check_criteria_edit.py` | `~/.claude/skills/harden-issues/test_check_criteria_edit.py` (32 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/harden-issues/check_criteria_edit.py` | `~/.claude/skills/harden-issues/check_criteria_edit.py` (refuses a hardening edit that adds a criterion beside a reset one, writes a count nobody measured, or gives an example input and outcome with no command in its clause; imports the criterion reader from `run-issues/check_issue_ready.py`) |
+| `skills/harden-issues/test_check_criteria_edit.py` | `~/.claude/skills/harden-issues/test_check_criteria_edit.py` (41 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |

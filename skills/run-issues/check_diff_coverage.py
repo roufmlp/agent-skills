@@ -373,29 +373,43 @@ def read_diff(repo: pathlib.Path, diff_range: str | None, diff_file: str | None)
     return result.stdout
 
 
-def drop_empty(hits: dict[str, dict[int, int]]) -> dict[str, dict[int, int]]:
-    """Discard file entries that map no line at all.
+def drop_unmapped(
+    hits: dict[str, dict[int, int]], mapped: set[str]
+) -> dict[str, dict[int, int]]:
+    """Discard file entries that map no line, unless the report MAPPED the file.
 
     A file that maps nothing is indistinguishable from a file whose every
     changed line is a brace, and the second reading passes. The first test run
     of this script found exactly that: `{"src/a.ts": {"lines": 3}}` is not an
     istanbul report, and it graded a diff fully covered. Dropping the entry
     here turns that input into `no SF:`/`no statementMap` at the reader, which
-    refuses. The cost is a real source file holding zero statements, which then
-    reads as absent from the report and refuses too — the safe direction, and
-    visible in the output rather than silent.
+    refuses.
+
+    `mapped` is the files the report states a statement count for, and a file
+    in it is kept even at zero: an istanbul `statementMap` of `{}`, an lcov
+    record with `LF:0`. Ruling `q-fin-e39c34-05`, 2026-10-07: run batch-e39c34
+    refused issues 373, 377 and 380 on one-line re-export index files that
+    `@vitest/coverage-v8` maps with zero statements, and the finale filed two
+    `high` rows on files holding no code. A zero-statement file is not
+    unexecuted code. A file whose entry states no count at all is still
+    dropped, and still refused as absent from the report.
     """
-    return {path: lines for path, lines in hits.items() if lines}
+    return {path: lines for path, lines in hits.items() if lines or path in mapped}
 
 
 def parse_lcov(text: str) -> dict[str, dict[int, int]]:
     """`SF:` opens a file, `DA:<line>,<hits>` is one line's hit count."""
     hits: dict[str, dict[int, int]] = {}
+    mapped: set[str] = set()
     current: dict[int, int] | None = None
+    name = ""
     for raw in text.splitlines():
         line = raw.strip()
         if line.startswith("SF:"):
-            current = hits.setdefault(line[3:], {})
+            name = line[3:]
+            current = hits.setdefault(name, {})
+        elif line.startswith("LF:") and current is not None:
+            mapped.add(name)
         elif line.startswith("DA:") and current is not None:
             number, _, count = line[3:].partition(",")
             try:
@@ -404,16 +418,19 @@ def parse_lcov(text: str) -> dict[str, dict[int, int]]:
                 continue
         elif line == "end_of_record":
             current = None
-    return drop_empty(hits)
+    return drop_unmapped(hits, mapped)
 
 
 def parse_istanbul(data: dict) -> dict[str, dict[int, int]]:
     """A statement counts as its START line, which is istanbul's own rule."""
     hits: dict[str, dict[int, int]] = {}
+    mapped: set[str] = set()
     for key, entry in data.items():
         if not isinstance(entry, dict):
             continue
         path = entry.get("path") or key
+        if isinstance(entry.get("statementMap"), dict):
+            mapped.add(path)
         statements = entry.get("statementMap") or {}
         counts = entry.get("s") or {}
         per_line = hits.setdefault(path, {})
@@ -424,7 +441,7 @@ def parse_istanbul(data: dict) -> dict[str, dict[int, int]]:
                 continue
             count = counts.get(statement_id, 0)
             per_line[number] = per_line.get(number, 0) + (count or 0)
-    return drop_empty(hits)
+    return drop_unmapped(hits, mapped)
 
 
 def read_coverage(path: pathlib.Path) -> dict[str, dict[int, int]]:
@@ -439,11 +456,11 @@ def read_coverage(path: pathlib.Path) -> dict[str, dict[int, int]]:
         if not isinstance(data, dict) or not data:
             raise ValueError("JSON holds no file entries")
         hits = parse_istanbul(data)
-        if not hits:
+        if not any(hits.values()):
             raise ValueError("JSON has no statementMap; not an istanbul report")
         return hits
     hits = parse_lcov(text)
-    if not hits:
+    if not any(hits.values()):
         raise ValueError("no SF: records; not an lcov report")
     return hits
 

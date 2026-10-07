@@ -8,7 +8,7 @@ section 2, root cause 2: hardening wrote the faulty criterion, then churned it).
     python3 ~/.claude/skills/harden-issues/check_criteria_edit.py \
         --issue <each file this pass hardened> [--base HEAD]
 
-Two refusals, both on text the pass wrote:
+Three refusals, all on text the pass wrote:
 
 **Replace, not add.** One tracker's issue 139c: pass `h0919` added a broad rule
 beside the narrow one and deleted nothing. "Both implementers built the first. Both
@@ -37,6 +37,10 @@ Only the pass's own sentences are read. Graded whole, the rule flagged 123 of th
 2026-09-23, mostly fixture sizes such as "two rows". One command anywhere in a
 criterion covers every count in it; that is the limit of this check, and the
 attacker's class 5 is the judgement behind it.
+
+**An example carries its command in its clause.** Issue 381 of one tracker: the launch
+pass of run batch-ce5d7b wrote "`4` finds no bill", and both gates measured it
+false. Ruling `q-fin-ce5d7b-03`; `unmeasured_examples` holds the measurement.
 """
 
 from __future__ import annotations
@@ -182,6 +186,74 @@ def unmeasured_counts(text: str, base: str | None = None) -> list[str]:
     return faults
 
 
+# An example is a literal input, backticked or double-quoted, then an outcome verb.
+EXAMPLE = re.compile(
+    r"(?:`(?P<code>[^`\n]+)`|\"(?P<quoted>[^\"\n]{1,40})\")(?:\s+\([^)]*\))?\s+"
+    r"(?:returns?|finds?|match(?:es)?|folds?\s+to|prints?|yields?|outputs?|"
+    r"evaluates?\s+to|resolves?\s+to)\b",
+    re.IGNORECASE,
+)
+# A backticked span that names code is not an input: a function, a file, a path or a flag.
+NAMES_CODE = re.compile(
+    r"[A-Za-z_$][\w$.]*(?:\(\))?|[\w.-]+\.(?:ts|tsx|js|mjs|py|md|sql|json|sh)|-.*|.*/.*"
+)
+CLAUSE_END = re.compile(r";|(?<=[.!?])\s+|(?<=[.!?]\*\*)\s+|(?<=[.!?][*_\"')])\s+")
+
+
+def is_command(span: str) -> bool:
+    return bool(span.split()) and span.split()[0].lower() in COMMANDS
+
+
+def clauses(body: str) -> list[str]:
+    """A criterion's clauses, split at `;` and at a sentence end, without struck
+    text or its `Not measured:` line. Backticks are kept: they mark the input."""
+    kept = STRUCK.sub(" ", NOT_MEASURED.sub(" ", body))
+    return [one.strip() for one in CLAUSE_END.split(" ".join(kept.split())) if one.strip()]
+
+
+def unmeasured_examples(text: str, base: str | None = None) -> list[str]:
+    """Each criterion whose new text gives an example input and outcome with no
+    command in the same clause.
+
+    Ruling `q-fin-ce5d7b-03`, 2026-10-07, road A2. Issue 381's criterion 3, as
+    the launch pass of run batch-ce5d7b wrote it, said "`04 39` returns nothing
+    by phone" and "`4` finds no bill"; both gates measured both false, which
+    cost a strike-2 attacker and a second attempt. The refusal sits here, where
+    the pass writes, and not in `check_issue_ready.py`, which also runs at
+    `/run-issues` launch, where its exit 1 blocks the run.
+
+    Beside means the same clause, because 381's criterion held one `grep` that
+    a one-command-per-criterion rule would have let cover every example in it.
+    There is no `Not measured:` waiver: the ruling is measure it or remove it.
+
+    Measured 2026-10-07 over the 391 criteria of one project's `ready-for-agent`
+    issues: any backticked span before an outcome verb hit 24 criteria, 23 of
+    them naming a function, file or flag (`saveLinePrice` returns), so a span
+    that names code is not an input. With that cut one live criterion hits, and
+    the 381 text does. Whether the command measures the claim is the attacker's
+    judgement; this checks only that one stands beside it.
+    """
+    before = dict(criteria(base)) if base is not None else {}
+    faults = []
+    for number, body in criteria(text):
+        old = " ".join(clauses(before.get(number, "")))
+        examples = []
+        for clause in clauses(body):
+            if clause in old or any(is_command(span) for span in BACKTICK.findall(clause)):
+                continue
+            for found in EXAMPLE.finditer(clause):
+                code = found.group("code")
+                if code is not None and (is_command(code) or NAMES_CODE.fullmatch(code.strip())):
+                    continue
+                examples.append(" ".join(found.group(0).split()))
+        if examples:
+            faults.append(
+                f"criterion {number} gives {', '.join(repr(one) for one in examples)} "
+                "with no command beside it that measured the outcome"
+            )
+    return faults
+
+
 def sentences(text: str) -> list[str]:
     return [one for one in SENTENCE_END.split(" ".join(text.split())) if one]
 
@@ -249,6 +321,7 @@ def main() -> int:
                        f"({', '.join(str(one) for one in record)}): replace the text the "
                        "run found at fault, or strike it with ~~ ~~" for fault in added_only(base, now)]
         faults += unmeasured_counts(now, base)
+        faults += unmeasured_examples(now, base)
         if faults:
             refused = True
             for fault in faults:
@@ -260,7 +333,9 @@ def main() -> int:
     if refused:
         print(
             "\nREFUSED: repair the criteria above before the stamp. A count takes the "
-            "command that measured it in backticks, or a `Not measured:` line quoting it.",
+            "command that measured it in backticks, or a `Not measured:` line quoting it. "
+            "An example input and outcome takes its command in the same clause: measure it "
+            "or remove it.",
             file=sys.stderr,
         )
         return 1

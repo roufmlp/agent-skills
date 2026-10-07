@@ -83,6 +83,17 @@ finale's 46 and 16 more, 14 of them tests that call `migrate()` in
 `scripts/migrate.mjs`, which lists `supabase/migrations/`. Their run time
 was not measured.
 
+A name after one `.` is another object's property and is not followed; a name
+after the spread `...` is. Until 2026-10-07 the spread was read as a property,
+so `MODULES` in `tests/scaffold/module-imports.ts`, declared as
+`[...sourceFiles("src"), ...sourceFiles("scripts")]`, reached no listing, and
+`tests/documents/route-tracing.test.ts` rode red past issue 388's scoped run
+(run `batch-ce5d7b`, ruling `q-fin-ce5d7b-05`, road A2). Measured on that project
+at `f26c3d6a` over the 760 test files `git ls-files` names: 100 tree readers
+outside the checks before the fix, 109 after, three of the nine in
+`tests/documents/`, the walk 4.8 s and 5.3 s. The nine's run time was not
+measured.
+
 ## How a test that names a changed file is found
 
 The human's ruling `q-07853b-05` of 2026-10-01, the fourth part of the set.
@@ -456,8 +467,15 @@ class Module:
                 if not (found.group(1) or found.group(2)):
                     self.loose.append(span)
         known = [*self.segments, *self.bindings]
+        # A name after one `.` is another object's property; after the spread
+        # `...` it is this name. Ruling `q-fin-ce5d7b-05`: `MODULES` in
+        # that project's `tests/scaffold/module-imports.ts` is
+        # `[...sourceFiles("src"), ...]`, and reading the spread as a property
+        # cut it from `readdirSync`, so `tests/documents/route-tracing.test.ts`
+        # rode red past issue 388's scoped run.
         self.refers = re.compile(
-            r"(?<![\w$.])(" + "|".join(map(re.escape, known)) + r")(?![\w$])"
+            r"(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))(" + "|".join(map(re.escape, known))
+            + r")(?![\w$])"
         ) if known else None
         self.scans: dict[tuple[Span, ...], tuple[bool, set[str], list[str]]] = {}
 

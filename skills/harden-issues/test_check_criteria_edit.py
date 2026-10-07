@@ -213,6 +213,78 @@ class ACountCarriesItsCommand(unittest.TestCase):
         self.assertEqual(check.unmeasured_counts(text), [])
 
 
+# Issue 381's criterion 3 as pass `Harden at launch` (commit 44d683f5) wrote it,
+# cut to the clauses both gates measured false on 2026-10-07.
+SEARCH_381 = (
+    "1. **One search finds a bill.** Check, as an operations reader: `47` returns [A] by the\n"
+    "   job number; `INV-8` returns [B]. Default: the job number matches exactly, so `4`\n"
+    "   finds no bill through job 47.\n"
+)
+
+
+class AnExampleCarriesItsCommand(unittest.TestCase):
+    """Ruling `q-fin-ce5d7b-03`, 2026-10-07, road A2: an example input and outcome
+    with no measuring command beside it is refused where the hardening pass writes
+    it. Issue 381's criterion 3 quoted searches that both gates measured false,
+    which cost a strike-2 attacker and a second attempt."""
+
+    def test_issue_381s_examples_are_refused(self):
+        faults = check.unmeasured_examples(issue(SEARCH_381))
+        self.assertEqual(len(faults), 1)
+        self.assertIn("criterion 1", faults[0])
+        for example in ("`47` returns", "`INV-8` returns", "`4` finds"):
+            self.assertIn(example, faults[0])
+
+    def test_a_quoted_input_is_an_example(self):
+        text = issue('1. **Search.** "oasis" returns [A] only.\n')
+        self.assertEqual(len(check.unmeasured_examples(text)), 1)
+
+    def test_an_example_beside_its_command_passes(self):
+        text = issue(
+            "1. **Search.** `04 39` folds to `971439` "
+            "(`node -e \"console.log(normalisePhone('04 39'))\"`).\n"
+        )
+        self.assertEqual(check.unmeasured_examples(text), [])
+
+    def test_a_command_in_another_clause_is_not_beside_it(self):
+        """Beside means the same clause: one command must not clear a criterion."""
+        text = issue(
+            "1. **Search.** `07` returns [A] (`grep -n PREFIX src/model/phone.ts`);"
+            " `4` finds no bill.\n"
+        )
+        faults = check.unmeasured_examples(text)
+        self.assertEqual(len(faults), 1)
+        self.assertIn("`4` finds", faults[0])
+        self.assertNotIn("`07`", faults[0])
+
+    def test_code_named_in_backticks_is_not_an_example_input(self):
+        """Measured 2026-10-07 over the 391 criteria of one project's ready issues:
+        23 of 24 hits on any backticked span named a function, file or flag."""
+        for span in (
+            "`saveLinePrice` returns the row",
+            "`src/model/rights.ts` matches",
+            "`refusingTheClear()` matches",
+            "`--reporter=json` outputs one line",
+            "`check_diff_coverage.py` returns 2",
+        ):
+            with self.subTest(span=span):
+                self.assertEqual(check.unmeasured_examples(issue(f"1. {span}.\n")), [])
+
+    def test_an_example_the_pass_did_not_write_is_not_graded(self):
+        base = issue(SEARCH_381)
+        now = issue(SEARCH_381 + "   The list paints the bill once.\n")
+        self.assertEqual(check.unmeasured_examples(now, base), [])
+
+    def test_not_measured_does_not_clear_an_example(self):
+        """The ruling: measure it or remove it. No waiver."""
+        text = issue("1. **Search.** `4` finds no bill.\n\n   Not measured: `4` finds no bill.\n")
+        self.assertEqual(len(check.unmeasured_examples(text)), 1)
+
+    def test_struck_text_is_not_graded(self):
+        text = issue("1. **Search.** ~~`4` finds no bill.~~ A test reads the list.\n")
+        self.assertEqual(check.unmeasured_examples(text), [])
+
+
 class TheCommandLine(unittest.TestCase):
     """What the hardening pass runs before it stamps."""
 
@@ -263,6 +335,13 @@ class TheCommandLine(unittest.TestCase):
         done = self.run_it(fresh)
         self.assertEqual(done.returncode, 1)
         self.assertIn("13 action modules", done.stderr)
+
+    def test_an_unmeasured_example_is_refused_before_the_stamp(self):
+        self.issue.write_text(issue(NARROW + "   Searching `4` finds no bill.\n"))
+        done = self.run_it()
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("`4` finds", done.stderr)
+        self.assertIn("measure it or remove it", done.stderr)
 
     def test_it_says_how_much_it_read(self):
         """A pass over nothing must not read like a clean pass."""
