@@ -447,8 +447,11 @@ def implementer_reason(agent_type, kind, stage):
         return (
             f"Refused: `{agent_type}` ran a whole suite outside the wrapper. "
             f"Run it once, at the end, through the wrapper:\n"
-            f"  {WRAPPER_COMMAND} --stage issue -- <the ledger header's Full "
-            f"suite: command>\n"
+            f"  {WRAPPER_COMMAND} --stage issue --spawn final -- <the ledger "
+            f"header's Full suite: command>\n"
+            f"The logic spawn of a screen issue runs no whole suite, and the "
+            f"final spawn runs it after a green or WIDE reading of the same "
+            f"tree from `scoped_suite.py --whole-if-wide`. The wrapper refuses both otherwise.\n"
             f"It keeps the whole output in a log and prints the log's path, "
             f"vitest's summary and the failing files, so the suite never needs "
             f"a second run to be read. Scoped runs, a file or a directory, pass "

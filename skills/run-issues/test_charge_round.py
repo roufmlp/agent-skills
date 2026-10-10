@@ -12,8 +12,10 @@ shape, so the choice no longer depends on who reads the verdicts.
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
+import re
 import pathlib
 import tempfile
 import unittest
@@ -273,14 +275,20 @@ class TheLightRound(unittest.TestCase):
                 self.assertEqual((code, out), (1, ""))
                 self.assertIn("--verify", err)
 
-    def test_a_fault_on_a_light_round_blocks_it_and_spawns_no_attacker(self):
-        """Default `q-h0925-40-4`."""
+    def test_a_fault_on_a_light_round_strikes_or_carves_and_spawns_no_attacker(self):
+        """Ruled 2026-10-07: on one issue of one run this road printed
+        `blocked (criteria)`, retired on 2026-10-06, and the runner routed it
+        by hand. The live road
+        strikes or carves the faulty part, resets the criteria and carries on."""
         code, out, err = self.charge(self.light(), "--review",
                                      "Grades: C1=pass C2=fault")
         self.assertEqual(code, 0, err)
         token, road = out.splitlines()[:2]
         self.assertEqual(token, "gates 2: review=reject charge=none")
-        self.assertIn("blocked (criteria)", road)
+        self.assertNotIn("blocked", road)
+        self.assertIn("~~", road)
+        self.assertIn("`carve after gates 2: C2`", road)
+        self.assertIn("reset", road)
         self.assertNotIn("step 8", road)
 
     def test_a_light_rounds_review_grades_are_still_held_to_the_issue(self):
@@ -402,6 +410,139 @@ class TheGatesOwnInvariantLabels(unittest.TestCase):
         code, _, err = run("Grades: C1=pass M3=fail", ALL_PASS)
         self.assertEqual(code, 1)
         self.assertIn("M3", err)
+
+
+SCREEN_ISSUE = """Status: open
+Claims: OPS-S07, OPS-S08
+
+# 366 — new request files
+
+## Acceptance criteria
+
+1. **The waiting files show on the job page.**
+2. **For each of OPS-S07 and OPS-S08, the pair for the row exists under the fidelity folder, and every difference names a ruling.**
+3. **Home shows the File coming chip.**
+"""
+
+
+class ScreenGrounds(unittest.TestCase):
+    """The human, 2026-10-05: a screen difference never blocks an issue. A strike
+    whose every failed item is a screen criterion (one naming a row the issue's
+    `Claims:` line claims) says so, so the attempt cap can land it short."""
+
+    def charge(self, review, body=SCREEN_ISSUE):
+        """Both gates grade alike, so no split is left to drive."""
+        return charge_round.decide(body, 2, review, review)
+
+    def test_a_strike_on_screen_criteria_alone_says_grounds_screen(self):
+        code, out, _ = self.charge("Grades: C1=pass C2=fail C3=pass")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0], "gates 2: verify=reject "
+                         "review=reject charge=strike grounds=screen")
+        self.assertIn("lands short", out)
+
+    def test_a_strike_with_any_other_criterion_says_nothing_more(self):
+        code, out, _ = self.charge("Grades: C1=pass C2=fail C3=fail")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.splitlines()[0],
+                         "gates 2: verify=reject review=reject charge=strike")
+
+    def test_an_issue_that_claims_no_row_has_no_screen_criterion(self):
+        body = SCREEN_ISSUE.replace("Claims: OPS-S07, OPS-S08\n", "")
+        _, out, _ = self.charge("Grades: C1=pass C2=fail C3=pass", body)
+        self.assertNotIn("grounds=screen", out)
+
+    def test_a_claims_line_below_the_title_claims_nothing(self):
+        body = SCREEN_ISSUE.replace("Claims: OPS-S07, OPS-S08\n", "").replace(
+            "## Acceptance", "Claims: OPS-S07, OPS-S08\n\n## Acceptance")
+        _, out, _ = self.charge("Grades: C1=pass C2=fail C3=pass", body)
+        self.assertNotIn("grounds=screen", out)
+
+    def test_a_correction_round_carries_no_grounds(self):
+        _, out, _ = self.charge("Grades: C1=pass C2=owed C3=pass")
+        self.assertNotIn("grounds=", out)
+
+
+SKILL = pathlib.Path(charge_round.__file__).with_name("SKILL.md")
+SPAN = re.compile(r"`([^`\n]+)`")
+
+
+def ledger_statuses(skill: str) -> tuple[set[str], set[str]]:
+    """(live, retired) from the one place the statuses are written: the
+    `Ledger statuses:` sentence of `run-issues/SKILL.md`. A status after
+    "in ledgers older than" is retired."""
+    start = skill.index("Ledger statuses:")
+    sentence = skill[start:skill.index("Both gates run", start)]
+    live, _, retired = sentence.partition("in ledgers older than")
+    spans = lambda text: {one.strip() for span in SPAN.findall(text)
+                          for one in span.split("→")}
+    return spans(live), spans(retired)
+
+
+def printed_statuses(source: str, words: set[str]) -> list[str]:
+    """Every backticked span in a string the script can print whose first word
+    is a ledger status word and holds nothing but that word and a bracket, so
+    the round token `gates N:` is not a status. Docstrings are not read."""
+    tree = ast.parse(source)
+    docstrings = {id(node.body[0].value) for node in ast.walk(tree)
+                  if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef,
+                                       ast.AsyncFunctionDef))
+                  and node.body and isinstance(node.body[0], ast.Expr)
+                  and isinstance(node.body[0].value, ast.Constant)}
+    docstrings |= {id(part) for node in ast.walk(tree) if isinstance(node, ast.JoinedStr)
+                   for part in node.values}  # read once, inside their f-string
+    texts = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.JoinedStr):
+            texts.append("".join(part.value if isinstance(part, ast.Constant) else "{}"
+                                 for part in node.values))
+        elif (isinstance(node, ast.Constant) and isinstance(node.value, str)
+              and id(node) not in docstrings):
+            texts.append(node.value)
+    form = re.compile(r"(?P<word>[\w-]+)(?:\s*\([^)]*\))?")
+    found = []
+    for text in texts:
+        for span in SPAN.findall(text):
+            shape = form.fullmatch(span.strip())
+            if shape and shape.group("word").lower() in words:
+                found.append(span.strip())
+    return found
+
+
+class EveryPrintedStatusIsLive(unittest.TestCase):
+    """Ruled 2026-10-07: a test fails when the script prints a status outside
+    the live list. A ruling retired the `blocked` statuses on 2026-10-06, and
+    this script went on printing `blocked (criteria)` until one run met it."""
+
+    def setUp(self):
+        self.live, self.retired = ledger_statuses(SKILL.read_text())
+        self.words = {one.split()[0] for one in self.live | self.retired}
+
+    def test_the_live_and_retired_lists_are_read(self):
+        self.assertIn("done (carved)", self.live)
+        self.assertIn("in-progress", self.live)
+        self.assertEqual(self.retired, {"blocked", "blocked (criteria)",
+                                        "blocked (depends on NN)",
+                                        "blocked (light: two attempts spent)"})
+
+    def test_a_retired_status_in_a_printed_string_is_found(self):
+        for retired in sorted(self.retired):
+            with self.subTest(status=retired):
+                source = f'road = "ledger it `{retired}` and go on."\n'
+                self.assertEqual(printed_statuses(source, self.words), [retired])
+
+    def test_a_status_built_in_an_f_string_is_found(self):
+        source = 'n = 4\nroad = f"ledger it `blocked (depends on {n})`"\n'
+        self.assertEqual(printed_statuses(source, self.words), ["blocked (depends on {})"])
+
+    def test_a_live_status_passes_and_a_docstring_is_not_read(self):
+        source = '"""`blocked` once."""\nroad = "ledger `done (carved)`."\n'
+        self.assertEqual(printed_statuses(source, self.words), ["done (carved)"])
+
+    def test_charge_round_prints_no_status_outside_the_live_list(self):
+        source = pathlib.Path(charge_round.__file__).read_text()
+        printed = printed_statuses(source, self.words)
+        self.assertEqual([one for one in printed if one not in self.live], [])
 
 
 if __name__ == "__main__":

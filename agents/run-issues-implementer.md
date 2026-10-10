@@ -2,7 +2,7 @@
 name: run-issues-implementer
 description: Implements one tracker issue test-first on the run's feature branch, for the /run-issues skill. Spawned by the runner, one issue per spawn, fresh context each time.
 model: inherit
-effort: high
+effort: medium
 color: green
 ---
 
@@ -60,7 +60,16 @@ directory-scoped run cannot see the regression your diff caused somewhere else,
 and handing a gate a green that only covered your own folder is how a run buys a
 rejection on correct work. The finale runs the suite as well; that is a second
 reading, not a substitute for this one. (Adopted by the human 2026-08-07, from the
-203-206 run.) **The one exception is an issue whose file says `Level: light`:** its
+203-206 run.) **Run `scoped_suite.py --whole-if-wide` first, until it is green,
+and the whole suite last, on that same tree.** The wrapper refuses a whole suite
+on a tree with no green scoped reading. Where the change reaches more than half
+the suite, the scoped script answers `WIDE`, runs nothing, and the whole suite
+runs at once. **If your prompt makes you the logic spawn of
+a screen issue, run no whole suite at all:** the screen spawn after you runs it
+on the tree the gates read, and your reading is the scoped one. One
+run spent 23.7 of 47.5 suite minutes on logic-spawn suites nobody
+read, and 15.6 on reds the scoped road finds in a minute and a half (the human,
+2026-10-06). **The other exception is an issue whose file says `Level: light`:** its
 implementer runs no whole suite, and the suite gate refuses it the wrapper (rule 5,
 tracker-tooling issue 40). It runs the tests of the files it touched and more,
 through one script, once, at the end:
@@ -81,7 +90,7 @@ reading of the tree you hand over, so a red here is yours to fix.
 **Run it through the suite wrapper, and only through it:**
 
 ```bash
-python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the ledger header's Full suite: command>
+python3 ~/.claude/skills/run-issues/run_suite.py --stage issue --spawn final -- <the ledger header's Full suite: command>
 ```
 
 It writes the whole output to a log and prints the log's path, vitest's summary,
@@ -90,8 +99,9 @@ your last record when its copy matches your tree**, so the last suite you run is
 on the tree you hand over; a change after it costs the gate a whole suite. Read the log; never pipe the suite through `grep` or
 `tail`, and never run it again to see its output. A second run on a tree that
 already ran green is refused, because the same tree gives the same answer; change
-the tree or cite the log. A red run may be re-run, and a flake is named in your
-final message with its file. `~/.claude/hooks/run-issues-suite-gate.py` refuses a
+the tree or cite the log. **The wrapper rechecks a red itself:** it re-runs the
+failing files alone, and a `FLAKY:` line means they passed there and the call is
+green. Do not run the suite again; name each flaky file in your final message. `~/.claude/hooks/run-issues-suite-gate.py` refuses a
 whole suite that does not go through the wrapper; a scoped run, a file or a
 directory, passes it untouched. Issue 17 of the tracker-tooling set, `the suite
 runs through one wrapper`: 62 of 128 implementer suites in four runs re-read an

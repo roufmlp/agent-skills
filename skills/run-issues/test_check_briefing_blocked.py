@@ -90,6 +90,41 @@ class ABlockedIssueIsNamed(Fixture):
                                       "# Merge briefing\n")
         self.assertEqual(code, 0, err)
 
+    def test_a_landed_short_issue_omitted_is_refused(self):
+        """The human, 2026-10-05: a light issue that lands short reads `done`,
+        so this check is the only thing that carries it to the human."""
+        for form in ("done (landed short)", "**done** (landed short: rows rn-1)"):
+            with self.subTest(form=form):
+                code, _, err = self.run_check(
+                    ledger((("11", "done"), ("12", form))),
+                    briefing("- 13 — an unrelated line.\n"))
+                self.assertEqual(code, 1, err)
+                self.assertIn("12", err)
+
+    def test_a_carved_issue_omitted_is_refused(self):
+        """The human, 2026-10-06: a carved issue reads `done` or releases, and
+        what it took out still reaches the human through the briefing."""
+        for form in ("done (carved)", "carved (whole)"):
+            with self.subTest(form=form):
+                code, _, err = self.run_check(
+                    ledger((("11", "done"), ("370", form))),
+                    briefing("- 13 — an unrelated line.\n"))
+                self.assertEqual(code, 1, err)
+                self.assertIn("370", err)
+
+    def test_a_carved_issue_named_passes(self):
+        code, _, err = self.run_check(
+            ledger((("370", "done (carved)"),)),
+            briefing("- **370** — carved: C2, the Undo, mints after the merge.\n"))
+        self.assertEqual(code, 0, err)
+
+    def test_a_landed_short_issue_named_passes(self):
+        code, out, err = self.run_check(
+            ledger((("11", "done"), ("12", "done (landed short)"))),
+            briefing("- **12** — landed short: the journey labels are row rn-1.\n"))
+        self.assertEqual(code, 0, err)
+        self.assertIn("12", out)
+
     def test_a_status_word_that_merely_holds_blocked_is_not_blocked(self):
         code, _, err = self.run_check(
             ledger((("12", "done, unblocked by 11"),)), "# Merge briefing\n")

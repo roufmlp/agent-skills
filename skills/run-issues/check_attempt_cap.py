@@ -33,8 +33,58 @@ runner then fixes the row, which is the only way the marker can go missing.
 **A `Level: light` issue gets two attempts** (tracker-tooling issue 40, rule 5).
 The level is read by `issue_level.py` from the issue file in the run's own tree,
 fresh on every call, so a light issue lifted to full mid-run gets its third.
-Anything but `Level: light` keeps the three above. The light refusal ledgers the
-issue `blocked` with the reason `light: two attempts spent`: no escalated third.
+Anything but `Level: light` keeps the three above. No escalated third.
+
+**A light issue at its cap lands short; it does not block** (the human,
+2026-10-05). One run blocked a light issue on two
+prototype-fidelity strikes, and nine of its twelve issues never started behind
+it. A light issue touches none of the five risk classes, so the refusal prints
+the land-short road: commit, row every owed ground, ledger `done (landed short)`,
+run the dependents. Only a red tree is still ledgered `blocked`.
+
+**A screen difference never blocks an issue, light or full** (the human,
+2026-10-05). A full issue at its cap whose LAST gate round carries
+`grounds=screen` -- every item it failed is a screen criterion, as
+`charge_round.py` decides and prints -- lands short on the same road. One run
+measured why: screen issues took 270 to 560 implementer turns,
+and 8 of 16 rejects since 4 October were screen differences. Any other ground in
+the last round keeps today's `blocked`.
+
+**A run never blocks on one feature: it carves it out** (the human,
+2026-10-06). One run shipped 1 of its 12 issues: one issue's Undo criterion
+spent four attempts and two criteria resets, this cap refused the fifth, and
+the ten issues behind it were skipped. Two of this
+file's own messages promised an escalated attempt after the second reset that
+the reset check above refused. Now every road that used to end in `blocked`
+ends in a carve:
+
+    at the cap, or after the second reset   the runner stamps
+        `carve after gates <N>: C2, C5`, the criteria the last round failed,
+        and this check authorises ONE carve spawn: an implementer that takes
+        those criteria out of the tree and keeps the rest. Its round is gated
+        like any other, under the critical gate where the issue ran under it.
+    the carve round passes                  commit, ledger `done (carved)`,
+                                            run the dependents
+    the carve round fails, or the tree      stamp `carve whole after gates
+        reads red                           <M>`, keep the code off the run
+                                            branch, ledger `carved (whole)`,
+                                            run the dependents
+    the carve would name every criterion    the same: `carve whole`
+    a dependent needs a carved criterion    `carve at launch: C3`, before its
+                                            first attempt, or `carve whole at
+                                            launch` where it needs all of it
+
+After the merge, `mint_carved.py` mints each carved part as a new issue at
+`needs-harden`, carrying its criteria, rows, verdicts and strike history, and a
+whole carve sends the issue itself back to `needs-harden`. The cap prints no
+road that ends in `blocked`; `test_check_attempt_cap.py` drives every refusal
+and refuses one that does.
+
+**The carve round keeps the critical gate.** `--charges`, run at every commit
+step, refuses to commit a carve round whose review verdict was not written by
+`run-issues-review-gate-critical` when the row or an earlier review verdict of
+the issue names that gate. A carve can only take code away, so the class the
+issue ran under still holds for what ships.
 
 Exit 0 authorises the spawn and prints the attempt number. Exit 1 refuses and
 prints the counts it refused on.
@@ -102,7 +152,8 @@ MARKER = {
     "gate round": re.compile(
         r"\bgates\s+(?P<round>\d+)\s*:\s*"
         r"(?:verify=(?P<verify>pass|reject)\s+)?review=(?P<review>pass|reject)\b"
-        r"(?:\s+charge=(?P<charge>strike|correction|none)\b)?",
+        r"(?:\s+charge=(?P<charge>strike|correction|none)\b)?"
+        r"(?:\s+grounds=(?P<grounds>screen)\b)?",
         re.IGNORECASE),
     # `criteria reset after gates 2`, or `criteria reset 1 of 2 after gates 2`.
     # A reset annuls the strikes charged up to the round it names. Its place in
@@ -120,7 +171,28 @@ MARKER = {
         r"\bcriteria[\s-]*(?:fault[\s-]*)?reset\s+\d+\s+of\s+\d+\b"
         r"(?!\s+after\s+gates\s+\d)",
         re.IGNORECASE),
+    # `carve after gates 4: C2, C5` -- the criteria the runner takes out of the
+    # issue after round 4 (the human, 2026-10-06). Criteria only:
+    # an invariant is never carved, because the part that ships must still keep
+    # it. `mint_carved.py` reads the same marker after the merge.
+    "carve": re.compile(
+        r"\bcarve\s+after\s+gates\s+(?P<round>\d+)\s*:\s*"
+        r"(?P<ids>C\d+(?:\s*,\s*C\d+)*)", re.IGNORECASE),
+    # `carve at launch: C3` -- a dependent's criterion that needs a part its
+    # blocker carved, taken out before attempt 1 so no attempt is spent on it.
+    "carve at launch": re.compile(
+        r"\bcarve\s+at\s+launch\s*:\s*(?P<ids>C\d+(?:\s*,\s*C\d+)*)",
+        re.IGNORECASE),
+    # `carve whole after gates 5`, or `carve whole at launch`: nothing ships.
+    "carve whole": re.compile(
+        r"\bcarve\s+whole\s+(?:after\s+gates\s+(?P<round>\d+)|at\s+launch)\b",
+        re.IGNORECASE),
+    # Any other spelling that starts like a carve stamp. A carve the cap cannot
+    # read is refused rather than read as no carve at all.
+    "carve word": re.compile(r"\bcarve\s+(?:after|at|whole)\b", re.IGNORECASE),
 }
+
+CRITICAL_GATE = "run-issues-review-gate-critical"
 
 # The stamp alone: `attempt 1` is one, while `attempt 1's files` and a quoted
 # `` `attempt 1` `` are prose about one (tracker-tooling issue 27).
@@ -140,6 +212,8 @@ class Decision:
     reason: str = ""
     # Attempts charged against the cap: taken, less those a reset refunded.
     spent: int = 0
+    # `attempt` for an ordinary spawn, `carve` for the one carve spawn.
+    kind: str = "attempt"
 
 
 def _cells(line):
@@ -256,8 +330,187 @@ def charge_faults(row):
     return faults
 
 
-def decide(ledger_text, issue, level="full"):
-    """Authorise or refuse the next implementer spawn for this issue."""
+# `attempt 5 (carve)`: the one carve spawn's stamp. It is an `attempt N` stamp
+# too, so the gates name their verdicts `<issue>-attempt-5-review.md` as the
+# write guard demands, and the cap can tell the carve spawn has been made.
+CARVE_ATTEMPT = re.compile(r"\battempt\s+(\d+)\s*\(carve\)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class Carve:
+    """What a row says it carved out of its issue."""
+    after: object = None       # the round of `carve after gates N`, or None
+    ids: tuple = ()            # every criterion carved, at launch and after
+    whole: bool = False
+    attempt: object = None     # N of `attempt N (carve)`, or None
+
+
+def _ids(text):
+    return {f"C{int(n)}" for n in re.findall(r"C(\d+)", text, re.IGNORECASE)}
+
+
+def read_carve(row, criteria_names=None):
+    """`(Carve, faults)`: what the row carved, and every way it says so badly.
+
+    `criteria_names` is the set of `C<n>` the issue file holds, read by
+    `criteria_ids.py`. With it, a carve naming a criterion the issue lacks is a
+    fault, and so is a carve naming every criterion, which is a whole carve
+    spelled wrong. Without it -- the issue file could not be read -- a carve
+    that keeps a part is a fault, because nothing can say what it leaves. A
+    whole carve keeps nothing, so it needs no list.
+    """
+    row = row or ""
+    known = [MARKER[kind].finditer(row)
+             for kind in ("carve", "carve at launch", "carve whole")]
+    starts = {found.start() for matches in known for found in matches}
+    faults = [f"`{found.group(0)}…` is not a carve stamp this cap can read. "
+              "Write `carve after gates <N>: C<n>, …`, `carve at launch: "
+              "C<n>, …` or `carve whole after gates <N>`."
+              for found in MARKER["carve word"].finditer(row)
+              if found.start() not in starts]
+    held = {int(found.group("round"))
+            for found in MARKER["gate round"].finditer(row)}
+    after = sorted({int(found.group("round"))
+                    for found in MARKER["carve"].finditer(row)})
+    ids = set()
+    for kind in ("carve", "carve at launch"):
+        for found in MARKER[kind].finditer(row):
+            ids |= _ids(found.group("ids"))
+    whole_rounds = [found.group("round")
+                    for found in MARKER["carve whole"].finditer(row)]
+    if len(after) > 1:
+        faults.append(
+            f"the row carves after rounds {', '.join(map(str, after))}. An "
+            "issue takes one carve; a carve round that fails is a whole carve.")
+    faults.extend(
+        f"`carve after gates {number}` names a round this row does not hold."
+        for number in after if number not in held)
+    faults.extend(
+        f"`carve whole after gates {number}` names a round this row does not "
+        "hold." for number in whole_rounds if number and int(number) not in held)
+    if (ids or after) and criteria_names is None:
+        faults.append(
+            "the row carves, and the issue file's criteria could not be read, "
+            "so nothing can say what the carve leaves.")
+    elif ids and criteria_names is not None:
+        strangers = sorted(ids - set(criteria_names),
+                           key=lambda name: int(name[1:]))
+        if strangers:
+            faults.append(
+                f"the carve names {', '.join(strangers)}, which the issue "
+                "file does not hold.")
+        elif set(criteria_names) and ids >= set(criteria_names) and not whole_rounds:
+            faults.append(
+                "the carve names every criterion the issue holds, so nothing "
+                "would ship. Write it `carve whole after gates <N>` (or `carve "
+                "whole at launch`).")
+    attempts = {int(n) for n in CARVE_ATTEMPT.findall(row)}
+    if len(attempts) > 1:
+        faults.append("the row stamps more than one carve attempt; an issue "
+                      "takes one carve spawn.")
+    if attempts and not after:
+        faults.append("the row stamps a carve attempt and no `carve after "
+                      "gates <N>: …`.")
+    return Carve(after=after[0] if after else None,
+                 ids=tuple(sorted(ids, key=lambda name: int(name[1:]))),
+                 whole=bool(whole_rounds),
+                 attempt=min(attempts) if attempts else None), faults
+
+
+def runs_critical(row, verdict_texts=()):
+    """True when the issue ran under the critical review gate: its row names
+    the gate, or one of its review verdicts was written by it."""
+    return CRITICAL_GATE in (row or "") or any(
+        CRITICAL_GATE in text or "review gate (critical)" in text.lower()
+        for text in verdict_texts)
+
+
+def _carve_road(issue, why, critical, last_round):
+    gate = (f"`{CRITICAL_GATE}`, as this issue ran under it" if critical
+            else "the gate this issue ran under")
+    return (
+        f"Refused: {why} A run never blocks on one feature (the human, "
+        f"2026-10-06). CARVE IT, without asking: stamp "
+        f"`carve after gates {last_round or '<N>'}: C<n>, …`, naming the "
+        f"criteria its last round failed, then re-run this check, which "
+        f"authorises one carve spawn. The carve implementer takes those "
+        f"criteria's code and tests out of the tree and keeps every criterion "
+        f"that passed; its round is gated on what remains, the review gate "
+        f"{gate}. Where the last round failed every criterion, stamp `carve "
+        f"whole after gates {last_round or '<N>'}` instead. Either way the "
+        f"dependents run, and the merge briefing names it under "
+        f"`## Skipped or blocked`.")
+
+
+def _whole_road(issue):
+    return (
+        f"Refused: issue {issue} is carved whole, so nothing of it ships and no "
+        f"implementer is spawned. Keep its code off the run branch, on "
+        f"`<run branch>-{issue}-carved`, ledger it `carved "
+        f"(whole)`, and run its dependents: a dependent criterion that needs "
+        f"it is stamped `carve at launch`. After the merge `mint_carved.py` "
+        f"sends the issue back to `needs-harden` with its record. Name it in "
+        f"the merge briefing's `## Skipped or blocked`.")
+
+
+def _carve_decision(issue, row, carve, rounds, this_attempt, resets, critical):
+    """The answer for a row that carries `carve after gates N`."""
+    later = [found for found in rounds if int(found.group("round")) > carve.after]
+    if carve.attempt is None:
+        gate = f"`{CRITICAL_GATE}`" if critical else "the issue's own gate"
+        return Decision(
+            allowed=True, attempt=this_attempt, resets=resets, kind="carve",
+            reason=(
+                f"carve spawn for issue {issue}: stamp `attempt {this_attempt} "
+                f"(carve)`. Take {', '.join(carve.ids)} out of the tree, their "
+                f"code and their tests, and keep every other criterion as it "
+                f"passed. Gate the round on what remains, the review gate "
+                f"{gate}. A red tree is the refusal: it means the rest does "
+                f"not stand alone, and the issue is carved whole."))
+    if not later:
+        return Decision(
+            allowed=False, attempt=this_attempt, resets=resets, kind="carve",
+            reason=(
+                f"Refused: issue {issue}'s carve spawn is made (attempt "
+                f"{carve.attempt}). Gate its round. An issue takes one carve "
+                f"spawn: where its work is unfinished or its tree is red, stamp "
+                f"`carve whole after gates {carve.after}`."))
+    last = later[-1]
+    passed = "reject" not in ((last.group("verify") or "").lower(),
+                              last.group("review").lower())
+    if passed:
+        return Decision(
+            allowed=False, attempt=this_attempt, resets=resets, kind="carve",
+            reason=(
+                f"Refused: issue {issue}'s carve round passed, so no spawn "
+                f"follows. Commit it through the usual commit gate, ledger it "
+                f"`done (carved)`, and run its dependents. After the merge "
+                f"`mint_carved.py` mints {', '.join(carve.ids)} as a new issue."))
+    if last.group("grounds"):
+        return Decision(
+            allowed=False, attempt=this_attempt, resets=resets, kind="carve",
+            reason=(
+                f"Refused: issue {issue}'s carve round failed on screen "
+                f"criteria alone, and a screen difference never blocks an issue "
+                f"(the human, 2026-10-05). LAND IT SHORT: commit through the usual "
+                f"commit gate, file every owed screen difference as a register "
+                f"row, ledger it `done (carved)` with those row ids in its "
+                f"stamps, and run its dependents."))
+    return Decision(
+        allowed=False, attempt=this_attempt, resets=resets, kind="carve",
+        reason=(
+            f"Refused: issue {issue}'s carve round failed on what was meant to "
+            f"ship, so the rest does not stand alone. Stamp `carve whole after "
+            f"gates {last.group('round')}`. " + _whole_road(issue)[len("Refused: "):]))
+
+
+def decide(ledger_text, issue, level="full", criteria_names=None,
+           verdict_texts=()):
+    """Authorise or refuse the next implementer spawn for this issue.
+
+    `criteria_names` is the `C<n>` set the issue file holds, and
+    `verdict_texts` the text of its review verdicts; both are read by `main`.
+    """
     row = find_row(ledger_text, issue)
     if row is None:
         return Decision(
@@ -308,16 +561,34 @@ def decide(ledger_text, issue, level="full"):
             ),
         )
 
+    carve, carve_faults = read_carve(row, criteria_names)
+    if carve_faults:
+        return Decision(
+            allowed=False, attempt=this_attempt, resets=resets,
+            reason=(f"Refused: issue {issue}'s carve stamps cannot be read.\n"
+                    "  - " + "\n  - ".join(carve_faults) + "\nFix the row, "
+                    "then re-run."))
+    rounds = list(MARKER["gate round"].finditer(row))
+    last_round = rounds[-1].group("round") if rounds else None
+    critical = runs_critical(row, verdict_texts)
+    if carve.whole:
+        return Decision(allowed=False, attempt=this_attempt, resets=resets,
+                        kind="carve", reason=_whole_road(issue))
+    if carve.after is not None:
+        return _carve_decision(issue, row, carve, rounds, this_attempt, resets,
+                               critical)
+
     if resets >= MAX_RESETS:
         return Decision(
             allowed=False,
             attempt=this_attempt,
             resets=resets,
-            reason=(
-                f"Refused: issue {issue} has {resets} criteria resets, the "
-                f"maximum. The criteria are frozen for this run — the next "
-                f"strike-2 buys one escalated attempt, then `blocked`."
-            ),
+            reason=_carve_road(
+                issue,
+                f"issue {issue} has {resets} criteria resets, the maximum, so "
+                f"its criteria are frozen and no implementer, escalated or "
+                f"not, is spawned against them.",
+                critical, last_round),
         )
 
     if level == "light" and spent >= MAX_LIGHT_ATTEMPTS:
@@ -330,9 +601,37 @@ def decide(ledger_text, issue, level="full"):
                 f"Refused: issue {issue} is `Level: light`, and a light issue "
                 f"has a cap of two attempts (rule 5). {spent} are spent and "
                 f"this would be attempt {this_attempt}. No escalated implementer "
-                f"and no criteria reset: ledger it `blocked` with the reason "
-                f"`light: two attempts spent`, and name it in the merge "
-                f"briefing's `## Skipped or blocked`."
+                f"and no criteria reset. LAND IT SHORT (the human, 2026-10-05): "
+                f"commit the last attempt's work through "
+                f"the usual commit gate, file every owed ground of its last "
+                f"review verdict as a register row, ledger it "
+                f"`done (landed short)` with those row ids in its stamps, and "
+                f"run its dependents. Only a tree the commit gate reads red "
+                f"cannot land: stamp that one `carve whole after gates "
+                f"{last_round or '<N>'}` and ledger it `carved (whole)`. Either "
+                f"way, name it in the merge briefing's `## Skipped or blocked`."
+            ),
+        )
+
+    if spent >= MAX_ATTEMPTS and rounds and rounds[-1].group("grounds"):
+        return Decision(
+            allowed=False,
+            attempt=this_attempt,
+            resets=resets,
+            spent=spent,
+            reason=(
+                f"Refused: issue {issue} has spent its {MAX_ATTEMPTS} attempts, "
+                f"and its last gate round failed on screen criteria alone "
+                f"(`grounds=screen`). A screen difference never blocks an "
+                f"issue (the human, 2026-10-05). LAND IT SHORT: commit the last "
+                f"attempt's work through the usual commit gate, file every "
+                f"owed screen difference of its last review verdict as a "
+                f"register row, ledger it `done (landed short)` with those row "
+                f"ids in its stamps, and run its dependents. Only a tree the "
+                f"commit gate reads red cannot land: stamp that one `carve "
+                f"whole after gates {last_round}` and ledger it `carved "
+                f"(whole)`. Either way, name it in the merge briefing's "
+                f"`## Skipped or blocked`."
             ),
         )
 
@@ -346,13 +645,13 @@ def decide(ledger_text, issue, level="full"):
             allowed=False,
             attempt=this_attempt,
             resets=resets,
-            reason=(
-                f"Refused: issue {issue} has {attempts} attempts recorded"
-                f"{refund_note} and the cap is {MAX_ATTEMPTS}. This would be "
-                f"attempt {this_attempt}. Ledger it `blocked` and work out "
-                f"what another attempt would need that the earlier ones did "
-                f"not have."
-            ),
+            spent=spent,
+            reason=_carve_road(
+                issue,
+                f"issue {issue} has {attempts} attempts recorded{refund_note} "
+                f"and the cap is {MAX_ATTEMPTS}. This would be attempt "
+                f"{this_attempt}.",
+                critical, last_round),
         )
 
     return Decision(allowed=True, attempt=this_attempt, resets=resets,
@@ -368,6 +667,77 @@ def _issue_level():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _criteria_ids():
+    """`criteria_ids.py` beside this file: the one reader of an issue's names."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "criteria_ids.py")
+    spec = importlib.util.spec_from_file_location("cap_criteria_ids", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def criteria_names_in(issue_path):
+    """The `C<n>` set the issue file holds, or None when it cannot be read."""
+    if not issue_path:
+        return None
+    try:
+        with open(issue_path, encoding="utf-8", errors="replace") as handle:
+            body = handle.read()
+    except OSError:
+        return None
+    return {f"C{number}" for number, _ in _criteria_ids().criteria(body)}
+
+
+def review_verdicts(ledger_path, issue):
+    """`{attempt: text}` of the issue's review verdicts beside the ledger."""
+    folder = os.path.join(os.path.dirname(os.path.abspath(ledger_path)),
+                          "verdicts")
+    found = {}
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return found
+    pattern = re.compile(rf"^{re.escape(issue)}-attempt-(\d+)-review\.md$",
+                         re.IGNORECASE)
+    for name in names:
+        match = pattern.match(name)
+        if not match:
+            continue
+        try:
+            with open(os.path.join(folder, name), encoding="utf-8",
+                      errors="replace") as handle:
+                found[int(match.group(1))] = handle.read()
+        except OSError:
+            continue
+    return found
+
+
+def carve_gate_faults(row, ledger_path, issue):
+    """At the commit step: a carve round that ships must keep the critical
+    gate the issue ran under. `[]` when the row carves nothing."""
+    carve, _ = read_carve(row, set())
+    if carve.attempt is None:
+        return []
+    verdicts = review_verdicts(ledger_path, issue)
+    earlier = [text for number, text in verdicts.items()
+               if number != carve.attempt]
+    if not runs_critical(row, earlier):
+        return []
+    path = os.path.join(os.path.dirname(os.path.abspath(ledger_path)),
+                        "verdicts", f"{issue}-attempt-{carve.attempt}-review.md")
+    text = verdicts.get(carve.attempt)
+    if text is None:
+        return [f"the carve round ships code from an issue that ran under "
+                f"`{CRITICAL_GATE}`, and it has no review verdict at {path}."]
+    if not runs_critical("", [text]):
+        return [f"the carve round's review verdict, {path}, was not written by "
+                f"`{CRITICAL_GATE}`, and this issue ran under it. Re-gate the "
+                f"carve round with the critical gate."]
+    return []
 
 
 def main(argv=None):
@@ -389,7 +759,9 @@ def main(argv=None):
 
     if args.charges:
         row = find_row(text, args.issue)
-        faults = (charge_faults(row) if row is not None
+        faults = (charge_faults(row) + carve_gate_faults(row, args.ledger,
+                                                         args.issue)
+                  if row is not None
                   else [f"no row for issue {args.issue} in the status table."])
         if faults:
             print(f"Refused: issue {args.issue}:\n  - " + "\n  - ".join(faults),
@@ -401,8 +773,14 @@ def main(argv=None):
     reading = _issue_level().read_level(args.ledger, args.issue, text)
     if reading.note:
         print(f"check_attempt_cap: {reading.note}.", file=sys.stderr)
-    decision = decide(text, args.issue, reading.level)
+    decision = decide(text, args.issue, reading.level,
+                      criteria_names=criteria_names_in(reading.path),
+                      verdict_texts=tuple(
+                          review_verdicts(args.ledger, args.issue).values()))
     cap = MAX_LIGHT_ATTEMPTS if reading.level == "light" else MAX_ATTEMPTS
+    if decision.allowed and decision.kind == "carve":
+        print(decision.reason)
+        return 0
     if decision.allowed:
         print(
             f"attempt {decision.attempt}, "

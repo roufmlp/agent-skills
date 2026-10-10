@@ -35,9 +35,10 @@ orient from
 Carry-forward and `primer.md` rather than exploring; never read `run-journal.md`;
 work test-first, via the `tdd` skill if the setup registers one and without it
 otherwise; run typecheck and the issue's own tests as you go, and
-the whole suite once at the end, only through
-`python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the ledger
-header's Full suite: command>`, reading its log rather than running it again
+the whole suite once at the end, after a green or `WIDE` reading of the same tree
+from `scoped_suite.py --whole-if-wide`, only through
+`python3 ~/.claude/skills/run-issues/run_suite.py --stage issue --spawn final --
+<the ledger header's Full suite: command>`, reading its log rather than running it again
 (`~/.claude/hooks/run-issues-suite-gate.py` refuses any other whole suite); own
 shipped code on the feature branch only; never merge, deploy, or touch
 main; treat a permission-classifier refusal as a closed road — unprivileged path

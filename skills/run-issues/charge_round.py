@@ -49,7 +49,18 @@ one review gate and no verify gate, so where the issue file says `Level: light`
 charged on the review grades alone, and the token names that gate alone:
 `gates N: review=<pass|reject> charge=<strike|correction|none>`. Without
 `Level: light`, a missing `--verify` is refused. A `fault` there is no re-check:
-the issue is `blocked (criteria)` (default `q-h0925-40-4`).
+the runner strikes the faulty text or carves the faulty criteria, resets the
+criteria and carries on (ruled 2026-10-07, after this road printed the retired
+`blocked (criteria)` in one run). `test_charge_round.py` fails when any string this
+script prints holds a status outside the live list in `SKILL.md`.
+
+SCREEN GROUNDS (the human, 2026-10-05). A screen difference never blocks an issue,
+light or full. Where every item a strike fails is a SCREEN CRITERION, the token
+ends `grounds=screen`, and `check_attempt_cap.py` lands such an issue short at
+its cap instead of blocking it. A screen criterion is one whose text names a row
+the issue's header `Claims:` line claims, as in one project's fidelity
+criterion: "For each of <row> and <row>, the pair for the row exists ...". Money, rights,
+data and behaviour criteria name no claimed row, so they keep today's rules.
 
 Exit 0 decided. Exit 1 refused, and nothing is charged. Exit 2 a factual split to
 drive first. Drill: `test_charge_round.py` beside this file.
@@ -103,7 +114,8 @@ def read_grades(line: str, who: str) -> dict:
             "A gate that graded nothing did not report.\n"
             "  Two roads out:\n"
             f"  1. Re-spawn the {who} gate.\n"
-            "  2. Ledger the issue `blocked` with this message." + AFK)
+            "  2. If the second spawn gives none either, stamp `carve whole` "
+            "with this message and run the next issue." + AFK)
     grades = {}
     for token in tokens:
         match = GRADE.match(token.strip(",;"))
@@ -198,6 +210,29 @@ ROADS = {
 }
 
 
+def claimed_rows(body: str) -> list:
+    """The row IDs on the issue's `Claims:` line, read above its title only:
+    a `Claims:` line below the title counts for nothing, as one project's
+    fidelity script reads it."""
+    for line in body.splitlines():
+        if line.startswith("# "):
+            return []
+        if line.startswith("Claims:"):
+            return [token for token in re.split(r"[\s,]+", line[len("Claims:"):])
+                    if token]
+    return []
+
+
+def screen_items(body: str) -> set:
+    """The criteria, as `C<n>`, whose text names a row the issue claims."""
+    rows = claimed_rows(body)
+    if not rows:
+        return set()
+    return {f"C{number}" for number, text in criteria_ids.criteria(body)
+            if any(re.search(rf"(?<![\w-]){re.escape(row)}(?![\w-])", text)
+                   for row in rows)}
+
+
 def verdict(grades: dict) -> str:
     return "reject" if set(grades.values()) - {"pass"} else "pass"
 
@@ -238,14 +273,25 @@ def decide(body, round_number, verify_line, review_line, driven_args=()):
             "the failing gate names and observe the result, cache-cleared. "
             f"Then re-run with {drives}." + AFK)
     charge, road = ROADS[outcome]
+    screen = screen_items(body)
+    on_screen = outcome == "fail" and bool(screen) and all(
+        GRADE.match(f"{name}=pass").group(2) in screen for name in names)
+    if on_screen:
+        road += (" Every failed item is a screen criterion (grounds=screen): "
+                 "at its attempt cap this issue lands short, never blocked "
+                 "(the human, 2026-10-05).")
     if outcome == "fault" and verify_line is None:
         # Default `q-h0925-40-4`: a light issue takes no criteria re-check.
         road = ("The criteria are at fault on {names}. No strike, and a "
-                "`Level: light` issue takes no criteria re-check: ledger it "
-                "`blocked (criteria)` and put the fault in the merge briefing.")
+                "`Level: light` issue takes no criteria re-check. Where a gate "
+                "named the fix exactly, strike the faulty text in the issue file "
+                "with ~~ ~~; otherwise stamp "
+                f"`carve after gates {round_number}: {{names}}`. Then reset the "
+                "criteria, put the fault in the merge briefing and carry on.")
     gates = ("" if verify_line is None else f"verify={verdict(verify)} ")
     token = (f"gates {round_number}: {gates}"
-             f"review={verdict(review)} charge={charge}")
+             f"review={verdict(review)} charge={charge}"
+             f"{' grounds=screen' if on_screen else ''}")
     return 0, f"{token}\n{road.format(names=', '.join(names))}\n", ""
 
 

@@ -23,8 +23,8 @@ file back** (ticket 36 of the pilot-delivery map, rulings 9 and 14).
 `all` (every remaining `ready-for-agent` issue in tracker order).
 
 Run in the order given. Some issues depend on earlier ones and say so in their own
-file ("run NN first", "this assumes NN has landed"); most do not. A blocked issue
-stops its dependents, not the whole run — see the per-issue loop.
+file ("run NN first", "this assumes NN has landed"); most do not. A carved issue
+stops nothing: its dependents run — see step 9 of the per-issue loop.
 
 For `all`, resolve the scope from each issue file's `Status:` line and take only
 clean `ready-for-agent` issues. Print the resolved list in the launch message.
@@ -66,8 +66,8 @@ gate that returned no verdict.
 
 | Stage | Agent type | Effort | What a wrong answer here costs |
 |---|---|---|---|
-| Implement | `run-issues-implementer` | high | A weak diff is paid for twice, by the gate round that rejects it and by the attempt it burns against the cap |
-| Third attempt after two rejections | `run-issues-implementer-escalated` | high | Two attempts have already failed on this issue, so the next exit is `blocked`: the issue leaves the run and comes back as one of the human's answers |
+| Implement | `run-issues-implementer` | medium | A weak diff is paid for twice, by the gate round that rejects it and by the attempt it burns against the cap |
+| Third attempt after two rejections | `run-issues-implementer-escalated` | high | Two attempts have already failed on this issue, so the next exit is a carve (step 9): what fails is taken out of the run and comes back as a new issue |
 | Verify | `run-issues-verify-gate` | high | A wrong pass ships behaviour nobody drove, and the finale is the first thing after it that looks |
 | Review | `run-issues-review-gate` | high | Same: no catcher until the finale, and it is the only reader of the whole diff before then |
 | Review, diff changes money/auth/secrets | `run-issues-review-gate-critical` | high | A wrong pass is money, auth or a secret, which is the class the variant exists for |
@@ -203,7 +203,9 @@ this pack, refuses a write to them; without it the rule is one the runner holds.
   A gate never writes an issue file or the other gate's file (the author's `gate-issue-write-guard.py`, not in this pack, refuses both).
 
 Ledger statuses: `queued → in-progress → gates → done`, plus `correction`
-(between `gates` and `done`, when taken) and `blocked`. Both gates run under the
+(between `gates` and `done`, when taken), `done (landed short)`, `done (carved)`, `carved (whole)`
+and, in ledgers older than 2026-10-06 only, `blocked`, `blocked (criteria)`,
+`blocked (depends on NN)` and `blocked (light: two attempts spent)`. Both gates run under the
 one `gates` status. Only the runner writes the ledger. Gates write
 verdicts into `verdicts/`, each into its own file. Everyone appends; nobody rewrites another's.
 
@@ -282,7 +284,7 @@ header by its own agent file. A brief that restates them is refused by
    A `Level: light` issue runs rule 5 (tracker-tooling issue 40): one review gate, and
    `run-issues-verify-gate` is spawned for a full issue only; no `harden-issues-attacker`,
    at launch or at strike 2; `check_attempt_cap.py` caps it at two attempts, then
-   `blocked`, with no escalated third and no criteria reset; no whole suite, neither
+   it lands short (step 9), with no escalated third and no criteria reset; no whole suite, neither
    the implementer's nor the runner's `run_suite.py --stage correction` re-run, but
    `scoped_suite.py`, and its commit waits for a green scoped reading of the tree
    it stages (the author's `run-issues-sweep-gate.py`, not in this pack, refuses that commit);
@@ -293,15 +295,15 @@ header by its own agent file. A brief that restates them is refused by
    choice — and the roads rejected — in the spawn prompt. Minutes here against
    hours later (112-116 run: decisions.md). Then spawn `run-issues-implementer`.
 
-   **Every implementer spawn passes the cap first**, this one and the escalated
-   third in step 8. It refuses the fourth attempt and the third criteria reset,
-   and prints the counts it refused on:
+   **Every implementer spawn passes the cap first**, the escalated and carve spawns too.
+   It refuses the fourth attempt and any after the second criteria reset, and prints
+   the counts it refused on and the road that follows:
 
    ```bash
    python3 ~/.claude/skills/run-issues/check_attempt_cap.py --ledger <run.md> --issue <id>
    ```
 
-   A non-zero exit means the issue is `blocked`: ledger it and go to step 9.
+   A non-zero exit refuses the spawn: do what it prints, then go to step 9.
    **Stamp `attempt <N>` into the issue's row before each spawn** — that marker
    is the only thing the cap counts, and a row still carrying the older
    `implement …` / `retry …` stamps is refused until it is restamped.
@@ -338,7 +340,7 @@ header by its own agent file. A brief that restates them is refused by
    faults. The round header carries the paths and the harness for every brief;
    this rule governs the prohibitions it has no field for.
 2. **Read its final message before doing anything else.** If it reports unfinished
-   work, the issue is not gate-ready — re-spawn to finish it, or mark `blocked`.
+   work, the issue is not gate-ready — re-spawn to finish it, or carve it (step 9).
    If it reports the acceptance criteria are *wrong* rather than unmet, spawn a
    review gate to confirm that claim only; if confirmed, set the issue
    `needs-harden` with the evidence and move on. Never build to criteria a worker
@@ -466,7 +468,7 @@ header by its own agent file. A brief that restates them is refused by
    the section sits above the newest `Implementation record, attempt N` heading —
    `stale`, meaning the section grades an earlier diff. **A non-zero exit is
    neither a pass nor a rejection: the gate did not report.** Re-spawn it, or
-   ledger the issue `blocked` with what the check printed. Never let one gate's
+   carve the issue (step 9) with what the check printed in the row. Never let one gate's
    verdict stand as the round's answer while the other is missing. A gate that
    drilled on a private copy can write its verdict beside the copy instead of
    beside the branch; passing the verdict file in this run's own tree is what
@@ -730,49 +732,46 @@ header by its own agent file. A brief that restates them is refused by
      `~/.claude/questionrules.md`'s table. A reversible fork takes its recommended
      default: the runner writes it into the issue file as a default, queues it,
      and the corrected issue buys the next attempt under the same two-reset cap.
-     A fork in the table's four `[irreversible]` classes, or a split, → ledger
-     `blocked (criteria)`, the question goes to the merge briefing, and the run
-     moves to step 9. **It never waits for an answer.** (The human 2026-08-29.)
+     A fork in the table's four `[irreversible]` classes, or a split, → stamp
+     `carve after gates <N>: <the criteria the fork decides>`, the question goes to
+     the merge briefing and rides into the carved issue, and the run carves in step 9.
+     **It never waits for an answer.** (The human 2026-08-29; carve, 2026-10-06.)
 
-   **Two criteria-fault resets maximum per issue.** After the second, the
-   criteria are frozen for the run; the next strike-2 buys one escalated
-   attempt, then `blocked`. Rejection CLASSES are counted across resets —
-   strikes reset, the class ledger does not. Without the cap, lawful resets
-   compound past what this skill promises (154-181: decisions.md). **This
-   paragraph states the intent; the pre-spawn check in step 1 is what enforces
-   it.**
+   **Two criteria-fault resets maximum per issue.** After the second, the criteria are frozen for
+   the run and the issue is carved (step 9), with no escalated attempt. Rejection CLASSES are
+   counted across resets — strikes reset, the class ledger does not. Without the cap, lawful resets
+   compound past what this skill promises (154-181: decisions.md). **This paragraph states the
+   intent; the pre-spawn check in step 1 is what enforces it.**
 
    This is the one case where a hardening pass may touch an issue a live run
    holds, and only because the run has stopped: no implementer is in the tree, and
    the runner spawns nothing else until the re-check returns.
-9. If the third attempt also fails a gate → ledger `blocked`. **Then work out what
-   depended on it.** Mark every queued issue that declares a dependency on the blocked one
-   `blocked (depends on NN)` and skip it; carry on with the rest. The run halts
-   entirely only when nothing independent is left.
+9. **A run never blocks on one feature: it carves** (the human, 2026-10-06;
+   decisions.md). At the cap, after the second reset, or on a red tree,
+   `check_attempt_cap.py` prints the road and the runner takes it without asking: land short;
+   `carve after gates <N>: C<n>, …`, then one carve spawn, gated on what remains under the review
+   gate the issue ran under; or `carve whole`. A defect the gates file as a register row never blocks.
+   **Then the dependents run, always.** Before a dependent's attempt 1, a criterion that needs a
+   carved one is stamped `carve at launch: C<n>`, a dependent that needs all of it `carve whole at
+   launch`. Every carve is named under the briefing's `## Skipped or blocked`. After the merge
+   `mint_carved.py` mints it, and `next_batch.py` refuses to plan until it has. A carved row's
+   handoff states its strike-class record and never sizes a fix in lines (decisions.md).
 
-   Dependencies come from the invocation where it declares them, and from the
-   issue files' own cross-references. **Where you cannot tell whether a queued
-   issue depends on the blocked one, treat it as dependent and skip it.** Say in
-   the merge briefing which issues were skipped and for what, so the next run
-   picks them up rather than rediscovering them.
-
-   **A blocked row's handoff never sizes a fix in lines** — in a class with
-   prior rejections a line count is fiction (decisions.md). It states the
-   strike-class record beside any size claim, and the briefing presents both
-   roads side by side — merge-now-fix-later and fix-first — each with what it
-   costs and what it risks. The judgement is the human's; the sizing is not.
-
-**One issue, one implementer spawn. Always.** Small-issue coalescing was retired
-by the human on 2026-08-15; `decisions.md` holds the measurement. Do not reinvent it,
-and do not report on it in the merge briefing.
+**One issue, one implementer spawn, except a screen issue's first attempt, which takes two**
+(the human, 2026-10-05; decisions.md). For an issue with a `Claims:` line, spawn an implementer that
+builds the logic and its tests and leaves the screen, then a fresh one that does the screen work in
+one pass from the measured lists the project's fidelity doc names, where it keeps one. One
+`attempt N` stamp and one cap check cover both. Small-issue coalescing was retired by the human on 2026-08-15;
+`decisions.md` holds the measurement. Do not reinvent it, and do not report on it in the merge briefing.
 
 ## Nothing finishes vaguely
 
-An issue leaves the ledger as `done` or `blocked`. Never "done, mostly". Anything
+An issue leaves the ledger as `done`, `done (landed short)`, `done (carved)` or
+`carved (whole)`. Never "done, mostly". Anything
 unfinished goes into its one named home before the ledger moves, and the merge
 briefing lists every such entry:
 
-- Acceptance unmet → stays `blocked`.
+- Acceptance unmet → carved (step 9), or landed short with each unmet ground a register row.
 - Waiting on the user (secret, env var, OAuth client) → THIS repo's
   pending-actions file, if it has one, by its absolute path. Never another repo's, and never a bare filename.
   Write a numbered action with one line of what is blocked on it. Code may
@@ -786,7 +785,8 @@ briefing lists every such entry:
 Handoff documents are never the home for any of this.
 
 **Nothing in a run writes an issue file.** Not the runner, not an implementer, not
-a gate. The one runner write allowed is step 2's `Level:` rewrite to `full`. An implementer may also edit the `Claims:` line, and only that line, of an issue outside the run's scope when its own criterion names the edit;
+a gate. The one runner write allowed is step 2's `Level:` rewrite to `full`. A carve
+waits in the ledger's stamps for `mint_carved.py`, after the merge. An implementer may also edit the `Claims:` line, and only that line, of an issue outside the run's scope when its own criterion names the edit;
 the finale counts the changed lines (`q-fin-c62d38-06`; decisions.md). Findings go to the register and wait there for the human: the finale spawns no
 promotion, and its red suite files become rows too (issue 39). A finding is out by
 default; their ruling is what gets it in. The register, the row format and the promotion rule are
@@ -803,7 +803,7 @@ cannot be told apart from a ruling nobody made (209-215: decisions.md).
 
 ## Resolving a blocked issue
 
-Resolution happens after the run closes, and it is a procedure, not an evening of
+This serves the `blocked` rows of ledgers older than 2026-10-06; a carve is resolved by hardening. Resolution happens after the run closes, and it is a procedure, not an evening of
 improvisation. The human's answer is one word — `merge`, `fix` or `drop`. `fix` spawns
 ONE implementer, under the delete-only prose rule where it applies, then ONE
 narrow gate round maximum, unattended; anything more becomes a register row. The human

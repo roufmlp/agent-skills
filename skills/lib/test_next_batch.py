@@ -483,6 +483,21 @@ class Ledgers(unittest.TestCase):
         held = out.stdout.split("Held by a run")[1]
         self.assertIn("37", held)
 
+    def test_a_landed_short_row_reads_as_done(self):
+        """The human, 2026-10-05: a light issue at its cap lands
+        short and is ledgered `done (landed short)`. Its code is on the branch,
+        so it satisfies what waits on it, exactly as `done` does."""
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_issue(self.root, "41-after", "ready-for-agent", blocked_by=["40-ci"])
+        write_ledger(self.feature, "batch-abc101", [("40", "**done** (landed short)")],
+                     state="merged")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertNotIn("does not know", out.stdout + out.stderr)
+        batch = [l for l in out.stdout.splitlines() if l.startswith("/run-issues ")]
+        self.assertEqual(len(batch), 1, out.stdout)
+        self.assertEqual(batch[0].split()[1:], ["41"])
+
     def test_a_bold_unknown_status_still_refuses(self):
         """Only the emphasis goes. The word under it is still tested by exact
         membership, so a status this tool does not know refuses as before."""
@@ -525,6 +540,25 @@ class Ledgers(unittest.TestCase):
     def test_a_queued_row_leaves_the_issue_available(self):
         write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
         write_ledger(self.feature, "batch-<id2>", [("40", "queued")])
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 40\n", out.stdout)
+
+    def test_a_dropped_row_leaves_the_issue_available(self):
+        # One run wrote `dropped` for seven issues when the human cut its
+        # scope on 2026-10-05, and on 2026-10-06 this tool refused the whole
+        # tracker over the word. A dropped issue was never started, so it ships
+        # nothing and the run holds nothing.
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_ledger(self.feature, "batch-abc102", [("40", "dropped")], state="merged")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 40\n", out.stdout)
+
+    def test_a_dropped_row_satisfies_no_dependent(self):
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        write_issue(self.root, "41-next", "ready-for-agent", blocked_by=["40-ci"])
+        write_ledger(self.feature, "batch-abc102", [("40", "dropped")], state="merged")
         out = run(self.root, "--count", "1")
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("/run-issues 40\n", out.stdout)
@@ -1476,6 +1510,66 @@ class LessText(unittest.TestCase):
             [("/tmp/40-ci.md",
               "20 acceptance criteria, and the limit is 14. Cut this issue.")])
         self.assertEqual(rest, ["something this reader has never seen"])
+
+
+class DirectRoadRecords(unittest.TestCase):
+    """A direct-road fix writes `bugs/df-NN.md` and merges, and nothing on that
+    road sets the issue's own `Status:`. Five issues of one project shipped that
+    way on 4 and 5 October and still read `ready-for-agent` on 6 October, so
+    this tool would have offered all five to a new run."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.feature = Path(self._tmp.name)
+        self.root = self.feature / "issues"
+        self.root.mkdir()
+        self.bugs = self.feature / "bugs"
+        self.bugs.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_a_record_beside_an_open_issue_refuses_naming_both(self):
+        write_issue(self.root, "401-scan", "ready-for-agent", blocked_by=None)
+        (self.bugs / "df-401.md").write_text("# df-401: fixed\n")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("df-401.md", out.stderr)
+        self.assertIn("401-scan.md", out.stderr)
+        self.assertIn("Status: done", out.stderr)
+        self.assertEqual(out.stdout, "")
+
+    def test_a_record_beside_an_unhardened_issue_refuses(self):
+        write_issue(self.root, "226e-picker", "needs-harden", blocked_by=None)
+        (self.bugs / "df-226e.md").write_text("# df-226e\n")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 1)
+        self.assertIn("df-226e.md", out.stderr)
+
+    def test_a_record_beside_a_done_or_closed_issue_passes(self):
+        write_issue(self.root, "115-cov", "done — merged", blocked_by=None)
+        write_issue(self.root, "116-hook", "closed", blocked_by=None)
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        (self.bugs / "df-115.md").write_text("# df-115\n")
+        (self.bugs / "df-116.md").write_text("# df-116\n")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 40\n", out.stdout)
+
+    def test_a_record_named_for_no_issue_is_not_read(self):
+        # `df-gm0930.md` and `df-ps1001.md` name hunt passes, not issues.
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        (self.bugs / "df-gm0930.md").write_text("# df-gm0930\n")
+        (self.bugs / "df-999.md").write_text("# df-999\n")
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 40\n", out.stdout)
+
+    def test_a_missing_bugs_directory_is_harmless(self):
+        self.bugs.rmdir()
+        write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
 
 
 if __name__ == "__main__":    unittest.main()

@@ -250,6 +250,35 @@ the first real test is that run. If the dependency reading proves unreliable, th
 safe direction is to widen what counts as dependent, not to restore the blanket
 halt.
 
+### A light issue at its cap lands short (the human, 2026-10-05)
+
+Ruled in chat, answering a queue item: the runner should have chosen this road by default
+and carried the run on, rather than stop and block other issues behind one simple issue.
+
+One run on one project had 12 issues in scope. One light issue, a product view on a job
+page, took two review rejections, both on criterion 1, the match to one prototype screen.
+Each round found a new difference nobody had listed: "50" against "50 pcs" and an empty
+reference line, then the journey labels under the bar. Every other criterion and all eleven
+invariants passed. The cap blocked it, and nine issues that name it under `## Blocked by`
+never started. It spent 88 of the run's 191 agent minutes and shipped nothing. The human
+took the parked work as it stood, with the labels as a register row. The
+merged tree passed the typecheck, 13,196 app tests and 295 harness tests.
+
+**Now:** a light issue at its cap is committed if its tree reads green, every owed ground
+of its last review becomes a register row, the ledger says `done (landed short)`, and its
+dependents run. A red tree is still `blocked`. The rule stops at `Level: light` because
+`set_level.py` makes any issue touching money, sign-in, secrets, migrations or row writes
+full, and the risk-path guard lifts a light issue on its first write to such a path. So a
+landed-short issue carries a known gap in display or behaviour, never in those five.
+
+**Where it is enforced.** `check_attempt_cap.py` prints this road at the moment it refuses
+the third spawn. `check_briefing_blocked.py` refuses a briefing that leaves a landed-short
+issue out of `## Skipped or blocked`, so the human still sees it at the merge and can bounce it.
+`next_batch.py` reads `done (landed short)` as `done`, so a later batch counts it satisfied.
+
+**Not yet exercised.** If a landed-short gap ever breaks a dependent, the measured answer
+is a narrower class of strike, not a return to blocking.
+
 ### Known residual risk — addressed 2026-07-27
 
 An issue whose acceptance criteria were wrong **when written** is caught late by
@@ -387,7 +416,8 @@ record were both spec-caused.
 only, evidence or silence, and it never waits. A fork it cannot settle returns
 `criteria-open`, the issue goes `blocked (criteria)`, and the run carries on. A
 question mid-run is a blocked issue, never a stall — no run stops for a human
-between launch and the merge read.
+between launch and the merge read. (Superseded on 2026-10-06: the fork's criteria
+are carved out instead, and the rest ships. See the last entry of this file.)
 
 **Named exception to the hardening guard.** `/harden-issues` otherwise refuses to
 touch an issue a run holds, because a second writer rewriting criteria under a
@@ -2573,6 +2603,31 @@ driven acceptance path would have caught. No count of either was taken before th
 ruling, so nothing here measures what `medium` missed. Read the next batch's rejects
 against the `medium` batches `batch-ea4cfa` and `batch-d70be9` if the question comes back.
 
+## The implementer goes back to `medium`, with the count the 2026-10-03 entry lacked (2026-10-05)
+
+The human set `run-issues-implementer.md` to `effort: medium`; the escalated implementer
+stays at `high`. They asked whether to undo it, and this is the count taken to answer.
+First-attempt gate passes per issue, from `run_compare.py since 30` on one project, grouped by the implementer effort each ledger's
+`Role effort at launch` line records:
+
+| Period | Effort | Runs | Issues | First-attempt passes |
+|---|---|---|---|---|
+| 2026-09-12 to 09-25 | high | 15 | 126 | 56 (44%) |
+| 2026-09-26 to 10-02 | medium | 16 | 121 | 59 (49%) |
+| 2026-10-03 to 10-05 | high | 6 | 48 | 18 (38%) |
+
+`medium` passed no fewer first attempts than either `high` period. The count is
+confounded, stated: light issues and the scoped suite arrived near the start of the
+`medium` period, and that project's screen-fidelity rules arrived in the last `high` one.
+It does not show `medium` better; it shows nothing that `high` bought. What `high` costs
+was measured on one run: one issue's implementer
+spent 36 of its 54 minutes in model time, writing about 262,000 output tokens.
+
+**Ruled by the human:** keep `medium`. **When to look again:** compare each next run's
+first-attempt rate with 38%, the last `high` period. Below about 30% across two runs is
+the case for raising it; read the rejects first, because an effort-shaped reject and a
+fidelity strike are different faults.
+
 ## An implementer may edit a later issue's `Claims:` line when its criterion names it (2026-10-04)
 
 The human's ruling `q-fin-c62d38-06`, adopted 2026-10-04 in the walk of one project's run
@@ -2605,3 +2660,75 @@ the other two green, and 362 would have run. Four new cases in `test_fork_specs.
 
 What it cannot tell: a spec that skips on a gate of its own that is a real fault, with
 the road open. The fork has no reading of such a spec, and the gates still grade it.
+
+## A screen difference never blocks an issue, and a screen issue takes two spawns (2026-10-05)
+
+The human ruled it on 5 October 2026, after reading the cost of screen work across three runs
+on one project. A screen issue took 270 to 560 implementer
+turns and 400k to 780k of context; a logic issue took 30 to 150 turns. The time went on small
+style-and-capture cycles judged by eye, and on gate rejections whose target moved each round:
+8 of the 16 rejects since 4 October were screen differences. One issue spent two attempts on
+them and landed short.
+
+**Now.** `charge_round.py` ends a strike's token with `grounds=screen` when every item it fails
+is a screen criterion, one whose text names a row the issue's header `Claims:` line claims.
+`check_attempt_cap.py` lands such an issue short at its cap, light or full, on the road the
+light rule above already prints: commit on a green tree, row every owed ground,
+ledger `done (landed short)`, run the dependents. Any money, rights, data or behaviour ground
+in the last round keeps today's `blocked` (superseded the next day: it carves; see below). And a screen issue's first attempt takes two
+spawns: one implementer builds the logic and its tests, then a fresh one does the screen work
+from the measured lists, under one `attempt N` stamp.
+
+**Where the rest lives.** The severity classes (a SMALL difference never rejects and becomes a
+register row; MEDIUM and LARGE may reject), the measured style list beside `words.md`, the
+shared ruled-texts file and the check that refuses a recaptured row without its lists belong
+to one project, in its own fidelity doc and script, and this pack does not ship them.
+Measured on one prototype row of that issue, captured on the same code before and after: the word
+list fell from 65 texts, every one owing a row, to 43, each tagged LARGE or MEDIUM; the new
+style list holds 43 MEDIUM and 42 SMALL lines, and the SMALL ones owe nothing.
+
+**What it cannot tell.** A criterion that names a claimed row and also carries behaviour reads
+as a screen criterion. That project writes the fidelity criterion on its own, so the case has not
+come up; an issue that merges the two should be split at hardening.
+
+## A run never blocks on one feature: it carves (2026-10-06)
+
+The human ruled it in the merge walk of one run, as three rulings recorded in that project's
+rulings file. The first: a run must not stop or block on a similar issue again, and must take
+the same road without asking, because a block costs the timeline. The second: a known defect
+filed as a register row merges and does not block the run. The third: a bad criterion is taken
+out, the rest ships, and the bad one becomes a new issue after the merge.
+
+**What it cost.** The run shipped 1 of its 12 issues. One issue spent four attempts and two
+criteria resets on its Undo, every round a strike in one class (two writes on one job at once).
+`check_attempt_cap.py` refused attempt 5 with a message that promised "one escalated attempt,
+then `blocked`", which its own reset check refused; step 8 said the same. The runner ledgered
+it `blocked` and, by step 9, the ten issues behind it `blocked (depends on NN)`, though only one
+of them needed the Undo. The human then carved the Undo by hand into a new issue, and that hand
+step is what this entry makes mechanical.
+
+**Now.** Every road the cap printed as `blocked` prints a carve. At the cap or after the second
+reset the runner stamps `carve after gates <N>: C<n>, …`, and the cap authorises one carve
+spawn, `attempt <N> (carve)`, gated on what remains. A pass is `done (carved)`. A failed carve
+round, a red tree, or a carve naming every criterion is `carve whole`: nothing ships and the
+ledger reads `carved (whole)`. Dependents always run; a dependent criterion that needs a carved
+one is carved at launch, which is what that one dependent needed. After the merge `mint_carved.py` mints each
+carved part as a `needs-harden` issue with its criteria, rows, verdicts and ledger row, or sends
+a whole carve back to `needs-harden`, and `next_batch.py` refuses to plan while a merged carve
+is unminted.
+
+**Two calls made here, and why.** A carve that covers the whole issue mints no new number: it
+sends the issue itself back, because two files for one piece of work is the drift
+`next_batch.py` was built to refuse. A shipped part that does not stand alone shows as a red
+suite or a failed carve round; that is the refusal, and the answer to it is the whole carve,
+never a second carve spawn, so a carve costs at most one spawn and one gate round.
+
+**The critical gate holds for what ships.** A carve only removes code, so an issue that ran
+under `run-issues-review-gate-critical` (money, auth, secrets) keeps it for its carve round.
+`check_attempt_cap.py --charges`, run at every commit step, refuses the commit when that round's
+review verdict was written by another gate.
+
+**What it cannot tell.** Which criteria a dependent needs from a carved blocker is the runner's
+reading of two issue files; nothing checks it. A wrong reading costs that dependent's attempts
+and ends in its own carve at the cap, so the run still does not block.
+

@@ -14,6 +14,12 @@ WHAT IT READS. Every status-table row, read by header through
 case, past emphasis and punctuation: `blocked`, `blocked (criteria)`,
 `blocked by 176`, `BLOCKED.` opening a longer cell, `blocked (depends on NN)`.
 Those are the forms the ledgers held, measured by AC7's command on 2026-09-25.
+A Status cell holding `landed short` counts too (the human, 2026-10-05): that
+light issue reads `done` so its dependents run, and this check is what still
+carries its unmet criteria to the human.
+A Status cell holding `carved` counts too (the human, 2026-10-06):
+`done (carved)` shipped part of the issue and `carved (whole)` shipped none of it,
+and both owe the human the line saying what was taken out.
 Each one's id must appear as a whole token under `finale.md`'s own heading,
 `## Skipped or blocked`, up to the next `## ` heading.
 
@@ -30,6 +36,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SECTION = re.compile(r"^##\s+Skipped or blocked\s*$", re.MULTILINE | re.IGNORECASE)
 NEXT = re.compile(r"^##\s", re.MULTILINE)
+LANDED_SHORT = re.compile(r"\blanded short\b|\bcarved\b", re.IGNORECASE)
 
 
 def _issue_level():
@@ -55,7 +62,8 @@ def unnamed(ledger_text, briefing_text, levels):
     if not rows:
         return None
     blocked = [issue for issue, status in rows
-               if levels.status_word(status) == "blocked"]
+               if levels.status_word(status) == "blocked"
+               or LANDED_SHORT.search(status)]
     body = skipped_section(briefing_text) or ""
     missing = [issue for issue in blocked
                if not re.search(rf"(?<![\w.]){re.escape(issue)}(?!\w)", body,

@@ -162,6 +162,17 @@ same way and had simply not been written yet. The form is exact: `blocked by 176
 `test_board.py` reads the statuses from the run-issues skill itself and drives the
 board over each, so a status the skill gains fails a test before it fails a board.
 
+A RUN NO LONGER WRITES `blocked`, and the forms above stay for the ledgers that
+hold them. The human ruled on 2026-10-06 that a run never blocks on one feature:
+one run wrote `blocked` for one issue and `blocked (depends on NN)` for the ten
+issues behind it, and shipped 1 of 12. Now
+the runner carves the failing criteria out. `done (carved)` shipped the rest and
+reads as `done`, so its dependents are reachable; `carved (whole)` shipped
+nothing and releases, as `blocked` does. Once a run with a carve has merged, this
+tool refuses until `run-issues/mint_carved.py` has written the carved part into
+an issue file (`unminted_carves`), because a plan made without it is a plan made
+without work that exists.
+
 WHAT A RELEASE DOES NOT SAY, and where the reader gets it. A `blocked` row often
 leaves a diff on a side branch — issue 08d's three attempts sit on that run's own
 `...-08d-blocked` branch, which is merged nowhere. This tool does not
@@ -318,9 +329,32 @@ KNOWN_STATUSES = SATISFIED + CANDIDATES + (PARKED, BLOCKED)
 # reason must match `BLOCKED_ROW` whole; see A BLOCKED ROW CARRIES ITS REASON above.
 LEDGER_SATISFIES = ("done",)
 LEDGER_HOLDS = ("done", "in-progress", "gates", "correction")
-LEDGER_RELEASES = ("queued", "blocked")
+# `dropped` is a scope cut: the run never started the issue, so it holds and
+# satisfies nothing. `launch-harden.md` takes a dropped issue out of the table, but
+# one run wrote the row as `dropped` for seven issues when the human cut its
+# scope on 2026-10-05, and on 2026-10-06 this tool refused the whole tracker over it.
+LEDGER_RELEASES = ("queued", "blocked", "dropped")
 LEDGER_KNOWN = LEDGER_HOLDS + LEDGER_RELEASES + ("blocked (<reason>)",)
 BLOCKED_ROW = re.compile(r"blocked \((?=[^()]*\S)[^()]+\)")
+# A light issue at its cap lands short: its code is committed, so it reads as
+# `done` (the human, 2026-10-05). Exact, like every status here.
+#
+# A run never blocks on one feature (the human, 2026-10-06). `done (carved)` shipped the criteria that passed and took the failing
+# ones out, so it reads as `done` and its dependents run. `carved (whole)`
+# shipped nothing, the way `blocked` ships nothing, so it releases.
+LEDGER_ALIASES = {"done (landed short)": "done", "done (carved)": "done",
+                  "carved (whole)": "blocked"}
+CARVED_STATUSES = ("done (carved)", "carved (whole)")
+
+# What `run-issues/mint_carved.py` writes after the merge, and the only proof
+# that it ran. A minted issue carries `Carved from: issue NN in run
+# <batch-id>, ...` in its header; a whole carve puts `## Carved whole by run
+# <batch-id>` into the issue's own file.
+CARVED_FROM = re.compile(
+    r"^Carved from:\s*issue\s+(?P<issue>[0-9]+[a-z]*)\s+in\s+run\s+"
+    r"(?P<run>[\w-]+)", re.MULTILINE | re.IGNORECASE)
+CARVED_WHOLE = re.compile(r"^##\s+Carved whole by run\s+(?P<run>[\w-]+)",
+                          re.MULTILINE | re.IGNORECASE)
 
 
 def ledger_status_known(status: str) -> bool:
@@ -710,6 +744,33 @@ def runs_dir_for(issues_dir: Path) -> Path:
     return issues_dir.resolve().parent / "runs"
 
 
+# A direct-road record, `bugs/df-<issue id>.md`. Names that are not an issue id,
+# such as `df-gm0930.md` for a hunt pass, do not match and are not read.
+DF_RECORD = re.compile(rf"^df-({ISSUE_ID})\.md$")
+
+
+def unstamped_direct_road(issues_dir: Path, issues: dict) -> list:
+    """`(record name, issue file)` for every `bugs/df-NN.md` whose issue still
+    reads as a candidate. Empty when every record's issue is done or closed.
+
+    The direct road writes the record and merges the fix, and none of its steps
+    sets the issue's own `Status:`. Five issues of one project shipped that way
+    on 4 and 5 October and still read `ready-for-agent` on 6 October, so this
+    tool would have offered five shipped fixes to a new run. A record names the
+    issue it fixed; a candidate status beside it is a stale file, not work.
+    """
+    bugs = issues_dir.resolve().parent / "bugs"
+    if not bugs.is_dir():
+        return []
+    found = []
+    for record in sorted(bugs.iterdir()):
+        match = DF_RECORD.match(record.name)
+        issue = issues.get(match.group(1)) if match else None
+        if issue and issue.status in CANDIDATES:
+            found.append((record.name, issue.file))
+    return found
+
+
 def run_is_merged(text: str) -> bool:
     """True when a ledger's `State:` line says the run reached `merged`.
 
@@ -762,8 +823,11 @@ def live_runs(rows) -> list:
     return sorted({r.run for r in rows if not r.merged})
 
 
-def ledger_rows(text: str):
+def ledger_rows(text: str, raw: bool = False):
     """Yield (issue id, status) from every table whose header has Issue and Status.
+
+    `raw` yields the status before `LEDGER_ALIASES` folds it, for the one reader
+    that must tell `done (carved)` from `done`: `unminted_carves`.
 
     THE STATUS COMES BACK WITHOUT ITS EMPHASIS. `*` and backticks are stripped the
     way `run_is_merged` strips them from a `State:` line, and nothing else is: the
@@ -790,7 +854,47 @@ def ledger_rows(text: str):
             continue
         found = LEDGER_CELL.match(cells[issue_col])
         if found:
-            yield found.group(1), cells[status_col].replace("*", "").replace("`", "").strip()
+            status = cells[status_col].replace("*", "").replace("`", "").strip()
+            yield found.group(1), (status if raw else
+                                   LEDGER_ALIASES.get(status, status))
+
+
+def unminted_carves(runs_dir: Path, issues_dir: Path) -> list:
+    """`(run, issue, status)` for every carve a MERGED run made that no issue
+    file shows was minted. Empty when every carve is minted.
+
+    After the merge `mint_carved.py` writes the carved part as a new issue, or
+    sends a whole carve back to `needs-harden`. A carve left unminted is work
+    that exists in no issue file, and the next batch would be planned without
+    it. A run that has not merged is skipped: its carve waits for the merge.
+    """
+    if not runs_dir.is_dir():
+        return []
+    texts = [path.read_text(encoding="utf-8", errors="replace")
+             for path in sorted(issues_dir.glob("*.md"))]
+    minted = {(found.group("issue").lower(), found.group("run").lower())
+              for text in texts for found in CARVED_FROM.finditer(text)}
+    whole = {}
+    for path, text in zip(sorted(issues_dir.glob("*.md")), texts):
+        number = re.match(r"([0-9]+[a-z]*)", path.name)
+        for found in CARVED_WHOLE.finditer(text):
+            if number:
+                whole.setdefault(number.group(1).lower(), set()).add(
+                    found.group("run").lower())
+    missing = []
+    for ledger in sorted(runs_dir.glob("*/run.md")):
+        run_id = ledger.parent.name
+        text = ledger.read_text(encoding="utf-8")
+        if not run_is_merged(text):
+            continue
+        for issue_id, status in ledger_rows(text, raw=True):
+            key = (issue_id.lower(), run_id.lower())
+            if status == "done (carved)" and key not in minted:
+                missing.append((run_id, issue_id, status))
+            elif status == "carved (whole)" and run_id.lower() not in whole.get(
+                    issue_id.lower(), set()):
+                missing.append((run_id, issue_id, status))
+    return missing
 
 
 @dataclass(frozen=True)
@@ -1622,7 +1726,24 @@ def main(argv=None) -> int:
         note = unreadable_note(issues)
         if note:
             print(note, file=sys.stderr)
+        stale = unstamped_direct_road(args.issues_dir, issues)
+        if stale:
+            raise Refusal(
+                "a direct-road record says these issues shipped, and their files "
+                "still offer them: "
+                + "; ".join(f"{record} beside {file}" for record, file in stale)
+                + ". Set each file's first line to `Status: done`, naming the "
+                "commit and the record")
         rows = load_ledgers(runs_dir_for(args.issues_dir), issues)
+        unminted = unminted_carves(runs_dir_for(args.issues_dir), args.issues_dir)
+        if unminted:
+            raise Refusal(
+                "a merged run carved work that no issue file carries yet: "
+                + "; ".join(f"issue {issue} of run {run} ({status})"
+                            for run, issue, status in unminted)
+                + ". Mint it first, in the main checkout: python3 "
+                "~/.claude/skills/run-issues/mint_carved.py --ledger "
+                "<feature>/runs/<run>/run.md --issues " + str(args.issues_dir))
         counts = fan_out(issues, rows, queued)
         runs = live_runs(rows)
 

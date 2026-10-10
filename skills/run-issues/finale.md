@@ -200,8 +200,8 @@ is safe to repeat:
    `## Promotion` section lists each row the run wrote, by id. `Issues minted` reads
    0, and `Register rows left` counts those rows.
 
-   **Then check that `## Skipped or blocked` names every issue the ledger blocked**, a
-   light issue the cap stopped at two attempts included (tracker-tooling issue 40). Exit
+   **Then check that `## Skipped or blocked` names every issue the ledger blocked, landed
+   short or carved**, a carve with the criteria it took out. Exit
    1 names each one missing; add it with its row's reason and re-run. Exit 2 read nothing.
 
    ```

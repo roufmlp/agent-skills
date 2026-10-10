@@ -75,9 +75,10 @@ Listed in the order the loop runs.
 | `skills/run-issues/test_wakeup_cron.py` | `~/.claude/skills/run-issues/test_wakeup_cron.py` |
 | `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, every test that lists a directory, every test whose text names a changed file, and the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-issues/fork_specs.py` | `~/.claude/skills/run-issues/fork_specs.py` (at launch, runs each e2e spec an issue's criteria name at the fork, and refuses the issue when the spec is already red) |
+| `skills/run-issues/mint_carved.py` | `~/.claude/skills/run-issues/mint_carved.py` (after a run merges, writes each part it carved out into an issue file, or sends a whole carve back to hardening; `lib/next_batch.py` refuses to plan while one is unminted) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (54 files, 2,406 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-11 by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (55 files, 2,465 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-11, in the second sync of that day, by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -327,18 +328,17 @@ in the 2026-10-04 sync; a later sync may publish them:
 ~/.claude/hooks/test_issue_size_guard.py
 ```
 
-**Two tools that arrived after 2026-10-07 wait, with their drills, for the sync that takes
-the skill text calling them.** `check_overlap_rule.py` and its drill are named by the live
-`harden-issues/SKILL.md`, and `mint_carved.py` and its drill by the live `run-issues/SKILL.md`; the
-published copies of both skills predate them and call neither. The 2026-10-11 sync took
-the suite wrapper alone, so publishing them now would ship scripts nothing here runs.
-Decided in that sync; the sync that takes either `SKILL.md` publishes them:
+**One tool that arrived after 2026-10-07 waits, with its drill, for the sync that takes
+the skill text calling it.** `check_overlap_rule.py` and its drill are named by the live
+`harden-issues/SKILL.md` and `agents/harden-issues-attacker.md`; the published copies of
+both predate it and call neither, so publishing it now would ship a script nothing here
+runs. The sync that takes `harden-issues/SKILL.md` publishes it. `mint_carved.py` waited
+beside it until the second 2026-10-11 sync took `run-issues/SKILL.md`, which calls it, and
+shipped then with its drill:
 
 ```withheld
 ~/.claude/skills/harden-issues/check_overlap_rule.py
 ~/.claude/skills/harden-issues/test_check_overlap_rule.py
-~/.claude/skills/run-issues/mint_carved.py
-~/.claude/skills/run-issues/test_mint_carved.py
 ```
 
 **The run harness is withheld, and this is the decision rather than an oversight.**

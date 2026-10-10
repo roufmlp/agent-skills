@@ -327,6 +327,7 @@ class RoundChargesTest(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual(decision.resets, 2)
         self.assertIn("frozen", decision.reason)
+        self.assertIn("CARVE IT", decision.reason)
 
     def test_a_counted_reset_stamp_that_names_no_round_is_refused(self):
         """Found by the review of issue 20: once one reset is named, a second
@@ -449,7 +450,19 @@ class TheLightCap(unittest.TestCase):
         self.assertEqual(code, 1, err)
         self.assertIn("Level: light", err)
         self.assertIn("cap of two", err)
-        self.assertIn("light: two attempts spent", err)
+        self.assertIn("carve whole after gates", err)
+
+    def test_the_light_refusal_names_the_land_short_road(self):
+        """The human, 2026-10-05: a green light issue at its cap
+        lands short and its dependents run; only a red tree is carved whole
+        (the human, 2026-10-06)."""
+        self.issue("Level: light")
+        code, _, err = self.cap()
+        self.assertEqual(code, 1, err)
+        self.assertIn("`done (landed short)`", err)
+        self.assertIn("register row", err)
+        self.assertIn("dependents", err)
+        self.assertIn("red", err)
 
     def test_a_full_issue_is_allowed_its_third_attempt(self):
         self.issue("Level: full")
@@ -525,6 +538,326 @@ class TheOneGateRound(unittest.TestCase):
             "attempt 1; gates 1: verify=pass review=reject"))), 1)
         self.assertEqual(charge_faults(self.row(
             "attempt 1; gates 1: verify=reject review=pass charge=strike")), [])
+
+
+class ScreenGroundsLandShort(unittest.TestCase):
+    """The human, 2026-10-05: a screen difference never blocks an issue, light or
+    full. A full issue at its cap whose last round failed on screen criteria
+    alone (`grounds=screen`, which `charge_round.py` prints) lands short."""
+
+    def ledger(self, last_round):
+        return ("| Issue | Status | Stamps |\n|---|---|---|\n"
+                "| 366 | in-progress | attempt 1; gates 1: verify=pass "
+                "review=reject charge=strike; attempt 2; gates 2: verify=pass "
+                "review=reject charge=strike grounds=screen; attempt 3; "
+                f"{last_round} |\n")
+
+    def test_a_full_issue_whose_last_round_failed_on_the_screen_alone_lands_short(self):
+        decision = decide(self.ledger(
+            "gates 3: verify=pass review=reject charge=strike grounds=screen"),
+            "366", "full")
+        self.assertFalse(decision.allowed)
+        self.assertIn("LAND IT SHORT", decision.reason)
+        self.assertIn("screen", decision.reason)
+        self.assertIn("`done (landed short)`", decision.reason)
+
+    def test_a_last_round_with_any_other_ground_is_carved(self):
+        decision = decide(self.ledger(
+            "gates 3: verify=reject review=reject charge=strike"), "366", "full")
+        self.assertFalse(decision.allowed)
+        self.assertNotIn("LAND IT SHORT", decision.reason)
+        self.assertIn("carve after gates 3", decision.reason)
+
+    def test_the_token_with_grounds_carries_its_charge(self):
+        self.assertEqual(charge_faults(
+            "| 366 | x | attempt 1; gates 1: verify=pass review=reject "
+            "charge=strike grounds=screen |"), [])
+
+
+def says_blocked(reason):
+    """True when a refusal tells the runner to ledger an issue `blocked`. The
+    briefing's section heading, `## Skipped or blocked`, is a place to name an
+    issue, not a status, so it is read past."""
+    return "`blocked`" in reason.replace("`## Skipped or blocked`", "")
+
+
+# One real issue's stamps as its run's ledger holds them, the
+# prose between them cut. Two criteria resets, four attempts, every round a
+# strike: this cap refused attempt 5 and promised an escalated one it would
+# also have refused, and 371 to 380 were skipped behind it.
+ROW_370 = (
+    "| 2 | 370 — credit and cancel ask | in-progress | Gate: "
+    "`run-issues-review-gate-critical` (credit approval rule). attempt 1; "
+    "gates 1: verify=reject review=reject charge=strike (C2, I1, I4); "
+    "attempt 2; gates 2: verify=reject review=reject charge=strike; criteria "
+    "reset after gates 2. attempt 3; gates 3: verify=reject review=reject "
+    "charge=strike; attempt 4; gates 4: verify=reject review=reject "
+    "charge=strike; criteria reset after gates 4. {tail} |\n")
+HEADER_370 = "| # | Issue | Status | Row |\n|---|---|---|---|\n"
+CRITERIA_370 = {f"C{n}" for n in range(1, 8)}
+
+
+class ARunNeverBlocksOnOneFeature(unittest.TestCase):
+    """The human, 2026-10-06: at the cap,
+    or after a second criteria reset, the runner carves the failing part out,
+    ships the rest, and the dependents run. No road this cap prints ends in
+    `blocked`."""
+
+    def decide_370(self, tail="", names=CRITERIA_370, verdicts=()):
+        return decide(HEADER_370 + ROW_370.format(tail=tail), "370", "full",
+                      criteria_names=names, verdict_texts=verdicts)
+
+    def test_issue_370_after_its_second_reset_is_carved_not_escalated(self):
+        decision = self.decide_370()
+        self.assertFalse(decision.allowed)
+        self.assertIn("CARVE IT", decision.reason)
+        self.assertIn("carve after gates 4", decision.reason)
+        self.assertNotIn("escalated attempt", decision.reason)
+        self.assertFalse(says_blocked(decision.reason), decision.reason)
+
+    def test_the_carve_round_keeps_the_critical_gate_370_ran_under(self):
+        decision = self.decide_370()
+        self.assertIn("`run-issues-review-gate-critical`", decision.reason)
+        spawn = self.decide_370("carve after gates 4: C2.")
+        self.assertIn("`run-issues-review-gate-critical`", spawn.reason)
+
+    def test_a_carve_stamp_authorises_one_carve_spawn(self):
+        decision = self.decide_370("carve after gates 4: C2.")
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.kind, "carve")
+        self.assertEqual(decision.attempt, 5)
+        self.assertIn("`attempt 5 (carve)`", decision.reason)
+        self.assertIn("C2", decision.reason)
+
+    def test_a_second_carve_spawn_is_refused(self):
+        decision = self.decide_370("carve after gates 4: C2. attempt 5 (carve)")
+        self.assertFalse(decision.allowed)
+        self.assertIn("one carve spawn", decision.reason)
+        self.assertIn("carve whole after gates 4", decision.reason)
+
+    def test_a_carve_round_that_passes_ships_as_done_carved(self):
+        decision = self.decide_370(
+            "carve after gates 4: C2. attempt 5 (carve); gates 5: "
+            "verify=pass review=pass charge=none")
+        self.assertFalse(decision.allowed)
+        self.assertIn("`done (carved)`", decision.reason)
+        self.assertIn("mint_carved.py", decision.reason)
+        self.assertIn("dependents", decision.reason)
+
+    def test_a_carve_round_that_fails_carves_the_issue_whole(self):
+        """The shipped part does not stand alone: nothing ships, and still
+        nothing blocks."""
+        decision = self.decide_370(
+            "carve after gates 4: C2. attempt 5 (carve); gates 5: "
+            "verify=reject review=pass charge=strike")
+        self.assertFalse(decision.allowed)
+        self.assertIn("carve whole after gates 5", decision.reason)
+        self.assertIn("`carved (whole)`", decision.reason)
+        self.assertIn("dependents", decision.reason)
+        self.assertFalse(says_blocked(decision.reason), decision.reason)
+
+    def test_a_carve_round_that_fails_on_the_screen_alone_lands_short(self):
+        decision = self.decide_370(
+            "carve after gates 4: C2. attempt 5 (carve); gates 5: verify=pass "
+            "review=reject charge=strike grounds=screen")
+        self.assertIn("LAND IT SHORT", decision.reason)
+        self.assertIn("`done (carved)`", decision.reason)
+
+    def test_a_whole_carve_spawns_nothing_and_runs_the_dependents(self):
+        for tail in ("carve whole after gates 4", "carve whole at launch"):
+            with self.subTest(tail=tail):
+                decision = self.decide_370(tail)
+                self.assertFalse(decision.allowed)
+                self.assertIn("`carved (whole)`", decision.reason)
+                self.assertIn("`needs-harden`", decision.reason)
+                self.assertFalse(says_blocked(decision.reason))
+
+    def test_a_carve_naming_every_criterion_must_be_written_whole(self):
+        decision = self.decide_370(
+            "carve after gates 4: C1, C2, C3, C4, C5, C6, C7")
+        self.assertFalse(decision.allowed)
+        self.assertIn("names every criterion", decision.reason)
+        self.assertIn("carve whole after gates", decision.reason)
+
+    def test_a_launch_carve_and_a_later_carve_add_up_to_every_criterion(self):
+        decision = self.decide_370(
+            "carve at launch: C1, C3, C4, C5, C6, C7; carve after gates 4: C2")
+        self.assertIn("names every criterion", decision.reason)
+
+    def test_a_carve_naming_a_criterion_the_issue_lacks_is_refused(self):
+        decision = self.decide_370("carve after gates 4: C9")
+        self.assertFalse(decision.allowed)
+        self.assertIn("C9", decision.reason)
+        self.assertIn("does not hold", decision.reason)
+
+    def test_a_carve_with_no_readable_issue_file_is_refused(self):
+        decision = self.decide_370("carve after gates 4: C2", names=None)
+        self.assertFalse(decision.allowed)
+        self.assertIn("could not be read", decision.reason)
+
+    def test_a_whole_carve_needs_no_readable_criteria(self):
+        decision = self.decide_370("carve whole after gates 4", names=None)
+        self.assertIn("`carved (whole)`", decision.reason)
+
+    def test_a_carve_naming_a_round_the_row_lacks_is_refused(self):
+        decision = self.decide_370("carve after gates 9: C2")
+        self.assertIn("does not hold", decision.reason)
+
+    def test_an_issue_takes_one_carve(self):
+        decision = self.decide_370(
+            "carve after gates 3: C2; carve after gates 4: C3")
+        self.assertIn("one carve", decision.reason)
+
+    def test_a_carve_stamp_the_cap_cannot_read_is_refused(self):
+        """Read the whole row: a carve spelled any other way is not silence."""
+        for tail in ("carve after round 4: C2", "carve at the launch: C2",
+                     "carve after gates 4 C2"):
+            with self.subTest(tail=tail):
+                decision = self.decide_370(tail)
+                self.assertFalse(decision.allowed)
+                self.assertIn("cannot be read", decision.reason)
+
+    def test_prose_that_says_carved_is_not_a_stamp(self):
+        decision = self.decide_370("the carved part waits for the merge")
+        self.assertIn("CARVE IT", decision.reason)
+
+    def test_a_launch_carve_spends_no_attempt(self):
+        row = "| 379 | in-progress | carve at launch: C3 |\n"
+        decision = decide(HEADER + row, "379", "full",
+                          criteria_names={"C1", "C2", "C3"})
+        self.assertTrue(decision.allowed, decision.reason)
+        self.assertEqual(decision.attempt, 1)
+        self.assertEqual(decision.kind, "attempt")
+
+    def test_no_refusal_this_cap_prints_ends_in_blocked(self):
+        """The control: every road that used to say `blocked`, driven."""
+        rows = {
+            "spent": "attempt 1; gates 1: verify=reject review=reject "
+                     "charge=strike; attempt 2; gates 2: verify=reject "
+                     "review=reject charge=strike; attempt 3; gates 3: "
+                     "verify=reject review=reject charge=strike",
+            "resets": "attempt 1; gates 1: verify=reject review=reject "
+                      "charge=strike; criteria reset after gates 1; attempt 2; "
+                      "gates 2: verify=reject review=reject charge=strike; "
+                      "criteria reset after gates 2",
+            "screen": "attempt 1; gates 1: verify=pass review=reject "
+                      "charge=strike grounds=screen; attempt 2; gates 2: "
+                      "verify=pass review=reject charge=strike grounds=screen; "
+                      "attempt 3; gates 3: verify=pass review=reject "
+                      "charge=strike grounds=screen",
+        }
+        for name, stamps in rows.items():
+            for level in ("full", "light"):
+                with self.subTest(road=name, level=level):
+                    decision = decide(HEADER + f"| 9 | x | {stamps} |\n", "9",
+                                      level, criteria_names={"C1", "C2"})
+                    self.assertFalse(decision.allowed)
+                    self.assertFalse(says_blocked(decision.reason),
+                                     decision.reason)
+
+
+class TheCarveRoundKeepsTheCriticalGate(unittest.TestCase):
+    """`--charges` at the commit step refuses a carve round whose review
+    verdict the critical gate did not write, where the issue ran under it."""
+
+    def setUp(self):
+        import tempfile
+        self.scratch = tempfile.TemporaryDirectory()
+        self.run = os.path.join(self.scratch.name, "runs", "batch-a1b2c3")
+        os.makedirs(os.path.join(self.run, "verdicts"))
+        self.ledger = os.path.join(self.run, "run.md")
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def write(self, row, verdicts):
+        with open(self.ledger, "w") as handle:
+            handle.write("| Issue | Status | Stamps |\n|---|---|---|\n" + row)
+        for attempt, text in verdicts.items():
+            with open(os.path.join(self.run, "verdicts",
+                                   f"370-attempt-{attempt}-review.md"), "w") as h:
+                h.write(text)
+
+    def charges(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(["--ledger", self.ledger, "--issue", "370", "--charges"])
+        return code, err.getvalue()
+
+    ROW = ("| 370 | gates | attempt 1; gates 1: verify=reject review=reject "
+           "charge=strike; carve after gates 1: C2; attempt 2 (carve); "
+           "gates 2: verify=pass review=pass charge=none |\n")
+    CRITICAL = "# Issue 370, attempt {n} — review gate (critical)\n"
+    PLAIN = "# Issue 370, attempt {n} — review gate\n"
+
+    def test_a_carve_round_gated_by_the_plain_gate_is_refused(self):
+        self.write(self.ROW, {1: self.CRITICAL.format(n=1),
+                              2: self.PLAIN.format(n=2)})
+        code, err = self.charges()
+        self.assertEqual(code, 1)
+        self.assertIn("run-issues-review-gate-critical", err)
+
+    def test_a_carve_round_with_no_review_verdict_is_refused(self):
+        self.write(self.ROW, {1: self.CRITICAL.format(n=1)})
+        code, err = self.charges()
+        self.assertEqual(code, 1)
+        self.assertIn("no review verdict", err)
+
+    def test_a_carve_round_gated_by_the_critical_gate_commits(self):
+        self.write(self.ROW, {1: self.CRITICAL.format(n=1),
+                              2: self.CRITICAL.format(n=2)})
+        code, err = self.charges()
+        self.assertEqual(code, 0, err)
+
+    def test_an_issue_that_never_ran_critical_needs_no_critical_carve(self):
+        self.write(self.ROW, {1: self.PLAIN.format(n=1),
+                              2: self.PLAIN.format(n=2)})
+        code, err = self.charges()
+        self.assertEqual(code, 0, err)
+
+
+class TheCapReadsTheIssueFilesCriteria(unittest.TestCase):
+    """`main` reads the criteria from the issue file in the run's tree, so a
+    carve is checked against what the issue holds."""
+
+    def setUp(self):
+        import tempfile
+        self.scratch = tempfile.TemporaryDirectory()
+        self.tree = os.path.realpath(self.scratch.name)
+        self.ledger = os.path.join(self.tree, ".scratch", "feat", "runs",
+                                   "batch-abc123", "run.md")
+        os.makedirs(os.path.dirname(self.ledger))
+        issues = os.path.join(self.tree, ".scratch", "feat", "issues")
+        os.makedirs(issues)
+        with open(os.path.join(issues, "12-x.md"), "w") as handle:
+            handle.write("Level: full\n# 12\n\n## Acceptance criteria\n\n"
+                         "- [ ] One.\n- [ ] Two.\n")
+
+    def tearDown(self):
+        self.scratch.cleanup()
+
+    def cap(self, stamps):
+        with open(self.ledger, "w") as handle:
+            handle.write(f"Worktree: `{self.tree}`\n\n| Issue | Status | Stamps |"
+                         f"\n|---|---|---|\n| 12 | in-progress | {stamps} |\n")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(["--ledger", self.ledger, "--issue", "12"])
+        return code, out.getvalue(), err.getvalue()
+
+    STAMPS = ("attempt 1; gates 1: verify=reject review=reject charge=strike; "
+              "attempt 2; gates 2: verify=reject review=reject charge=strike; "
+              "attempt 3; gates 3: verify=reject review=reject charge=strike; ")
+
+    def test_a_carve_of_one_criterion_of_two_authorises_the_carve_spawn(self):
+        code, out, err = self.cap(self.STAMPS + "carve after gates 3: C2")
+        self.assertEqual(code, 0, err)
+        self.assertIn("attempt 4 (carve)", out)
+
+    def test_a_carve_of_both_criteria_is_refused(self):
+        code, _, err = self.cap(self.STAMPS + "carve after gates 3: C1, C2")
+        self.assertEqual(code, 1)
+        self.assertIn("names every criterion", err)
 
 
 if __name__ == "__main__":

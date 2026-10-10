@@ -235,7 +235,7 @@ class TheImplementers(unittest.TestCase):
             with self.subTest(agent=agent):
                 reason = mod.decide(agent, "npm test", "/anywhere", ())
                 self.assertIsNotNone(reason)
-                self.assertIn("--stage issue", reason)
+                self.assertIn("--stage issue --spawn final", reason)
 
     def test_the_wrapper_at_issue_passes_and_at_any_other_stage_does_not(self):
         agent = "run-issues-implementer"
