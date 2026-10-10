@@ -243,8 +243,12 @@ class TheImplementers(unittest.TestCase):
             agent, f"{WRAPPER} --stage issue -- npm test", TREE, ()))
         for stage in ("finale", "baseline", "correction"):
             with self.subTest(stage=stage):
-                self.assertIsNotNone(mod.decide(
-                    agent, f"{WRAPPER} --stage {stage} -- npm test", TREE, ()))
+                reason = mod.decide(
+                    agent, f"{WRAPPER} --stage {stage} -- npm test", TREE, ())
+                self.assertIsNotNone(reason)
+                # run_suite.py refuses `--stage issue` with no spawn, so the
+                # refusal names the command the wrapper accepts.
+                self.assertIn("--stage issue --spawn final", reason)
 
     def test_a_scoped_run_passes(self):
         self.assertIsNone(mod.decide("run-issues-implementer",

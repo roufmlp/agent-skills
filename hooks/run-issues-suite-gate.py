@@ -461,7 +461,7 @@ def implementer_reason(agent_type, kind, stage):
     return (
         f"Refused: `{agent_type}` called the wrapper at stage `{stage}`. An "
         f"implementer's stage is `issue`; baseline, correction and finale are "
-        f"the runner's readings. Reissue with --stage issue." + AFK)
+        f"the runner's readings. Reissue with --stage issue --spawn final." + AFK)
 
 
 def verify_reason(kind, stage):

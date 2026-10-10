@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the whole suite once per tree: log it, hash the tree, refuse a repeat.
 
-    python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the suite command>
+    python3 ~/.claude/skills/run-issues/run_suite.py --stage issue --spawn final -- <the suite command>
 
 Fix F4 of a run-time audit of 2026-09-23: `the suite runs through one wrapper`.
 
