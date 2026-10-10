@@ -70,13 +70,14 @@ Listed in the order the loop runs.
 | `skills/run-issues/make_copy.py` | `~/.claude/skills/run-issues/make_copy.py` (makes a gate's private copy of the run tree, with its history, its uncommitted work and a linked `node_modules`) |
 | `skills/run-issues/move_verdicts.py` | `~/.claude/skills/run-issues/move_verdicts.py` (moves gate verdicts out of issue files and into the runs that wrote them; dry run unless `--apply`) |
 | `skills/run-issues/run_suite.py` | `~/.claude/skills/run-issues/run_suite.py` (the wrapper every whole-suite reading goes through: logs it, hashes the tree, refuses a repeat) |
+| `skills/run-issues/flake_report.py` | `~/.claude/skills/run-issues/flake_report.py` (lists the test files `run_suite.py` has found flaky in one repository, most flakes first, from its flake ledger) |
 | `skills/run-issues/wakeup_cron.py` | `~/.claude/skills/run-issues/wakeup_cron.py` (makes the run's 30-minute wakeup cron from its ledger, records the job with the process that made it, clears it, and judges each firing idle or busy) |
 | `skills/run-issues/test_wakeup_cron.py` | `~/.claude/skills/run-issues/test_wakeup_cron.py` |
 | `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, every test that lists a directory, every test whose text names a changed file, and the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-issues/fork_specs.py` | `~/.claude/skills/run-issues/fork_specs.py` (at launch, runs each e2e spec an issue's criteria name at the fork, and refuses the issue when the spec is already red) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (53 files, 2,176 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-01 by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (54 files, 2,406 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-11 by running each file) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -324,6 +325,20 @@ in the 2026-10-04 sync; a later sync may publish them:
 ~/.claude/hooks/test_fixed_sleep_guard.py
 ~/.claude/hooks/issue-size-guard.py
 ~/.claude/hooks/test_issue_size_guard.py
+```
+
+**Two tools that arrived after 2026-10-07 wait, with their drills, for the sync that takes
+the skill text calling them.** `check_overlap_rule.py` and its drill are named by the live
+`harden-issues/SKILL.md`, and `mint_carved.py` and its drill by the live `run-issues/SKILL.md`; the
+published copies of both skills predate them and call neither. The 2026-10-11 sync took
+the suite wrapper alone, so publishing them now would ship scripts nothing here runs.
+Decided in that sync; the sync that takes either `SKILL.md` publishes them:
+
+```withheld
+~/.claude/skills/harden-issues/check_overlap_rule.py
+~/.claude/skills/harden-issues/test_check_overlap_rule.py
+~/.claude/skills/run-issues/mint_carved.py
+~/.claude/skills/run-issues/test_mint_carved.py
 ```
 
 **The run harness is withheld, and this is the decision rather than an oversight.**

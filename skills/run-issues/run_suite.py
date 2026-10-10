@@ -3,9 +3,7 @@
 
     python3 ~/.claude/skills/run-issues/run_suite.py --stage issue -- <the suite command>
 
-Issue 17 of the tracker-tooling set, `the suite runs through one wrapper`, fix F4
-of the audit at
-`.scratch/tracker-tooling/evidence/audit-2026-09-23-run-time-and-strikes/README.md`.
+Fix F4 of a run-time audit of 2026-09-23: `the suite runs through one wrapper`.
 
 ## Why
 
@@ -18,7 +16,7 @@ green once is not run again.
 
 ## What it does
 
-0. Takes the machine's whole-suite lock (`take_lock`, issue 41b), so a second
+0. Takes the machine's whole-suite lock (`take_lock`), so a second
    whole suite anywhere on the machine waits for this one. The record keeps
    when the suite asked (`asked`), the seconds it waited (`waited`), whether
    another suite held the lock (`lock`: free, held or none) and that suite's
@@ -31,11 +29,47 @@ green once is not run again.
 3. Runs the command from an argument list, never a shell, with the whole
    output going to a log, and with coverage where it can read the command
    (`with_coverage`); the report is kept beside the log (`keep_report`).
-4. Runs the repo's harness suite after it where one is owed (`run_harness`).
+4. Runs the repo's harness suite after it where one is owed (`run_harness`),
+   and rechecks a red harness reading as it rechecks a red whole suite.
 5. Prints vitest's summary lines, the failing files, the log's path and the
    report's, and appends one record, with the tree the suite left as
    `tree_after`. The exit is the suite's, or the harness suite's where the
    suite was green.
+
+At `issue` the call names its spawn, `--spawn logic` or `--spawn final`, and
+both are refused where the scoped road can run (`issue_refusal`):
+
+- `logic`, always. Where a runner gives a screen issue's first attempt two
+  spawns, a logic spawn and then a screen spawn, the screen spawn runs the
+  whole suite on the tree the gates read. The logic spawn's suite is read by nobody.
+- `final`, until the newest `scoped` record for this tree is green, or `wide`:
+  `scoped_suite.py --whole-if-wide` runs nothing where the change reaches more
+  than half the suite, since its scoped suite would cost a whole one. The
+  whole suite runs once, on a tree the scoped road has passed or found wide.
+
+One run on one project (2026-10-06) ran 12 whole suites in 47.5 minutes
+on two screen issues. The logic spawns' suites took 23.7 of them. Four reds took
+15.6, and each failed in the repo-wide checks or a test importing the change,
+which the scoped road runs in about a minute and a half. A tree with no
+`node_modules/.bin/vitest` has no scoped road, and `final` runs there.
+
+A red whole suite re-runs only its failing files, one after another, with no
+coverage (`recheck`), where it names at most `RECHECK_CAP` of them and the
+command is one this wrapper can name files to. A file that passes there is a
+flake: the call is green, the record names it under `flaky`, and the
+repository's flake ledger (`run-suite-flakes.jsonl` in the git common
+directory, the run tree's for a gate's copy) gains a line. `flake_report.py`
+reads the ledger. A file that fails alone too keeps the call red. Nine flaky
+reds cost 34.5 minutes of whole-suite re-runs in the three suite stores on disk
+on 2026-10-06, and 42 run records name a flake (the human, 2026-10-06). The recheck
+takes seconds and runs under the same machine lock.
+
+A red harness reading takes the same recheck, through the contract's command
+(`harness_args`): a file that passes alone is a flake, and the harness reading
+is green. The human, 2026-10-11, changing a ruling of 2026-10-05. One project's
+`tests/views/home-badge-time.test.ts` reds under two parallel runs (594 ms
+against a 450 ms bound), and each such red re-ran all 453 harness files. Each
+ledger line names its `suite`, `app` or `harness`.
 
 At `verify` and `correction` it may answer without a run. The perf audit of
 2026-09-28 (one project, `.scratch/workflow-audit/perf-audit-2026-09-28/`)
@@ -53,8 +87,7 @@ A red run is never refused, so a flake can be re-run.
 
 `issue` is an implementer's. `baseline`, `correction` and `finale` are the
 runner's: before spawn 1, the coverage re-run `SKILL.md` step 5 orders after a
-correction round, and `finale.md` step 1. Issue 06 of this set rules those
-three runner readings. `verify` is the verify gate's, in the copy
+correction round, and `finale.md` step 1. `verify` is the verify gate's, in the copy
 `make_copy.py` made. `scoped` is `scoped_suite.py`'s, which writes to the
 same store. The refusal is per stage, so a finale that reads the
 tree the last implementer read is not refused here.
@@ -69,9 +102,8 @@ never sees it, and every worktree has its own.
 
 A gate's copy is a `git clone --shared` (`make_copy.py`), so it has a store of
 its own, and `git config run-suite.source` names the run tree whose store the
-`verify` stage reads. A directory outside git is refused, as issue 17 first
-ruled: the rsync copy without `.git` that issue 28 taught this file to read
-made 11 git tests red in every verify suite, and it is gone.
+`verify` stage reads. A directory outside git is refused: an rsync copy without `.git`, which this
+file once read, made 11 git tests red in every verify suite, and it is gone.
 
 Each record keeps its coverage report under `coverage/<log stem>/`, so the next
 suite in the tree cannot overwrite the report an earlier record names.
@@ -81,7 +113,9 @@ suite in the tree cannot overwrite the report an earlier record names.
 The command's own, passed through, or the harness suite's where the suite was
 green; at a reused `verify`, the reused record's. 3 is this wrapper's refusal:
 a repeat on a green tree, a tree git could not read, a copy `make_copy.py` did
-not make, a test-only correction, or a harness contract it cannot place. 127 is
+not make, a test-only correction, a harness contract it cannot place, or an
+`issue` call that names no spawn, the logic spawn, or a tree the scoped road
+has not passed. 127 is
 a command that could not start.
 """
 
@@ -103,6 +137,9 @@ import tempfile
 import time
 
 STAGES = ("issue", "baseline", "correction", "finale", "verify")
+# Stage `issue` names which spawn calls. `logic`: the first of a screen issue's
+# two. `final`: every spawn that hands its tree to the gates.
+SPAWNS = ("logic", "final")
 
 # The lines of vitest's own footer that the summary prints. The rest of the
 # output is in the log.
@@ -118,6 +155,11 @@ RUN_STATE = (".scratch",)
 COVERAGE_FLAGS = ("--coverage.enabled", "--coverage.reporter=json",
                   "--coverage.reportOnFailure=true")
 REPORT = "coverage-final.json"
+
+# The recheck: at most this many failing files, run one after another.
+RECHECK_CAP = 5
+RECHECK_FLAGS = ("--no-file-parallelism",)
+FLAKES = "run-suite-flakes.jsonl"
 
 # A test module the scoped road can find: a test file by its name, or a script
 # module under a test or end-to-end directory, which tests import. Not a
@@ -145,7 +187,7 @@ VITEST = {"vitest", "vitest.mjs"}
 PACKAGE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
 LAUNCHERS = {"npx", "pnpx", "bunx", "node", "nohup", "time", "caffeinate"}
 
-# Issue 41b. One whole suite at a time on the machine. The environment variable
+# One whole suite at a time on the machine. The environment variable
 # points the lock elsewhere; `test_run_suite.py` sets it in every case, since the
 # outer wrapper holds the real lock while the whole suite runs that file.
 LOCK_ENV = "RUN_SUITE_LOCK"
@@ -241,7 +283,7 @@ class Queue:
     suite ran without the lock. `holder` is the pid the lock file named when
     this one found it held. The perf audit of 2026-09-28 is why this exists:
     `started` was stamped after the lock was taken, so 28.5 minutes of queue
-    across two runs were in no record, and run `batch-04dff9`'s ledger blamed
+    across two runs were in no record, and one run's ledger blamed
     "the other run's load" on a suite no other suite held back."""
     asked: datetime.datetime
     waited: float = 0.0
@@ -322,6 +364,14 @@ def with_coverage(command: list[str],
                       if word.startswith("--coverage.reportsDirectory=")), "coverage")
         return list(command), pathlib.Path(where)
     flags = [*COVERAGE_FLAGS, f"--coverage.reportsDirectory={reports}"]
+    placed = vitest_args(command, flags)
+    return (placed, reports) if placed is not None else (list(command), None)
+
+
+def vitest_args(command: list[str], extra: list[str]) -> list[str] | None:
+    """`command` with `extra` where vitest reads them, or None where this
+    cannot tell: after a vitest launch, or after one `--` of a package
+    manager's `test` script."""
     words = [pathlib.PurePath(word).name for word in command]
     index = 0
     while index < len(words) and (words[index] in LAUNCHERS
@@ -329,11 +379,69 @@ def with_coverage(command: list[str],
         index += 1
     head, rest = words[index:index + 1], words[index + 1:]
     if head and head[0] in VITEST:
-        return [*command, *flags], reports
+        return [*command, *extra]
     if head and head[0] in PACKAGE_MANAGERS and (
             rest[:1] in (["test"], ["t"]) or rest[:2] == ["run", "test"]):
-        return [*command, *([] if "--" in command else ["--"]), *flags], reports
-    return list(command), None
+        return [*command, *([] if "--" in command else ["--"]), *extra]
+    return None
+
+
+def harness_args(command: list[str], extra: list[str]) -> list[str] | None:
+    """`command` with `extra` where the harness command reads them: where
+    `vitest_args` places them, or after one `--` of a package manager's
+    `run <script>`. One project's `npm run test:harness` runs
+    `scripts/test-harness.mjs`, which takes file names and runs only the
+    config that collects them."""
+    placed = vitest_args(command, extra)
+    if placed is not None:
+        return placed
+    words = [pathlib.PurePath(word).name for word in command]
+    if len(words) >= 3 and words[0] in PACKAGE_MANAGERS and words[1] == "run" \
+            and not words[2].startswith("-"):
+        return [*command, *([] if "--" in command else ["--"]), *extra]
+    return None
+
+
+def recheck(command: list[str], failing: list[str], log: pathlib.Path,
+            place=vitest_args) -> dict:
+    """Run only the failing files of a red suite, one after another, with no
+    coverage. The module docstring holds the measurement."""
+    if len(failing) > RECHECK_CAP:
+        return {"run": False, "why": f"{len(failing)} failing files, over the "
+                                     f"cap of {RECHECK_CAP}"}
+    placed = place(command, [*RECHECK_FLAGS, *failing])
+    if placed is None:
+        return {"run": False, "why": "the command is not one this wrapper can "
+                                     "name files to"}
+    began = time.monotonic()
+    exit_code, text = run_logged(placed, log)
+    return {"run": True, "command": placed, "exit": exit_code,
+            "seconds": round(time.monotonic() - began, 1), "log": str(log),
+            "failing": failing_files(text)}
+
+
+def flake_ledger(tree: pathlib.Path) -> pathlib.Path:
+    """The repository's flake ledger: in the git common directory, so every
+    worktree and every gate's copy of one repository writes one file."""
+    source = source_of(tree) or tree
+    common = pathlib.Path(git(source, "rev-parse", "--git-common-dir"))
+    return (common if common.is_absolute() else source / common).resolve() / FLAKES
+
+
+def record_flakes(tree: pathlib.Path, names: list[str], entry: dict) -> dict[str, int]:
+    """Append one ledger line per flaky file and return each file's count."""
+    path = flake_ledger(tree)
+    with open(path, "a", encoding="utf-8") as handle:
+        for name in names:
+            handle.write(json.dumps({"file": name, **entry}) + "\n")
+    counts: dict[str, int] = {}
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            name = json.loads(line).get("file")
+        except ValueError:
+            continue
+        counts[name] = counts.get(name, 0) + 1
+    return {name: counts.get(name, 0) for name in names}
 
 
 def keep_report(directory: pathlib.Path | None, started: datetime.datetime,
@@ -539,8 +647,11 @@ def run_logged(command: list[str], log: pathlib.Path) -> tuple[int, str]:
     return exit_code, log.read_text(encoding="utf-8", errors="replace")
 
 
-def run_harness(stage: str, tree: pathlib.Path, contract, log: pathlib.Path) -> dict:
-    """The harness reading this call owes, run where it is owed."""
+def run_harness(stage: str, tree: pathlib.Path, tree_id: str, contract,
+                log: pathlib.Path) -> dict:
+    """The harness reading this call owes, run where it is owed. A red reading
+    rechecks its failing files alone; where they pass, `exit` is 0, the red
+    exit is kept as `suite_exit`, and the ledger counts each file."""
     if contract is None:
         return {"run": False, "why": "the tree declares no harness suite"}
     command, entries = contract
@@ -550,18 +661,46 @@ def run_harness(stage: str, tree: pathlib.Path, contract, log: pathlib.Path) -> 
         wanted, why = True, "git could not read the diff, so it runs"
     if not wanted:
         return {"run": False, "why": why}
+    started = now()
     began = time.monotonic()
     exit_code, text = run_logged(command, log)
-    return {"run": True, "why": why, "command": command, "exit": exit_code,
-            "seconds": round(time.monotonic() - began, 1), "log": str(log),
-            "failing": failing_files(text), "summary": summary_lines(text)}
+    reading = {"run": True, "why": why, "command": command, "exit": exit_code,
+               "seconds": round(time.monotonic() - began, 1), "log": str(log),
+               "failing": failing_files(text), "summary": summary_lines(text)}
+    named = reading["failing"]
+    if exit_code in (0, COULD_NOT_START) or not named:
+        return reading
+    again = recheck(command, named, log.with_name(f"{log.stem}-recheck.log"),
+                    place=harness_args)
+    reading["recheck"] = again
+    if again.get("run") and again["exit"] == 0:
+        reading.update({"suite_exit": exit_code, "exit": 0, "failing": [],
+                        "flaky": named})
+        reading["flaked"] = record_flakes(tree, named, {
+            "suite": "harness", "tree": tree_id, "stage": stage,
+            "started": started.isoformat(), "log": str(log),
+            "recheck_log": again["log"]})
+    return reading
 
 
 def harness_line(harness: dict | None) -> str:
     if not harness or not harness.get("run"):
         return f"harness suite not run: {(harness or {}).get('why', 'no reading')}"
-    return (f"harness suite exit {harness['exit']} ({harness['why']}); whole "
-            f"output: {harness['log']}")
+    lines = [f"harness suite exit {harness['exit']} ({harness['why']}); whole "
+             f"output: {harness['log']}"]
+    again = harness.get("recheck") or {}
+    for name in harness.get("flaky", []):
+        lines.append(f"FLAKY: {name} failed in the harness suite and passed alone "
+                     f"({again.get('log')}). It has flaked "
+                     f"{harness.get('flaked', {}).get(name, '?')} times in this "
+                     f"repository. The harness reading is green; do not run it "
+                     f"again.")
+    if again and not again.get("run"):
+        lines.append(f"failing harness files not rechecked: {again['why']}")
+    elif again and not harness.get("flaky"):
+        lines.append(f"harness recheck: the failing files ran alone and exited "
+                     f"{again['exit']}, so this red is no flake ({again['log']})")
+    return "\n".join(lines)
 
 
 def is_test_path(path: str) -> bool:
@@ -604,6 +743,41 @@ def correction_refusal(store: pathlib.Path, tree: pathlib.Path,
                 f"the tests that import a changed file and the repo-wide "
                 f"checks: {SCOPED}")
     return None
+
+
+def issue_refusal(spawn: str | None, tree: pathlib.Path, store: pathlib.Path,
+                  tree_id: str) -> str | None:
+    """Why an implementer's whole suite is refused, or None where it runs. The
+    module docstring holds the measurement. The scoped road is vitest's, so a
+    tree without vitest is judged on its spawn's name alone."""
+    if spawn is None:
+        return ("stage issue names its spawn. `--spawn logic` is the first "
+                "spawn of a screen issue's two-spawn attempt. `--spawn final` "
+                "is every spawn that hands its tree to the gates: the screen "
+                "spawn, a one-spawn attempt, a retry, an escalation.")
+    if not (tree / "node_modules" / ".bin" / "vitest").exists():
+        return None
+    if spawn == "logic":
+        return (f"the logic spawn runs no whole suite. The screen spawn after "
+                f"it runs one on the tree the gates read, and the verify gate "
+                f"reuses only that record. Your reading is the scoped road, "
+                f"which runs every test whose imports reach your change and "
+                f"the repo-wide checks:\n  {SCOPED}")
+    for record in reversed(read_records(store)):
+        if record.get("stage") != "scoped" or tree_id not in (
+                record.get("tree"), record.get("tree_after")):
+            continue
+        if record.get("exit") == 0 or record.get("wide"):
+            return None
+        return (f"the newest scoped reading of tree {tree_id}, at "
+                f"{record.get('started')}, exited {record.get('exit')}. Failing "
+                f"files: {', '.join(record.get('failing') or []) or 'none named'}. "
+                f"Whole output: {record.get('log')}. Fix the red, run the "
+                f"scoped road again, then this:\n  {SCOPED} --whole-if-wide")
+    return (f"no scoped reading exists for tree {tree_id}. The whole suite "
+            f"runs once, on a tree the scoped road has passed. Run it, fix "
+            f"its reds, then run this again. Where it answers WIDE it ran "
+            f"nothing, and this runs at once:\n  {SCOPED} --whole-if-wide")
 
 
 def reuse(earlier: dict, tree_id: str, store: pathlib.Path, queue: Queue) -> int:
@@ -652,8 +826,12 @@ def reuse(earlier: dict, tree_id: str, store: pathlib.Path, queue: Queue) -> int
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--stage", required=True, choices=STAGES)
+    parser.add_argument("--spawn", choices=SPAWNS,
+                        help="Stage issue only: which implementer spawn calls.")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
+    if args.spawn and args.stage != "issue":
+        parser.error("--spawn belongs to stage issue only")
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("no suite command after `--`")
@@ -693,6 +871,12 @@ def main(argv=None) -> int:
             print(f"REFUSED: {why}\nThe whole suite did not start.")
             return REFUSED
 
+    if args.stage == "issue":
+        why = issue_refusal(args.spawn, tree, store, tree_id)
+        if why:
+            print(f"REFUSED: {why}\nThe whole suite did not start.")
+            return REFUSED
+
     earlier = green_before(read_records(store), tree_id, args.stage)
     if earlier:
         print(f"REFUSED: tree {tree_id} already ran green at stage "
@@ -707,18 +891,24 @@ def main(argv=None) -> int:
     stem = f"{started:%Y%m%dT%H%M%S.%fZ}-{args.stage}-{tree_id[:12]}"
     log = store / "logs" / f"{stem}.log"
     kept = store / "coverage" / stem
+    plain = list(command)
     command, reports = with_coverage(command, kept)
     if reports is not None and not reports.is_absolute():
         reports = pathlib.Path(os.getcwd()) / reports
     suite_exit, text = run_logged(command, log)
     report = keep_report(reports, started, kept)
-    harness = run_harness(args.stage, tree, contract,
+    named = failing_files(text)
+    again = (recheck(plain, named, store / "logs" / f"{stem}-recheck.log")
+             if suite_exit not in (0, COULD_NOT_START) and named else None)
+    flaky = named if again and again.get("run") and again["exit"] == 0 else []
+    harness = run_harness(args.stage, tree, tree_id, contract,
                           store / "logs" / f"{stem}-harness.log")
     ended = now()
     tree_after = after_hash(tree)
-    failing = failing_files(text) + [name for name in harness.get("failing", [])
-                                     if name not in failing_files(text)]
-    exit_code = suite_exit or harness.get("exit", 0)
+    suite_failing = [] if flaky else named
+    failing = suite_failing + [name for name in harness.get("failing", [])
+                               if name not in suite_failing]
+    exit_code = (0 if flaky else suite_exit) or harness.get("exit", 0)
 
     record = {"tree": tree_id, "tree_after": tree_after, "stage": args.stage,
               "exit": exit_code, "suite_exit": suite_exit, "harness": harness,
@@ -729,6 +919,12 @@ def main(argv=None) -> int:
               "log": str(log), "failing": failing,
               "coverage": str(report) if report else None,
               "report_root": str(tree) if report else None}
+    if args.spawn:
+        record["spawn"] = args.spawn
+    if again:
+        record["recheck"] = again
+    if flaky:
+        record["flaky"] = flaky
     with open(store / RECORDS, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
 
@@ -736,6 +932,20 @@ def main(argv=None) -> int:
     print(queue_line(queue))
     for line in summary_lines(text):
         print(f"  {line}")
+    if flaky:
+        counts = record_flakes(tree, flaky, {
+            "suite": "app", "tree": tree_id, "stage": args.stage, "started": started.isoformat(),
+            "log": str(log), "recheck_log": again["log"]})
+        for name in flaky:
+            print(f"FLAKY: {name} failed in the whole suite and passed alone "
+                  f"({again['log']}). It has flaked {counts[name]} times in this "
+                  f"repository. The call is green; do not run the suite again. "
+                  f"The list: python3 ~/.claude/skills/run-issues/flake_report.py")
+    elif again and not again.get("run"):
+        print(f"failing files not rechecked: {again['why']}")
+    elif again:
+        print(f"recheck: the failing files ran alone and exited {again['exit']}, "
+              f"so this red is no flake ({again['log']})")
     if failing:
         print("failing files:")
         for name in failing:

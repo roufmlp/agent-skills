@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Cases for run_suite.py, the whole-suite wrapper.
 
-Issue 17 of the tracker-tooling set, `the suite runs through one wrapper`, fix F4
-of the 2026-09-23 audit. Each case drives the script as a command, in a throwaway
+Fix F4 of the 2026-09-23 audit, `the suite runs through one wrapper`. Each case drives the script as a command, in a throwaway
 git repository, against a fake suite that prints what vitest prints.
 
     python3 -m unittest test_run_suite
@@ -78,10 +77,23 @@ FAKE_VITEST = textwrap.dedent("""\
             handle.write("// rewritten by the suite\\n")
     for name in filter(None, os.environ.get("FAKE_FAILING", "").split(",")):
         print(f" FAIL  {name} > a suite > a case")
+    # FAKE_FLAKY: files that fail in a whole run and pass when named alone.
+    flaky = [name for name in os.environ.get("FAKE_FLAKY", "").split(",") if name]
+    named = [a for a in args if a.endswith(".ts")]
+    if flaky and not named:
+        for name in flaky:
+            print(f" FAIL  {name} > a suite > a case")
+        sys.exit(1)
     print(" Test Files  3 passed (3)")
     print("   Duration  1.02s")
     sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """)
+
+
+def spawn_of(stage):
+    """Stage `issue` names its spawn. Every case but `TheIssueStage`'s is a
+    final spawn, the one that hands its tree to the gates."""
+    return ["--spawn", "final"] if stage == "issue" else []
 
 
 def git(repo, *args):
@@ -107,7 +119,7 @@ class Repo(unittest.TestCase):
         self.fake = root / "fake_suite.py"
         self.fake.write_text(FAKE_SUITE)
         self.counter = root / "launches"
-        # Issue 41b, AC3. Every case points the machine lock into its own
+        # Every case points the machine lock into its own
         # scratch directory. Without it a case waits on the real lock, which
         # the outer wrapper holds while the whole suite runs this file.
         self.lock = root / "suite.lock"
@@ -120,7 +132,8 @@ class Repo(unittest.TestCase):
         command = [sys.executable, str(self.fake), str(exit_code),
                    str(self.counter), *failing]
         return subprocess.run(
-            [sys.executable, str(SCRIPT), "--stage", stage, "--", *command],
+            [sys.executable, str(SCRIPT), "--stage", stage, *spawn_of(stage),
+             "--", *command],
             cwd=str(cwd or self.repo), capture_output=True, text=True,
             env=self.env, timeout=60)
 
@@ -149,7 +162,8 @@ class Repo(unittest.TestCase):
 
     def run_command(self, *command, stage="issue", cwd=None, env=None):
         return subprocess.run(
-            [sys.executable, str(SCRIPT), "--stage", stage, "--", *command],
+            [sys.executable, str(SCRIPT), "--stage", stage, *spawn_of(stage),
+             "--", *command],
             cwd=str(cwd or self.repo), capture_output=True, text=True,
             env={**self.env, **(env or {})}, timeout=60)
 
@@ -291,8 +305,8 @@ class ARepeat(Repo):
 
     def test_a_green_run_at_one_stage_does_not_refuse_another_stage(self):
         """The finale reads the tree the last implementer read, and
-        `finale.md` step 1 asks for that reading. Issue 18 judges who may run
-        which stage; this rule is per stage."""
+        `finale.md` step 1 asks for that reading. The suite-gate hook judges who
+        may run which stage; this rule is per stage."""
         self.run_suite(stage="issue")
         done = self.run_suite(stage="finale")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
@@ -353,8 +367,8 @@ class ACommandThatCannotStart(Repo):
 
     def test_it_exits_127_says_so_and_records_no_green(self):
         done = subprocess.run(
-            [sys.executable, str(SCRIPT), "--stage", "issue", "--",
-             "no-such-suite-binary-17"],
+            [sys.executable, str(SCRIPT), "--stage", "issue", "--spawn", "final",
+             "--", "no-such-suite-binary-17"],
             cwd=str(self.repo), capture_output=True, text=True, env=self.env,
             timeout=60)
         self.assertEqual(done.returncode, 127, done.stdout + done.stderr)
@@ -439,10 +453,11 @@ class TheVerifyStage(Repo):
         bin_dir = self.fake_bin()
         self.run_command(str(bin_dir / "vitest"), "run",
                          env={"FAKE_EXIT": "1", "FAKE_FAILING": "b.test.ts"})
+        before = len(self.argvs(bin_dir))
         done = self.run_command(str(bin_dir / "vitest"), "run", stage="verify",
                                 cwd=self.copy_of())
         self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertEqual(len(self.argvs(bin_dir)), 1)
+        self.assertEqual(len(self.argvs(bin_dir)), before)
         self.assertIn("b.test.ts", done.stdout)
         self.assertIn("alone", done.stdout)
 
@@ -656,13 +671,83 @@ class TheHarnessSuite(Repo):
         self.assertIn("harness suite exit 0", done.stdout)
 
 
+class TheHarnessFlakeRecheck(TheHarnessSuite):
+    """The human, 2026-10-11, changing a ruling of 2026-10-05: a red harness
+    reading gets the recheck a red whole suite gets. One project's
+    `tests/views/home-badge-time.test.ts` reds under two parallel runs (594 ms
+    against a 450 ms bound), and each such red re-ran all 453 harness files.
+    That project's command is `npm run test:harness`, whose script takes file
+    names after `--`."""
+
+    def npm_contract(self, env):
+        bin_dir = self.fake_bin()
+        self.contract()
+        isolation = self.repo / ".claude" / "run-isolation.json"
+        block = json.loads(isolation.read_text())
+        block["harnessSuite"]["command"] = f"{bin_dir / 'npm'} run test:harness"
+        isolation.write_text(json.dumps(block))
+        git(self.repo, "commit", "-qam", "npm contract")
+        self.env.update(env)
+        return bin_dir
+
+    def ledger(self):
+        path = self.repo / ".git" / "run-suite-flakes.jsonl"
+        return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+    def test_a_harness_file_that_passes_alone_is_a_flake_and_the_call_is_green(self):
+        bin_dir = self.npm_contract({"FAKE_FLAKY": "tests/views/home-badge-time.test.ts"})
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        argvs = self.argvs(bin_dir)
+        self.assertEqual(len(argvs), 2)
+        self.assertEqual(argvs[1], ["npm", "run", "test:harness", "--",
+                                    "--no-file-parallelism",
+                                    "tests/views/home-badge-time.test.ts"])
+        record = self.records()[-1]
+        harness = record["harness"]
+        self.assertEqual((record["exit"], record["failing"], harness["exit"],
+                          harness["suite_exit"], harness["flaky"]),
+                         (0, [], 0, 1, ["tests/views/home-badge-time.test.ts"]))
+        self.assertTrue(pathlib.Path(harness["recheck"]["log"]).exists())
+        self.assertEqual([(e["file"], e["suite"], e["stage"]) for e in self.ledger()],
+                         [("tests/views/home-badge-time.test.ts", "harness", "finale")])
+        self.assertIn("FLAKY: tests/views/home-badge-time.test.ts", done.stdout)
+
+    def test_a_harness_file_that_fails_alone_too_keeps_the_call_red(self):
+        bin_dir = self.npm_contract({"FAKE_FAILING": "tests/harness/lease.test.ts",
+                                     "FAKE_EXIT": "1"})
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 2)
+        record = self.records()[-1]
+        self.assertEqual(record["failing"], ["tests/harness/lease.test.ts"])
+        self.assertNotIn("flaky", record["harness"])
+        self.assertEqual(self.ledger(), [])
+
+    def test_more_failing_harness_files_than_the_cap_are_not_rechecked(self):
+        names = ",".join(f"tests/f{n}.test.ts" for n in range(run_suite.RECHECK_CAP + 1))
+        bin_dir = self.npm_contract({"FAKE_FLAKY": names})
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 1)
+        self.assertIn("not rechecked", done.stdout)
+
+    def test_a_harness_command_it_cannot_place_is_not_rechecked(self):
+        self.contract(exit_code=1, failing=["tests/harness/lease.test.ts"])
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertEqual(self.harness_launches(), 1)
+        self.assertIn("not rechecked", done.stdout)
+
+
 class TheMachineLock(Repo):
-    """Issue 41b. Every whole-suite red in six audited runs was two runs
+    """Every whole-suite red in six audited runs was two runs
     contending, so a whole suite waits for any other on the machine."""
 
     def start(self, cwd, stage="issue"):
         return subprocess.Popen(
-            [sys.executable, str(SCRIPT), "--stage", stage, "--", "sleep", "2"],
+            [sys.executable, str(SCRIPT), "--stage", stage, *spawn_of(stage),
+             "--", "sleep", "2"],
             cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, env=self.env)
 
@@ -759,7 +844,7 @@ class TheMachineLock(Repo):
 
     # The perf audit of 2026-09-28: `started` was stamped after the lock was
     # taken, so 28.5 minutes of queue across two runs were in no record, and
-    # run `batch-04dff9`'s ledger blamed "the other run's load" on a suite that
+    # one run's ledger blamed "the other run's load" on a suite that
     # started 37 minutes after the other run ended. The record now says when the
     # suite asked, how long it waited, and whether another suite held the lock.
 
@@ -803,6 +888,207 @@ class TheMachineLock(Repo):
         done = self.run_suite()
         self.assertEqual(done.returncode, 3, done.stdout)
         self.assertIn("already ran green at stage", done.stdout)
+
+
+class TheIssueStage(Repo):
+    """One run on one project (2026-10-06): 12 whole suites, 47.5 minutes,
+    on two screen issues. The logic spawn's suites, 23.7 minutes, were read by
+    nobody: the screen spawn ran one on the tree the gates read. Four reds, 15.6
+    minutes, were reds the scoped road also finds in a minute and a half."""
+
+    def vitest(self):
+        """A tree the scoped road can read: `node_modules/.bin/vitest`."""
+        bin_dir = self.repo / "node_modules" / ".bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "vitest").write_text("")
+        (self.repo / ".gitignore").write_text("ignored/\nnode_modules/\n")
+        git(self.repo, "commit", "-qam", "ignore node_modules")
+
+    def scoped(self, exit_code=0, failing=(), tree=None):
+        """A record as `scoped_suite.py` writes it, for the tree as it stands."""
+        store = self.store()
+        store.mkdir(parents=True, exist_ok=True)
+        tree_id = tree or run_suite.tree_hash(self.repo)
+        with open(store / "records.jsonl", "a") as handle:
+            handle.write(json.dumps({
+                "tree": tree_id, "tree_after": tree_id, "stage": "scoped",
+                "exit": exit_code, "failing": list(failing),
+                "started": "2026-10-06T07:00:00+00:00",
+                "log": "/the/scoped.log"}) + "\n")
+
+    def call(self, *spawn, stage="issue"):
+        command = [sys.executable, str(self.fake), "0", str(self.counter)]
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--stage", stage, *spawn, "--", *command],
+            cwd=str(self.repo), capture_output=True, text=True, env=self.env,
+            timeout=60)
+
+    def test_an_issue_suite_naming_no_spawn_is_refused_and_told_both(self):
+        done = self.call()
+        self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+        self.assertIn("--spawn logic", done.stdout)
+        self.assertIn("--spawn final", done.stdout)
+        self.assertEqual(self.launches(), 0)
+
+    def test_the_logic_spawn_is_refused_and_named_the_scoped_road(self):
+        self.vitest()
+        self.scoped()
+        done = self.call("--spawn", "logic")
+        self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+        self.assertIn("scoped_suite.py", done.stdout)
+        self.assertEqual(self.launches(), 0)
+
+    def test_a_final_spawn_with_no_scoped_reading_is_refused(self):
+        self.vitest()
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+        self.assertIn("scoped_suite.py", done.stdout)
+        self.assertEqual(self.launches(), 0)
+
+    def test_a_final_spawn_on_a_tree_the_scoped_road_passed_runs(self):
+        self.vitest()
+        self.scoped()
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 1)
+        self.assertEqual(self.records()[-1]["spawn"], "final")
+
+    def test_a_red_whole_suite_may_be_run_again_on_the_same_passed_tree(self):
+        self.vitest()
+        self.scoped()
+        command = [sys.executable, str(self.fake), "1", str(self.counter), "x.test.ts"]
+        for _ in range(2):
+            subprocess.run([sys.executable, str(SCRIPT), "--stage", "issue",
+                            "--spawn", "final", "--", *command],
+                           cwd=str(self.repo), capture_output=True, text=True,
+                           env=self.env, timeout=60)
+        self.assertEqual(self.launches(), 2)
+
+    def test_the_newest_scoped_reading_decides_and_a_red_one_is_named(self):
+        self.vitest()
+        self.scoped()
+        self.scoped(exit_code=1, failing=["tests/a.test.ts"])
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+        self.assertIn("tests/a.test.ts", done.stdout)
+        self.assertEqual(self.launches(), 0)
+
+    def test_a_scoped_pass_on_an_older_tree_does_not_count(self):
+        self.vitest()
+        self.scoped()
+        (self.repo / "a.ts").write_text("export const a = 2;\n")
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 3, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 0)
+
+    def test_a_wide_scoped_reading_lets_the_final_spawn_run(self):
+        self.vitest()
+        store = self.store()
+        store.mkdir(parents=True, exist_ok=True)
+        tree_id = run_suite.tree_hash(self.repo)
+        with open(store / "records.jsonl", "a") as handle:
+            handle.write(json.dumps({"tree": tree_id, "tree_after": tree_id,
+                                     "stage": "scoped", "exit": None, "wide": True,
+                                     "started": "2026-10-06T11:00:00+00:00"}) + "\n")
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 1)
+
+    def test_the_refusal_names_the_wide_flag(self):
+        self.vitest()
+        done = self.call("--spawn", "final")
+        self.assertIn("--whole-if-wide", done.stdout)
+
+    def test_a_tree_with_no_vitest_has_no_scoped_road_and_runs(self):
+        done = self.call("--spawn", "final")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 1)
+
+    def test_a_spawn_at_another_stage_is_an_error(self):
+        done = self.call("--spawn", "final", stage="finale")
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 0)
+
+
+class TheFlakeRecheck(Repo):
+    """A red whole suite re-runs only its failing files, one after another.
+    Files that pass there are flakes: the call is green, and the repository's
+    flake ledger counts them. Nine flaky reds cost 34.5 minutes of whole-suite
+    re-runs in the three suite stores on disk on 2026-10-06."""
+
+    copy_of = TheVerifyStage.copy_of
+
+    def red(self, env):
+        bin_dir = self.fake_bin()
+        done = self.run_command(str(bin_dir / "npm"), "test", env=env)
+        return bin_dir, done
+
+    def ledger(self):
+        path = self.repo / ".git" / "run-suite-flakes.jsonl"
+        return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+    def test_a_file_that_passes_alone_is_a_flake_and_the_call_is_green(self):
+        bin_dir, done = self.red({"FAKE_FLAKY": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("FLAKY: tests/a.test.ts", done.stdout)
+        argvs = self.argvs(bin_dir)
+        self.assertEqual(len(argvs), 2)
+        self.assertIn("tests/a.test.ts", argvs[1])
+        self.assertIn("--no-file-parallelism", argvs[1])
+        self.assertFalse(any(a.startswith("--coverage") for a in argvs[1]))
+        record = self.records()[-1]
+        self.assertEqual((record["exit"], record["suite_exit"], record["failing"],
+                          record["flaky"]), (0, 1, [], ["tests/a.test.ts"]))
+        self.assertTrue(pathlib.Path(record["recheck"]["log"]).exists())
+        self.assertEqual([e["file"] for e in self.ledger()], ["tests/a.test.ts"])
+
+    def test_a_flake_line_names_the_app_suite(self):
+        self.red({"FAKE_FLAKY": "tests/a.test.ts"})
+        self.assertEqual([e["suite"] for e in self.ledger()], ["app"])
+
+    def test_a_file_that_fails_alone_too_stays_red_and_is_no_flake(self):
+        bin_dir, done = self.red({"FAKE_FAILING": "tests/a.test.ts", "FAKE_EXIT": "1"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 2)
+        record = self.records()[-1]
+        self.assertEqual((record["exit"], record["failing"]), (1, ["tests/a.test.ts"]))
+        self.assertNotIn("flaky", record)
+        self.assertEqual(self.ledger(), [])
+
+    def test_more_failing_files_than_the_cap_are_not_rechecked(self):
+        names = ",".join(f"tests/f{n}.test.ts" for n in range(run_suite.RECHECK_CAP + 1))
+        bin_dir, done = self.red({"FAKE_FLAKY": names})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 1)
+        self.assertIn("not rechecked", done.stdout)
+
+    def test_a_red_with_no_fail_line_is_not_rechecked(self):
+        bin_dir, done = self.red({"FAKE_EXIT": "1"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 1)
+
+    def test_a_command_it_cannot_place_is_not_rechecked(self):
+        done = self.run_suite("tests/a.test.ts", exit_code=1)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(self.launches(), 1)
+
+    def test_a_second_flake_of_one_file_is_counted_as_a_repeat(self):
+        self.red({"FAKE_FLAKY": "tests/a.test.ts"})
+        (self.repo / "a.ts").write_text("export const a = 3;\n")
+        _, done = self.red({"FAKE_FLAKY": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("flaked 2 times", done.stdout)
+        self.assertEqual(len(self.ledger()), 2)
+
+    def test_a_gates_copy_writes_the_run_trees_ledger(self):
+        bin_dir = self.fake_bin()
+        (self.repo / "a.ts").write_text("export const a = 2;\n")
+        copy = self.copy_of()
+        (copy / "a.ts").write_text("export const a = 4;\n")
+        done = self.run_command(str(bin_dir / "npm"), "test", stage="verify",
+                                cwd=copy, env={"FAKE_FLAKY": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual([e["stage"] for e in self.ledger()], ["verify"])
 
 
 class NoShell(Repo):

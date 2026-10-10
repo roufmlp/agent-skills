@@ -6,23 +6,37 @@ repo-wide checks, with coverage, logged and recorded as `run_suite.py` records.
     python3 ~/.claude/skills/run-issues/scoped_suite.py [--since <ref>]
 
 The perf audit of 2026-09-28 (one project, `.scratch/workflow-audit/
-perf-audit-2026-09-28/`), fixes 3 and 4, and the human's ruling
-`q-fin-44052e-01` of 2026-09-30.
+perf-audit-2026-09-28/`), fixes 3 and 4, and the human's ruling of
+2026-09-30.
 
 ## Who runs it
 
-- A `Level: light` issue's implementer, as its one suite (rule 5 of
-  tracker-tooling issue 40 still refuses it the whole suite).
+- A `Level: light` issue's implementer, as its one suite (rule 5 in
+  `SKILL.md` still refuses it the whole suite).
 - The runner, after a correction round that changed test files only.
   `run_suite.py --stage correction` refuses the whole suite there and names
   this script.
 
+## Two answers it shares with `run_suite.py`, ruled by the human on 2026-10-06
+
+- **A red rechecks its failing files alone** (`run_suite.recheck`). A file
+  that passes there is a flake: the reading is green, the record names it
+  under `flaky`, and the repository's flake ledger gains a line. One issue
+  re-ran a 462-file scoped suite, 4.7 minutes, after `regenerate-route` flaked
+  in it.
+- **`--whole-if-wide` runs nothing for a wide change.** Where the set would run
+  more than half of every test file, it records a `wide` reading, which
+  `run_suite.py --spawn final` accepts in place of a green one, and names the
+  whole suite. That issue reached 462 of about 716 files, and each of its four
+  scoped suites took 4.1 to 4.7 minutes, as long as a whole suite. A light
+  issue never passes the flag: a `wide` reading is no green for its commit.
+
 ## Why the set is wider than the touched files
 
 A light issue's scoped run used to read the tests of the files it touched,
-and three reds escaped to the finale: issue 181 broke
-`tests/documents/brief-route.test.ts`, whose imports reach a file 181 changed;
-254 broke `tests/build-checks/design-values.test.ts` and 234c broke
+and three reds escaped to the finale: one issue broke
+`tests/documents/brief-route.test.ts`, whose imports reach a file it changed;
+two others broke `tests/build-checks/design-values.test.ts` and
 `tests/sessions/standing-rules.test.ts`, repo-wide checks that read source as
 text and import nothing either changed.
 
@@ -41,11 +55,11 @@ So the set is four parts:
    `sweepTests` list in `.claude/run-isolation.json`. A filter matches a test
    file whose path holds it, and the config's own `exclude` still applies, so
    a harness file named by a filter stays out.
-3. **The tree readers.** The human's ruling `q-fin-44052e-01`, road A: every
+3. **The tree readers.** The human's ruling of 2026-09-30, road A: every
    test that lists a directory to find what it checks. Two runs in a row
-   shipped a finale red of this class: issue 299 with
-   `tests/controls/layout/skeleton.test.tsx`, and issue 304 (run
-   `batch-44052e`) with `tests/controls/popup-sheet-changed.test.ts`. Both
+   shipped a finale red of this class: one with
+   `tests/controls/layout/skeleton.test.tsx`, the next with
+   `tests/controls/popup-sheet-changed.test.ts`. Both
    list the tree through a helper in `tests/build-checks/` and import nothing
    the issue changed. `tree_readers` reads every test `vitest list` names and
    follows what it uses, name by name, through the repository.
@@ -77,7 +91,7 @@ bodies and quote string bodies are not read as imports or uses, so the
 fixture code tests carry in strings is never followed; a listing written
 inside a string, such as a `git ls-files` command, still counts.
 
-Measured on that project on 2026-10-01, at main `e7703fd4`: 597 test files,
+Measured on that project on 2026-10-01, at its main branch: 597 test files,
 62 tree readers outside the checks, the walk about 4 s. The 62 are the
 finale's 46 and 16 more, 14 of them tests that call `migrate()` in
 `scripts/migrate.mjs`, which lists `supabase/migrations/`. Their run time
@@ -87,20 +101,20 @@ A name after one `.` is another object's property and is not followed; a name
 after the spread `...` is. Until 2026-10-07 the spread was read as a property,
 so `MODULES` in `tests/scaffold/module-imports.ts`, declared as
 `[...sourceFiles("src"), ...sourceFiles("scripts")]`, reached no listing, and
-`tests/documents/route-tracing.test.ts` rode red past issue 388's scoped run
-(run `batch-ce5d7b`, ruling `q-fin-ce5d7b-05`, road A2). Measured on that project
-at `f26c3d6a` over the 760 test files `git ls-files` names: 100 tree readers
+`tests/documents/route-tracing.test.ts` rode red past one issue's scoped run
+(the human's ruling of 2026-10-07, road A2). Measured on that project over the
+760 test files `git ls-files` names: 100 tree readers
 outside the checks before the fix, 109 after, three of the nine in
 `tests/documents/`, the walk 4.8 s and 5.3 s. The nine's run time was not
 measured.
 
 ## How a test that names a changed file is found
 
-The human's ruling `q-07853b-05` of 2026-10-01, the fourth part of the set.
+The human's ruling of 2026-10-01, the fourth part of the set.
 `tests/bills/bill-form-invariants.test.ts` reads
-`src/controls/picker/picker.tsx` as text by its path. Issue 310 changed that
+`src/controls/picker/picker.tsx` as text by its path. One issue changed that
 file, the import closure and the walk both missed the test, and it rode red
-through 311 and 312 to the finale (run `batch-07853b`, fork F4).
+through the next two issues to the finale.
 
 `naming_tests` reads every file `vitest list` names, and every Playwright spec
 under `e2e/`, for the repo-relative path of each changed file that is not a
@@ -108,11 +122,26 @@ test path and not run state. A vitest file that holds one joins the run. A
 spec under `e2e/` that vitest does not list is named in the output and the
 record as `named_e2e`, for the browser harness: vitest cannot run it. Changed
 means `git diff --name-only <since>` plus untracked files, so a deleted file
-still counts. Measured on that project on 2026-10-01: 0.04 s for 310's ten
+still counts. Measured on that project on 2026-10-01: 0.04 s for that issue's ten
 changed source files, ten tests, the missed one among them.
 
 The harness suite runs after it where the diff touches a path the harness
 contract names (`run_suite.harness_wanted`).
+
+## A recheck after a red reading
+
+The human, 2026-10-05. On two runs a light
+implementer's first reading found one to six failing files, and the whole set
+ran again to confirm the fix: 27 readings, 85 minutes, in the first run alone.
+So when the newest reading from the same base is red, the next one runs the
+failing files, every test whose imports reach a file changed since the red
+tree (`reached_since`), the tree readers, the tests that name a changed file,
+and the checks. Every other test passed on the red tree and reaches no change.
+Coverage merges: a changed file takes the recheck's entry, any other file adds
+both readings' hits. The record carries `recheck_of` and `delta`, and the
+commit gate reads it as any other reading. `recheck_base` lists when the whole
+set runs instead. Driven on that project: 221 files in 102 s red, then 118 files
+in 70 s green, the 64 tree readers and 53 checks being the floor.
 
 ## What it refuses, exit 3
 
@@ -180,6 +209,67 @@ def refuse(why: str) -> int:
     return REFUSED
 
 
+# A change to one of these can move any test, so a recheck reads the whole set.
+# vitest's own `forceRerunTriggers` default plus the files that configure it.
+RERUN_TRIGGERS = re.compile(
+    r"(^|/)(package(-lock)?\.json|tsconfig[^/]*\.json|vitest[^/]*\.config\.[cm]?[jt]s|"
+    r"vite\.config\.[cm]?[jt]s|\.claude/run-isolation\.json)$")
+
+
+def recheck_base(tree: pathlib.Path, records: list[dict], since: str,
+                 tree_id: str, every: list[str]) -> tuple[dict, list[str]] | None:
+    """The red reading a recheck may build on, and the files changed since it.
+
+    The human, 2026-10-05. On two runs a light
+    implementer's first reading found one to six failing files, and the whole
+    set ran again, about four minutes, to confirm the fix. A test outside the
+    recheck passed on the red tree and reaches no file changed since, so it
+    reads the same. None, and the whole set runs, when the newest reading is
+    green or measured from another base, names no failing file, names one
+    vitest does not list now, kept no coverage report, or when the change
+    since touches a rerun trigger or cannot be read."""
+    previous = next((r for r in reversed(records) if r.get("stage") == STAGE), None)
+    if (not previous or previous.get("exit") == 0 or previous.get("since") != since
+            or previous.get("tree") in (None, tree_id) or not previous.get("failing")
+            or (previous.get("harness") or {}).get("exit", 0)
+            or any(name not in every for name in previous["failing"])
+            or not previous.get("coverage")
+            or not pathlib.Path(previous["coverage"]).is_file()):
+        return None
+    try:
+        delta = run_suite.git(tree, "diff", "--name-only", previous["tree"],
+                              tree_id).splitlines()
+    except (subprocess.CalledProcessError, OSError):
+        return None
+    if not delta or any(RERUN_TRIGGERS.search(path) for path in delta):
+        return None
+    return previous, delta
+
+
+def merged_coverage(old: pathlib.Path, new: pathlib.Path | None,
+                    tree: pathlib.Path, delta: list[str]) -> dict:
+    """One istanbul report for the rechecked tree. A file changed since the red
+    reading takes the recheck's entry alone, because every test that imports it
+    ran again. Any other file is unchanged, so its hits from both readings add."""
+    changed = {str(tree / path) for path in delta}
+    report = {key: value for key, value in json.loads(old.read_text()).items()
+              if key not in changed and value.get("path") not in changed}
+    fresh = json.loads(new.read_text()) if new and new.is_file() else {}
+    for key, value in fresh.items():
+        kept = report.get(key)
+        if kept is None or kept.get("statementMap") != value.get("statementMap") \
+                or kept.get("branchMap") != value.get("branchMap"):
+            report[key] = value
+            continue
+        for counts in ("s", "f"):
+            kept[counts] = {k: kept[counts].get(k, 0) + value[counts].get(k, 0)
+                            for k in {*kept[counts], *value[counts]}}
+        kept["b"] = {k: [a + b for a, b in zip(kept["b"].get(k, [0] * len(arms)), arms)]
+                     for k, arms in value["b"].items()} | \
+            {k: arms for k, arms in kept["b"].items() if k not in value["b"]}
+    return report
+
+
 def sweep_filters(tree: pathlib.Path) -> list[str]:
     """The repo-wide checks: the repo's `sweepTests`, or the default. Raises
     `run_suite.ContractError` on a value it cannot use."""
@@ -207,14 +297,43 @@ def related(vitest: list[str], tree: pathlib.Path, since: str) -> list[str]:
     return list_files(vitest, tree, f"--changed={since}")
 
 
-def list_files(vitest: list[str], tree: pathlib.Path, *flags: str) -> list[str]:
+def reached_since(vitest: list[str], tree: pathlib.Path, red_tree: str) -> list[str]:
+    """Every test file whose imports reach a file changed since `red_tree`.
+
+    `vitest --changed=<ref>` always adds the work not yet committed, through
+    `git diff --cached` and `git ls-files --modified`, so against the run's real
+    HEAD it names the whole issue's closure again. It runs here against a
+    throwaway git directory whose HEAD and index are the red tree, so the work
+    not yet committed is exactly the change since that reading. The directory
+    borrows the repository's objects and writes its own; the repository is not
+    touched. Raises on a failed list."""
+    common = pathlib.Path(run_suite.git(tree, "rev-parse", "--path-format=absolute",
+                                        "--git-common-dir"))
+    with tempfile.TemporaryDirectory() as scratch:
+        git_dir = pathlib.Path(scratch) / "git"
+        for part in ("objects/info", "refs", "info"):
+            (git_dir / part).mkdir(parents=True)
+        (git_dir / "objects" / "info" / "alternates").write_text(f"{common / 'objects'}\n")
+        (git_dir / "HEAD").write_text(f"{red_tree}\n")
+        if (common / "info" / "exclude").is_file():
+            (git_dir / "info" / "exclude").write_bytes((common / "info" / "exclude").read_bytes())
+        env = {**os.environ, "GIT_DIR": str(git_dir), "GIT_WORK_TREE": str(tree)}
+        anchor = run_suite.git(tree, "commit-tree", red_tree, "-m", "scoped recheck base",
+                               env=env)
+        (git_dir / "HEAD").write_text(f"{anchor}\n")
+        run_suite.git(tree, "read-tree", red_tree, env=env)
+        return list_files(vitest, tree, f"--changed={anchor}", env=env)
+
+
+def list_files(vitest: list[str], tree: pathlib.Path, *flags: str,
+               env: dict | None = None) -> list[str]:
     """The test files `vitest list --filesOnly` names under `flags`, relative
     to the tree. Raises on a failed list."""
     with tempfile.TemporaryDirectory() as scratch:
         out = pathlib.Path(scratch) / "list.json"
         done = subprocess.run(
             [*vitest, "list", "--filesOnly", *flags, f"--json={out}"],
-            cwd=tree, capture_output=True, text=True)
+            cwd=tree, capture_output=True, text=True, env=env)
         if done.returncode != 0 or not out.exists():
             raise RuntimeError(f"`vitest list` exited {done.returncode}: "
                                f"{(done.stdout + done.stderr).strip()[-2000:]}")
@@ -468,11 +587,11 @@ class Module:
                     self.loose.append(span)
         known = [*self.segments, *self.bindings]
         # A name after one `.` is another object's property; after the spread
-        # `...` it is this name. Ruling `q-fin-ce5d7b-05`: `MODULES` in
-        # that project's `tests/scaffold/module-imports.ts` is
+        # `...` it is this name. Ruled 2026-10-07: `MODULES` in one
+        # project's `tests/scaffold/module-imports.ts` is
         # `[...sourceFiles("src"), ...]`, and reading the spread as a property
         # cut it from `readdirSync`, so `tests/documents/route-tracing.test.ts`
-        # rode red past issue 388's scoped run.
+        # rode red past one issue's scoped run.
         self.refers = re.compile(
             r"(?<![\w$])(?:(?<=\.\.\.)|(?<!\.))(" + "|".join(map(re.escape, known))
             + r")(?![\w$])"
@@ -706,6 +825,9 @@ def main(argv=None) -> int:
                         help="The ref the change is measured from. HEAD: the uncommitted work.")
     parser.add_argument("--vitest", default="npx vitest",
                         help="How vitest is launched in this tree.")
+    parser.add_argument("--whole-if-wide", action="store_true",
+                        help="A final spawn's call: run nothing where the set is "
+                             "over half the suite, and say so.")
     args = parser.parse_args(argv)
     vitest = shlex.split(args.vitest)
 
@@ -750,22 +872,64 @@ def main(argv=None) -> int:
         return refuse(f"git could not name the files changed since {args.since} "
                       f"({str(detail).strip()}).")
 
+    ran = files + readers + named
+    base = recheck_base(tree, run_suite.read_records(store), args.since, tree_id, every)
+    if base:
+        previous, delta = base
+        try:
+            reached = reached_since(vitest, tree, previous["tree"])
+            moved = naming_tests(tree, every, [
+                path for path in delta if not run_suite.is_test_path(path)
+                and not path.startswith(tuple(f"{p}/" for p in run_suite.RUN_STATE))])
+        except (subprocess.CalledProcessError, RuntimeError, OSError, ValueError,
+                KeyError):
+            base = None
+        else:
+            ran = [name for name in dict.fromkeys(
+                       [*previous["failing"], *reached, *readers, *moved])
+                   if not any(check in name for check in sweep)]
+
+    if args.whole_if_wide and not base and len(ran) * 2 > len(every):
+        record = {"tree": tree_id, "tree_after": tree_id, "stage": STAGE,
+                  "exit": None, "wide": True, "set": len(ran), "every": len(every),
+                  "since": args.since, "started": run_suite.now().isoformat(),
+                  "seconds": 0.0}
+        with open(store / run_suite.RECORDS, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record) + "\n")
+        print(f"WIDE: this change reaches {len(ran)} of {len(every)} test files, "
+              f"more than half, so a scoped suite would take about as long as the "
+              f"whole one. Nothing ran. Run the whole suite now:\n"
+              f"  python3 ~/.claude/skills/run-issues/run_suite.py --stage issue "
+              f"--spawn final -- <the ledger header's Full suite: command>")
+        return 0
+
     started = run_suite.now()
     stem = f"{started:%Y%m%dT%H%M%S.%fZ}-{STAGE}-{tree_id[:12]}"
     log = store / "logs" / f"{stem}.log"
     kept = store / "coverage" / stem
     command, reports = run_suite.with_coverage(
-        [*vitest, "run", *(str(tree / name) for name in files + readers + named), *sweep,
+        [*vitest, "run", *(str(tree / name) for name in ran), *sweep,
          "--passWithNoTests"], kept)
     suite_exit, text = run_suite.run_logged(command, log)
+    named_red = run_suite.failing_files(text)
+    again = (run_suite.recheck([*vitest, "run"], named_red,
+                               store / "logs" / f"{stem}-recheck.log")
+             if suite_exit not in (0, run_suite.COULD_NOT_START) and named_red else None)
+    flaky = named_red if again and again.get("run") and again["exit"] == 0 else []
     report = run_suite.keep_report(reports, started, kept)
-    harness = run_suite.run_harness(STAGE, tree, contract,
+    if base:
+        kept.mkdir(parents=True, exist_ok=True)
+        merged = kept / run_suite.REPORT
+        merged.write_text(json.dumps(merged_coverage(
+            pathlib.Path(previous["coverage"]), report, tree, delta)), encoding="utf-8")
+        report = merged
+    harness = run_suite.run_harness(STAGE, tree, tree_id, contract,
                                     store / "logs" / f"{stem}-harness.log")
     ended = run_suite.now()
     tree_after = run_suite.after_hash(tree)
-    failing = run_suite.failing_files(text)
+    failing = [] if flaky else named_red
     failing += [name for name in harness.get("failing", []) if name not in failing]
-    exit_code = suite_exit or harness.get("exit", 0)
+    exit_code = (0 if flaky else suite_exit) or harness.get("exit", 0)
 
     record = {"tree": tree_id, "tree_after": tree_after, "stage": STAGE,
               "exit": exit_code,
@@ -779,14 +943,33 @@ def main(argv=None) -> int:
               "seconds": round((ended - started).total_seconds(), 1),
               "log": str(log), "failing": failing,
               "coverage": str(report) if report else None,
-              "report_root": str(tree) if report else None}
+              "report_root": str(tree) if report else None, "ran": ran}
+    if base:
+        record.update({"recheck_of": previous["tree"], "delta": delta})
+    if again:
+        record["recheck"] = again
+    if flaky:
+        record["flaky"] = flaky
     with open(store / run_suite.RECORDS, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(record) + "\n")
+    if flaky:
+        counts = run_suite.record_flakes(tree, flaky, {
+            "suite": "app", "tree": tree_id, "stage": STAGE, "started": started.isoformat(),
+            "log": str(log), "recheck_log": again["log"]})
+        for name in flaky:
+            print(f"FLAKY: {name} failed in the scoped suite and passed alone "
+                  f"({again['log']}). It has flaked {counts[name]} times in this "
+                  f"repository. The reading is green; do not run it again.")
 
     print(f"scoped suite exit {suite_exit}, tree {tree_id}: {len(files)} files "
           f"whose imports reach the change since {args.since}, {len(readers)} "
           f"more that list a directory, {len(named)} more that name a changed "
           f"file, and the checks {', '.join(sweep)}")
+    if base:
+        print(f"  recheck of the red reading of tree {previous['tree'][:12]} at "
+              f"{previous.get('started')}: {len(delta)} file(s) changed since, so "
+              f"{len(ran)} test file(s) ran, its failing files among them; the "
+              f"rest passed on that tree and reach no change")
     for name in named:
         print(f"  joined, it names a changed file: {name}")
     for name in named_e2e:

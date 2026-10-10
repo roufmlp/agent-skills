@@ -38,18 +38,27 @@ FAKE_VITEST = textwrap.dedent("""\
         handle.write(json.dumps(args) + "\\n")
     if args[0] == "list":
         out = next(a.split("=", 1)[1] for a in args if a.startswith("--json="))
-        changed = any(a.startswith("--changed") for a in args)
-        key = "FAKE_LIST" if changed else "FAKE_ALL"
+        base = next((a.split("=", 1)[1] for a in args if a.startswith("--changed=")), None)
+        key = ("FAKE_ALL" if base is None else "FAKE_LIST"
+               if base == os.environ.get("FAKE_SINCE", "HEAD") else "FAKE_RECHECK")
         files = [f for f in os.environ.get(key, "").split(",") if f]
         pathlib.Path(out).write_text(json.dumps(
             [{"file": str(pathlib.Path.cwd() / f)} for f in files]))
         sys.exit(int(os.environ.get(key + "_EXIT", "0")))
-    where = next(a.split("=", 1)[1] for a in args
-                 if a.startswith("--coverage.reportsDirectory="))
-    pathlib.Path(where).mkdir(parents=True, exist_ok=True)
-    (pathlib.Path(where) / "coverage-final.json").write_text("{}")
+    where = next((a.split("=", 1)[1] for a in args
+                  if a.startswith("--coverage.reportsDirectory=")), None)
+    if where:
+        pathlib.Path(where).mkdir(parents=True, exist_ok=True)
+        (pathlib.Path(where) / "coverage-final.json").write_text(
+            os.environ.get("FAKE_COVERAGE", "{}").replace("<ROOT>", str(pathlib.Path.cwd())))
     for name in filter(None, os.environ.get("FAKE_FAILING", "").split(",")):
         print(f" FAIL  {name} > a suite > a case")
+    # FAKE_FLAKY: files that fail in the scoped run and pass in the recheck.
+    flaky = [f for f in os.environ.get("FAKE_FLAKY", "").split(",") if f]
+    if flaky and "--no-file-parallelism" not in args:
+        for name in flaky:
+            print(f" FAIL  {name} > a suite > a case")
+        sys.exit(1)
     print(" Test Files  2 passed (2)")
     sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """)
@@ -96,7 +105,12 @@ class Repo(unittest.TestCase):
         return [json.loads(line) for line in path.read_text().splitlines() if line]
 
     def runs(self):
-        return [argv for argv in self.argvs() if argv[0] == "run"]
+        """The scoped runs, not the flake rechecks after a red one."""
+        return [argv for argv in self.argvs() if argv[0] == "run"
+                and "--no-file-parallelism" not in argv]
+
+    def rechecks(self):
+        return [argv for argv in self.argvs() if "--no-file-parallelism" in argv]
 
     def records(self):
         path = pathlib.Path(git(self.repo, "rev-parse", "--absolute-git-dir")) \
@@ -158,9 +172,9 @@ class TheSet(Repo):
 
 
 class TheTreeReaders(Repo):
-    """The human's ruling `q-fin-44052e-01`, road A, 2026-09-30. Issue 304 moved two
+    """The human's ruling, road A, 2026-09-30. One issue moved two
     sheets that `tests/controls/popup-sheet-changed.test.ts` names by line, and
-    issue 299 broke `tests/controls/layout/skeleton.test.tsx`, which scans the
+    another broke `tests/controls/layout/skeleton.test.tsx`, which scans the
     tree. Both list the source tree through a helper and import nothing the
     issue changed, so the import closure missed them and both reached the
     finale red. Every test that lists a directory now joins the scoped run."""
@@ -249,9 +263,8 @@ class TheTreeReaders(Repo):
                                             if n != "uses-rule"})
 
     def test_a_name_spread_into_a_value_is_a_use(self):
-        """Ruling `q-fin-ce5d7b-05`, road A2, 2026-10-07. Issue 388 of run
-        batch-ce5d7b committed green on the scoped suite with
-        `tests/documents/route-tracing.test.ts` red. It imports `MODULES` from
+        """The human's ruling, road A2, 2026-10-07. One issue committed green
+        on the scoped suite with `tests/documents/route-tracing.test.ts` red. It imports `MODULES` from
         `tests/scaffold/module-imports.ts`, declared as
         `[...sourceFiles("src"), ...sourceFiles("scripts")]`, and the walk
         read the spread `...sourceFiles` as the property `.sourceFiles`. A
@@ -344,11 +357,11 @@ class TheTreeReaders(Repo):
 
 
 class TheNamingTests(TheTreeReaders):
-    """The human's ruling `q-07853b-05`, 2026-10-01. Issue 310 changed
+    """The human's ruling, 2026-10-01. One issue changed
     `src/controls/picker/picker.tsx`, and `tests/bills/bill-form-invariants.test.ts`
     reads that file as text by its path. Neither the import closure nor the
-    tree-reader walk named it, so it rode red through 311 and 312 to the
-    finale. Every test whose text holds a changed file's path now joins."""
+    tree-reader walk named it, so it rode red through the next two issues to
+    the finale. Every test whose text holds a changed file's path now joins."""
 
     PICKER = "src/controls/picker/picker.tsx"
     INVARIANTS = "tests/bills/bill-form-invariants.test.ts"
@@ -463,6 +476,217 @@ class TheReading(Repo):
         self.assertEqual(done.returncode, 0, done.stdout)
         self.assertTrue(counter.exists())
         self.assertTrue(self.records()[-1]["harness"]["run"])
+
+
+def entry(path, hits):
+    """An istanbul file entry with one statement per hit count."""
+    return {"path": path,
+            "statementMap": {str(i): {"start": {"line": i + 1, "column": 0},
+                                      "end": {"line": i + 1, "column": 1}}
+                             for i in range(len(hits))},
+            "fnMap": {}, "branchMap": {}, "s": {str(i): h for i, h in enumerate(hits)},
+            "f": {}, "b": {}}
+
+
+class TheRecheck(Repo):
+    """The human, 2026-10-05: make the implementers fast. On two runs
+    a light implementer's first scoped reading found one to
+    six failing files, and the whole 260-to-470-file set ran again, about four
+    minutes, to confirm the fix. After a red reading the next run reads only
+    what the fix can move: the failing files, every test whose imports reach a
+    file changed since the red tree, the tree readers and the checks."""
+
+    FIRST = "tests/one.test.ts,tests/two.test.ts,tests/three.test.ts"
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "tests").mkdir()
+        for name in ("one", "two", "three", "four"):
+            (self.repo / "tests" / f"{name}.test.ts").write_text("test('x', () => {});\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "tests")
+
+    def red_then_fix(self, fix="fix.ts", **second):
+        (self.repo / "a.ts").write_text("export const a = 2;\n")
+        self.scoped(env={"FAKE_LIST": self.FIRST, "FAKE_EXIT": "1",
+                         "FAKE_FAILING": "tests/two.test.ts",
+                         "FAKE_COVERAGE": second.pop("first_coverage", "{}")})
+        (self.repo / fix).write_text("export const fixed = true;\n")
+        return self.scoped(env={"FAKE_LIST": self.FIRST + ",tests/four.test.ts",
+                                "FAKE_ALL": self.FIRST + ",tests/four.test.ts",
+                                "FAKE_RECHECK": "tests/four.test.ts", **second})
+
+    def ran(self, argv):
+        return [pathlib.Path(word).resolve().relative_to(self.repo.resolve()).as_posix()
+                for word in argv
+                if word.endswith(".test.ts") and pathlib.Path(word).is_absolute()]
+
+    def test_a_run_after_a_red_one_reads_only_what_the_fix_can_move(self):
+        done = self.red_then_fix()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(sorted(self.ran(self.runs()[-1])),
+                         ["tests/four.test.ts", "tests/two.test.ts"])
+        self.assertIn("recheck", done.stdout)
+
+    def test_the_recheck_records_the_whole_set_and_its_base(self):
+        self.red_then_fix()
+        first, second = self.records()[-2:]
+        self.assertEqual(second["recheck_of"], first["tree"])
+        self.assertIn("fix.ts", second["delta"])
+        self.assertEqual(second["files"], self.FIRST.split(",") + ["tests/four.test.ts"])
+        self.assertEqual(sorted(second["ran"]), ["tests/four.test.ts", "tests/two.test.ts"])
+
+    def test_a_green_recheck_lets_a_light_issue_commit(self):
+        import scoped_suite
+        bin_dir = self.repo / "node_modules" / ".bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "vitest").write_text("")
+        (self.repo / ".gitignore").write_text("node_modules/\n")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "commit", "-q", "-m", "ignore node_modules")
+        self.red_then_fix()
+        self.assertIsNone(scoped_suite.light_commit_refusal(self.repo, "light"))
+
+    def test_a_red_recheck_stays_red(self):
+        done = self.red_then_fix(FAKE_EXIT="1", FAKE_FAILING="tests/two.test.ts")
+        self.assertEqual(done.returncode, 1)
+        self.assertEqual(self.records()[-1]["exit"], 1)
+
+    def test_coverage_keeps_the_unchanged_files_and_takes_the_changed_ones_fresh(self):
+        old = {"<ROOT>/kept.ts": entry("<ROOT>/kept.ts", [1, 0]),
+               "<ROOT>/fix.ts": entry("<ROOT>/fix.ts", [5])}
+        new = {"<ROOT>/kept.ts": entry("<ROOT>/kept.ts", [0, 2]),
+               "<ROOT>/fix.ts": entry("<ROOT>/fix.ts", [0, 3])}
+        self.red_then_fix(first_coverage=json.dumps(old), FAKE_COVERAGE=json.dumps(new))
+        report = json.loads(pathlib.Path(self.records()[-1]["coverage"]).read_text())
+        root = str(self.repo.resolve())
+        self.assertEqual(report[f"{root}/kept.ts"]["s"], {"0": 1, "1": 2})
+        self.assertEqual(report[f"{root}/fix.ts"]["s"], {"0": 0, "1": 3})
+
+    def test_the_change_is_measured_from_the_red_tree_not_from_head(self):
+        """vitest adds the work not yet committed to any `--changed` base, so
+        against the real HEAD it would name the whole closure again. Driven on
+        one project: 165 of 168 files ran before this, 1 after."""
+        import scoped_suite
+        git_vitest = pathlib.Path(self.scratch.name) / "git-vitest"
+        git_vitest.write_text(f"#!{sys.executable}\n" + textwrap.dedent("""\
+            import json, pathlib, subprocess, sys
+            out = next(a.split("=", 1)[1] for a in sys.argv if a.startswith("--json="))
+            seen = subprocess.run(["git", "ls-files", "--other", "--modified",
+                                   "--exclude-standard"], capture_output=True,
+                                  text=True, check=True).stdout.split()
+            pathlib.Path(out).write_text(json.dumps(
+                [{"file": str(pathlib.Path.cwd() / f)} for f in seen
+                 if f.endswith(".test.ts")]))
+            """))
+        git_vitest.chmod(0o755)
+        (self.repo / "tests" / "one.test.ts").write_text("changed before the red reading\n")
+        red = run_suite.tree_hash(self.repo)
+        (self.repo / "tests" / "two.test.ts").write_text("changed by the fix\n")
+        self.assertEqual(scoped_suite.reached_since([str(git_vitest)], self.repo.resolve(), red),
+                         ["tests/two.test.ts"])
+        self.assertEqual(git(self.repo, "status", "--short"),
+                         "M tests/one.test.ts\n M tests/two.test.ts")
+
+    def test_a_change_to_a_rerun_trigger_reads_the_whole_set(self):
+        done = self.red_then_fix(fix="package.json")
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertEqual(len(self.ran(self.runs()[-1])), 4)
+        self.assertNotIn("recheck_of", self.records()[-1])
+
+    def test_a_red_reading_that_names_no_failing_file_reads_the_whole_set(self):
+        (self.repo / "a.ts").write_text("export const a = 2;\n")
+        self.scoped(env={"FAKE_LIST": self.FIRST, "FAKE_EXIT": "1"})
+        (self.repo / "fix.ts").write_text("x\n")
+        self.scoped(env={"FAKE_LIST": self.FIRST, "FAKE_RECHECK": ""})
+        self.assertEqual(len(self.ran(self.runs()[-1])), 3)
+
+    def test_a_failing_file_vitest_no_longer_lists_reads_the_whole_set(self):
+        """A harness file, or a test the fix deleted: nothing proves the rest."""
+        (self.repo / "a.ts").write_text("export const a = 2;\n")
+        self.scoped(env={"FAKE_LIST": self.FIRST, "FAKE_EXIT": "1",
+                         "FAKE_FAILING": "tests/harness/lease.test.ts"})
+        (self.repo / "fix.ts").write_text("x\n")
+        self.scoped(env={"FAKE_LIST": self.FIRST, "FAKE_ALL": self.FIRST,
+                         "FAKE_RECHECK": ""})
+        self.assertEqual(len(self.ran(self.runs()[-1])), 3)
+
+
+class TheFlakeRecheck(Repo):
+    """A red scoped run rechecks its failing files alone, as `run_suite.py`
+    does. One issue re-ran a 462-file scoped suite, 4.7
+    minutes, after `regenerate-route` flaked in it on 2026-10-06."""
+
+    def ledger(self):
+        path = self.repo / ".git" / run_suite.FLAKES
+        return [json.loads(l) for l in path.read_text().splitlines()] if path.exists() else []
+
+    def test_a_file_that_passes_alone_makes_the_scoped_reading_green(self):
+        done = self.scoped(env={"FAKE_FLAKY": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("FLAKY: tests/a.test.ts", done.stdout)
+        [again] = self.rechecks()
+        self.assertIn("tests/a.test.ts", again)
+        self.assertFalse(any(a.startswith("--coverage") for a in again))
+        record = self.records()[-1]
+        self.assertEqual((record["exit"], record["suite_exit"], record["failing"],
+                          record["flaky"]), (0, 1, [], ["tests/a.test.ts"]))
+        self.assertEqual([e["stage"] for e in self.ledger()], ["scoped"])
+
+    def test_a_file_that_fails_alone_too_stays_red(self):
+        done = self.scoped(env={"FAKE_EXIT": "1", "FAKE_FAILING": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.rechecks()), 1)
+        self.assertEqual(self.records()[-1]["failing"], ["tests/a.test.ts"])
+        self.assertEqual(self.ledger(), [])
+
+
+class TheWideChange(Repo):
+    """One issue reached 462 of about 716 test files: its
+    scoped suites took 4.1 to 4.7 minutes, as long as a whole suite. A final
+    spawn asks `--whole-if-wide` and goes straight to the whole suite."""
+
+    ALL = "tests/a.test.ts,tests/b.test.ts,tests/c.test.ts,tests/d.test.ts"
+
+    def setUp(self):
+        super().setUp()
+        (self.repo / "tests").mkdir()
+        for name in self.ALL.split(","):
+            (self.repo / name).write_text("export {};\n")
+
+    def test_a_change_reaching_more_than_half_runs_nothing_and_says_wide(self):
+        done = self.scoped("--whole-if-wide", env={
+            "FAKE_ALL": self.ALL, "FAKE_LIST": "tests/a.test.ts,tests/b.test.ts,tests/c.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("WIDE", done.stdout)
+        self.assertIn("run_suite.py", done.stdout)
+        self.assertEqual(self.runs(), [])
+        record = self.records()[-1]
+        self.assertEqual((record["stage"], record["exit"], record["wide"]),
+                         ("scoped", None, True))
+        self.assertEqual(record["tree"], run_suite.tree_hash(self.repo))
+
+    def test_without_the_flag_a_wide_change_still_runs(self):
+        done = self.scoped(env={
+            "FAKE_ALL": self.ALL, "FAKE_LIST": "tests/a.test.ts,tests/b.test.ts,tests/c.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(len(self.runs()), 1)
+
+    def test_a_narrow_change_runs_even_with_the_flag(self):
+        done = self.scoped("--whole-if-wide", env={
+            "FAKE_ALL": self.ALL, "FAKE_LIST": "tests/a.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(len(self.runs()), 1)
+        self.assertNotIn("wide", self.records()[-1])
+
+    def test_a_wide_record_is_no_green_for_a_light_commit(self):
+        self.scoped("--whole-if-wide", env={
+            "FAKE_ALL": self.ALL, "FAKE_LIST": "tests/a.test.ts,tests/b.test.ts,tests/c.test.ts"})
+        (self.repo / "node_modules" / ".bin").mkdir(parents=True)
+        (self.repo / "node_modules" / ".bin" / "vitest").write_text("")
+        sys.path.insert(0, str(HERE))
+        import scoped_suite
+        self.assertIsNotNone(scoped_suite.light_commit_refusal(self.repo, "light"))
 
 
 class TheLightCommit(Repo):
