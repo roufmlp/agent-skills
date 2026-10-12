@@ -50,7 +50,13 @@ gate. That spec is printed as `skipped`, and nothing is known about it.
 Run `batch-471bd4`, fork `920c03a9`: issue 362's criterion 2 named
 `e2e/fidelity-shots.spec.ts`, which skips unless `npm run fidelity:shots --
 <row-id>` sets `FIDELITY_ROW`. Two other specs passed, and 362 was refused.
-With no passed case anywhere in the reading, the skip stays red.
+With no passed case anywhere in the reading, the repo's probe runs: the spec
+named by `e2eProbe` in `.claude/run-isolation.json`. A passed case in it proves
+the road open the same way (the human, 2026-10-05, `q-fin-f831bf-02`). Run
+`batch-f831bf` named `e2e/fidelity-shots.spec.ts` alone, four issues were
+refused, and the run waited 26 minutes for the human's override. The probe runs only
+when a skip has no other proof. With no probe declared, or one that passes
+nothing, the skip stays red.
 
 ## The override
 
@@ -68,6 +74,7 @@ start.
 from __future__ import annotations
 
 import argparse
+import json
 import pathlib
 import re
 import shlex
@@ -90,6 +97,7 @@ COUNT = re.compile(r"^\s*(\d+) (failed|flaky|passed|skipped|did not run|interrup
 # A case under the `N failed` count: `[project] › file:line:col › title ───`.
 CASE = re.compile(r"^\s*(?:\[[^\]]+\] › )?\S+:\d+:\d+ › (.+?)\s*─*\s*$")
 BLOCKED = "blocked (fork spec red)"
+CONTRACT = ".claude/run-isolation.json"
 
 
 def issue_id(path: pathlib.Path) -> str:
@@ -100,6 +108,16 @@ def issue_id(path: pathlib.Path) -> str:
 def git(tree: pathlib.Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(tree), *args], check=True,
                           capture_output=True, text=True).stdout.strip()
+
+
+def declared_probe(tree: pathlib.Path) -> str | None:
+    """The repo's `e2eProbe` spec from `.claude/run-isolation.json`, or None."""
+    try:
+        contract = json.loads((tree / CONTRACT).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    probe = contract.get("e2eProbe") if isinstance(contract, dict) else None
+    return probe if isinstance(probe, str) and SPEC.fullmatch(probe) else None
 
 
 def named_specs(body: str) -> list[tuple[str, str]]:
@@ -252,6 +270,20 @@ def main(argv=None) -> int:
     # A passed case anywhere, in a green spec or a red one, proves the road
     # open, so a spec that skipped every case skipped on its own gate. It is
     # neither green nor red.
+    if not proof and any(why == EVERY_CASE_SKIPPED for _, _, why, _ in readings.values()):
+        probe = declared_probe(tree)
+        if probe and not (tree / probe).is_file():
+            print(f"probe not run, absent at the fork {fork}: {probe}")
+        elif probe:
+            try:
+                *_, passed = run_spec(command, tree, probe,
+                                      logs / ("probe__" + probe.replace("/", "__") + ".log"))
+            except OSError as error:
+                print(f"REFUSED: the harness `{args.harness}` could not start ({error}).")
+                return UNKNOWN
+            print(f"probe {probe}: {passed} case(s) passed")
+            if passed:
+                proof.append(probe)
     skipped = []
     for spec, (green, cases, why, log) in list(readings.items()):
         if why != EVERY_CASE_SKIPPED:

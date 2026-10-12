@@ -2732,3 +2732,17 @@ review verdict was written by another gate.
 reading of two issue files; nothing checks it. A wrong reading costs that dependent's attempts
 and ends in its own carve at the cap, so the run still does not block.
 
+## A calendar red reads main's log before the run fixes it (2026-10-11)
+
+Run `batch-4a2388` in one project. On Sunday 11 October one test redded every
+light commit on the calendar alone: a case read the real clock and printed the Sunday note.
+The runner fixed it in its own gated commit, `80bb4c7a` at 01:02, while main fixed the same
+test a second way at 01:48 (`490bb77c`, register row `df-sn1011`), and both rode into the
+merge. The human ruled `q-fin4a2388-06` in the session walk of that day: such a test takes one
+implementer and one review gate in its own commit, no carve, and the runner first takes
+main's fix where one exists.
+
+`check_main_fix.py` is that read, so it exits rather than reminds. Replayed read-only from
+`80bb4c7a` against main, its log query lists `490bb77c`. A fix in the code under test that
+neither changes the test file nor names it in the message is not seen; the review gate on
+the run's own fix is the net for that.

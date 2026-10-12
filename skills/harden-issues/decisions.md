@@ -465,9 +465,86 @@ recorded nothing, which is the h1001pk state. Driven on that project's own trees
 `c523bc11` passes. This pack does not ship `check_walk_closed.py`, so `SKILL.md` states the
 rule the check holds, and the pass holds it by hand.
 
+## Overlapping writes are named, and a script refuses the silence (2026-10-06)
+
+Run `batch-671b22` in one project. Issue 370's credit Undo took four attempts and two criteria
+resets and stopped at the attempt cap. Every rejection fell in one class: two writes on the
+same job at the same moment, an Undo against an Accept, a Confirm, a decline or a second Undo.
+Each gate found one more writer or one more reader the criterion had never named (attempt 3:
+`confirmTheOrder` reads credit and takes no lock; attempt 4: `sendBackMark` orders by
+transaction start). Both strike-2 re-checks found the criteria short of a bounded overlap
+rule, not the code short of a fix (the run's merge briefing, "370, read against its
+verdicts"). The Undo left 370 and became issue 409.
+
+The finale's candidate, `q-fin-671b22-04`, was narrow: refuse an issue that adds an undo of a
+money or status write. The human widened it in the merge walk: "Add a check but it should be
+general i dont want to add each time i face issue one by one."
+
+So class 12 covers any write that can overlap another on one record, and
+`check_overlap_rule.py` refuses on what is ABSENT, never on words that look like a write. A
+word list (undo, cancel, approve) would be the forbidden-spellings guard `coderules.md`
+rejects, and the next issue worded another way would pass it. Every hardened issue answers in
+`## Overlapping writes`; `None:` with a four-word reason is the cheap answer. The
+`Outside the list:` line copies the bound ruling `q-s4-1` gave a guard's `Forms:` list,
+because an open list of writers is what let every gate plant one more interleaving.
+
+Driven 2026-10-06: issues 370 and 409 as the tree holds them are refused, both for no
+section; `grep -l "^## Overlapping writes"` over that project's issues found none, so the script
+binds only the files a pass hands it. Strike-2 mode keeps classes 1, 5 and 9 and does not
+run the script, because it stamps nothing.
+
+## A "no new LARGE line" clause names its exemption (2026-10-11)
+
+Run `batch-6f777a` in one project. A bare "no new LARGE line" stood against 468 C9, 470 C8 and
+474 C7, and struck 470 once: a line a written ruling or a recorded default already kept still
+read as new, and the runner struck each clause by hand to add "that no written ruling or
+default keeps". The human ruled `q-fin-6f777a-04` in the session walk of 11 October: a check in
+the stamp script, not a sentence in the attacker brief.
+
+`check_large_clause.py` is the fourth refusal before the stamp. It judges each clause alone,
+inside its own sentence, and drops `~~struck~~` text first. Driven 2026-10-11 on the tree:
+468, 470 and 474 pass as the runner rewrote them; 469 is refused on criterion 10, a bare
+clause nobody struck, and on a run note that quotes the clause. The quote is accepted as a
+refusal, because the stamp runs before any run note exists.
+
 ## This file exists (2026-07-27)
 
 One of the five forks from the 2026-07-27 panel, taken by the human: three personas
 wanted the provenance out of the hot file, which is billed on every invocation.
 The incident anecdotes above moved here from SKILL.md the same day; the checklist
 itself stays in SKILL.md because it is the working instruction, not provenance.
+
+## A touched table's row policies are printed into the issue, and a script refuses the silence (2026-10-12)
+
+Run `batch-4d16a5` in one project. Issue 485 took a strike because the `pending_uploads` delete
+policy (migration 0058, `pending_uploads_delete_owner_or_admin`) admits admin, and nobody who
+wrote or attacked the criteria knew: `Touches:` named `src/model/pending-uploads.ts`, not the
+table, and the policy sat in a migration the issue never listed. The human ruled
+`q-fin4d16a5-06` in the walk of 12 October, "Agree", overturning the default: the attacker
+writes the row policies of each table in `Touches:` into the issue as a fact, with the roles
+each lets read and write (recorded in that project's rulings file).
+
+Built as a script, not a reminder. `check_row_policies.py --print` replays
+`supabase/migrations/` in file order and prints the block, so the policy text is never
+retyped; the attacker fills `Reads:` and `Writes:`, the one judgement. Without `--print` it
+refuses the stamp. Each policy line carries an 8-hex signature of its command, roles and
+expressions, so an idempotent migration that drops and recreates a policy with a new
+expression turns a stale block red.
+
+Which tables a `Touches:` reaches is measured, not listed: the tables are every `create
+table`, and a file reaches one as `public.<table>`, `.from("<table>")`, or, for a name with an
+underscore, as a bare word. A one-word table as a bare word is English (164 of one project's
+`src/` files say `jobs`). Measured 2026-10-12: all 31 of that project's tables the code reaches
+are reached as `public.<table>`; a second project reaches its 81 as `.from("<table>")`.
+
+What the reader cannot place it says so. That project's migrations 0015, 0034 and 0043 build
+policy names in a loop; the printed block carries a `Not itemised:` line for each, and the
+check refuses a block that drops one. Policies written inside `execute format(...)` with a
+literal name are read, with `%I` as `current_user`.
+
+Driven 2026-10-12 on that project: issue 485 is refused for no section, naming eight tables; its
+printed block shows `public.has_role('admin')` on the delete policy; the block with the blanks
+filled passes. Over the 580 issue files in the tracker, 287 touch a table and carry no section,
+293 pass; the script binds only the files a pass hands it. Four mutations of the script each
+went red (constant signature, the `Reads:`/`Writes:` check removed, the `execute format` path
+removed, the `Not itemised:` check removed).

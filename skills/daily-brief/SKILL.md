@@ -239,7 +239,11 @@ Where the SHA matches:
 1. Merge the feature branch to main. Fast-forward or a merge commit, whatever the
    repo's convention is; never rebase someone else's history.
 2. Rewrite every `Status: done — on branch <branch>, unmerged` in that run's
-   issues to `done`. Nothing else in the chain ever clears that suffix.
+   issues to `done`. Nothing else in the chain ever clears that suffix. Then mint
+   what the run carved, in the main checkout:
+   `python3 ~/.claude/skills/run-issues/mint_carved.py --ledger <feature>/runs/<batch>/run.md --issues <feature>/issues`.
+   It writes each carved part as a `needs-harden` issue, and `next_batch.py`
+   refuses to plan until it has run (`q-fin-671b22-01`).
 3. Remove the worktrees and branches this merge just finished:
 
    ```
@@ -272,7 +276,7 @@ earlier. The reminder was tried in two repos and obeyed in neither.
 **The walk and the cleanup are bound to the merge, not to this path.** If the
 human merged a run branch themselves — a PR taken mid-session, a manual merge —
 the next brief session runs steps 2, 3, 5 and 6 for that merge anyway: rewrite
-the statuses, clean up, walk the deployed site, report. That path is how the
+the statuses, mint the carves, clean up, walk the deployed site, report. That path is how the
 trees accumulated in the first place, so it is the one that most needs step 3.
 Where the repo reserves merge and deploy to the human, the `merge` answer
 degrades to exactly that — record the merge, clean up, run the walk.

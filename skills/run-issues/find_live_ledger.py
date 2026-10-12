@@ -77,6 +77,7 @@ Usage:
 
 import argparse
 import glob
+import json
 import os
 import re
 import dataclasses
@@ -337,13 +338,41 @@ def _touches(files, issue):
         return ()
 
 
-def _path_reason(held, held_paths, wanted, wanted_paths, spell):
-    """Why `held` and `wanted` meet by paths, or None when they do not."""
+def _ignored_roots(main_root):
+    """The repository's `overlapIgnore` roots, normalised; () when it names none.
+
+    The human, 2026-10-09: a repository names its test and evidence roots in
+    `.claude/run-isolation.json`, and a `Touches:` path under one never decides
+    an overlap. Ruling Q17's path half stops two runs building one source module
+    twice; a meet among test files is settled at the merge. Measured that day:
+    43 of 256 issue files in one tracker touched the whole `tests/`, so every issue
+    with a test met them. A list holding anything but directory forms ending in
+    `/` below the root is dropped whole, so a typo ignores nothing.
+    """
+    try:
+        with open(os.path.join(main_root, ".claude", "run-isolation.json")) as handle:
+            value = json.load(handle).get("overlapIgnore", [])
+    except (OSError, ValueError, AttributeError):
+        return ()
+    if not isinstance(value, list) or not all(
+            isinstance(root, str) and root.endswith("/") and root.strip("/")
+            and "*" not in root for root in value):
+        return ()
+    return tuple(normalise(root, main_root) for root in value)
+
+
+def _path_reason(held, held_paths, wanted, wanted_paths, spell, ignored=()):
+    """Why `held` and `wanted` meet by paths, or None when they do not.
+
+    A path under an ignored root is dropped after the no-paths test, so an
+    issue that touches only test roots touches nothing that decides a meet."""
     for issue, paths in ((wanted, wanted_paths), (held, held_paths)):
         if not paths:
             return f"{held} (meets {wanted}: {issue} carries no `Touches:` paths)"
-    for mine in held_paths:
-        for theirs in wanted_paths:
+    def counted(paths):
+        return [p for p in paths if not any(spell(p).startswith(root) for root in ignored)]
+    for mine in counted(held_paths):
+        for theirs in counted(wanted_paths):
             if meet(spell(mine), spell(theirs)):
                 return f"{held} (`{mine}` meets `{theirs}` of {wanted})"
     return None
@@ -363,6 +392,7 @@ def overlapping(candidates, issues):
     for c in runs(candidates):
         files = None
         spell = None
+        ignored = ()
         scope = parse_scope_ids(c.scope_text)
         mine = {_issue_key(own) for own in scope}
         others = [i for i in wanted if _issue_key(i) not in mine]
@@ -380,9 +410,10 @@ def overlapping(candidates, issues):
                 except (NotARepository, OSError):
                     tree_root = main_root = c.tree
                 spell = lambda item, t=tree_root, m=main_root: normalise(item, m, t)  # noqa: E731
+                ignored = _ignored_roots(main_root)
             own_paths = _touches(files, own)
             for other in others:
-                reason = _path_reason(own, own_paths, other, _touches(files, other), spell)
+                reason = _path_reason(own, own_paths, other, _touches(files, other), spell, ignored)
                 if reason:
                     held.append(reason)
         if held:

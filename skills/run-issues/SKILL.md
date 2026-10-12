@@ -456,25 +456,17 @@ header by its own agent file. A brief that restates them is refused by
    python3 ~/.claude/skills/run-issues/check_drill_coverage.py --issue <issue file> --verdict <review file> --section "## Review gate"
    ```
 
-   **`check_drill_coverage.py` refuses ONE thing** (the human, 2026-09-17): a gate
-   grading a drill-carrying criterion on the IMPLEMENTATION RECORD's evidence
-   without saying so, which is how issue 114's criterion 7 passed a review gate
-   while the drill it skipped was red 4 of 4. The repair is a sentence in the
-   verdict, not a re-spawn. Its docstring holds the wider rule that would not
-   mechanise and what it prints under `NOT GRADED` instead.
+   **`check_drill_coverage.py` refuses ONE thing** (the human, 2026-09-17): a gate grading a
+   drill-carrying criterion on the IMPLEMENTATION RECORD's evidence without saying so. The
+   repair is a sentence in the verdict, not a re-spawn; the docstring holds issue 114's story.
 
-   **It has four refusals, not three.** It exits non-zero when the heading is
-   absent, when nothing sits under it, when a row still reads `pending`, and when
-   the section sits above the newest `Implementation record, attempt N` heading —
-   `stale`, meaning the section grades an earlier diff. **A non-zero exit is
+   **`check_verdict.py` has four refusals; its docstring lists them. A non-zero exit is
    neither a pass nor a rejection: the gate did not report.** Re-spawn it, or
    carve the issue (step 9) with what the check printed in the row. Never let one gate's
    verdict stand as the round's answer while the other is missing. A gate that
    drilled on a private copy can write its verdict beside the copy instead of
    beside the branch; passing the verdict file in this run's own tree is what
-   makes that a refusal instead of a silent pass. **This is a check and not a reminder on
-   purpose:** the rule it enforces was told twice and failed a third time (the human
-   2026-08-14; `decisions.md` and the script's docstring hold the faults).
+   makes that a refusal instead of a silent pass (the human 2026-08-14; `decisions.md`).
 
    Both pass → **verify the routings**: grep each target file for the exact
    line the gate quoted as appended — gates end each routed finding with that
@@ -763,6 +755,14 @@ builds the logic and its tests and leaves the screen, then a fresh one that does
 one pass from the measured lists the project's fidelity doc names, where it keeps one. One
 `attempt N` stamp and one cap check cover both. Small-issue coalescing was retired by the human on 2026-08-15;
 `decisions.md` holds the measurement. Do not reinvent it, and do not report on it in the merge briefing.
+
+## A test outside the batch that reds on the calendar alone
+
+A **calendar red** (a test no issue touches, red on the date alone) first runs
+`python3 ~/.claude/skills/run-issues/check_main_fix.py --test <file> --base <fork branch>`. Exit 3:
+cherry-pick what it prints, re-run the file. Exit 0, or still red: one implementer and one review
+gate, own commit, no carve. Exit 2: fix what it names. Done when the file is green and the ledger
+names the commit that made it so (the human, 2026-10-11, `q-fin4a2388-06`; story in the docstring).
 
 ## Nothing finishes vaguely
 

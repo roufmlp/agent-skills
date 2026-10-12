@@ -414,6 +414,47 @@ sharpened (with evidence), question (for the human), or clean.
     from the ticket 33 audit; `decisions.md` holds the five criteria resets it
     was measured on.)
 
+12. **Overlapping writes.** A criterion that adds a write which can land on a
+    record while another write lands on it — an undo, a reversal, a status
+    change, a money change, a second actor on the same job — names three
+    things inside it, and the bound that closes the list:
+
+    ```
+    Writers: <every other write that can land on the same record meanwhile>
+    Readers: <the reads the rule binds>
+    Loser sees: <what the write that loses answers, and what it saved>
+    Outside the list: a writer or reader a gate finds that this list does not name is a register row, not a rejection.
+    ```
+
+    Every hardened issue carries `## Overlapping writes`: one bullet per such
+    criterion (`- Criterion 2, the credit Undo.`), or `- None: <why>`. Find the
+    writers in the code and in the open issues, not in the criterion's own
+    words, and read `Writers:` as the population a gate drives: each pair is
+    one interleaving, and the rule says which write wins. Where the serial
+    result of two writes is both saving, the rule says so, or it cannot hold.
+    `check_overlap_rule.py` refuses the stamp on a missing section, a `None:`
+    with no reason, and a named criterion short of a label. Whether `None:` is
+    true is this class's judgement, not the script's. (Ruled by the human
+    2026-10-06, `q-fin-671b22-04`, general by their order; `decisions.md` holds
+    issue 370's four attempts.)
+
+13. **Row policies.** `Touches:` names files, and a table is reached through
+    them, so the policy that governs a write is in a migration the issue never
+    lists. Run `check_row_policies.py --print --issue <file>`; it replays
+    `supabase/migrations/` and prints the `## Row policies` block for every
+    table the issue's files reach: each standing policy, its command, its roles
+    and its `using` and `with check` text. Paste the block into the issue, and
+    fill the two blanks on each policy line, `Reads:` and `Writes:`: the roles
+    the expression lets through. Read the expression, not the policy's name
+    (`pending_uploads_delete_owner_or_admin` admits admin; a name saying "own"
+    may not). Where a criterion's behaviour depends on who a policy admits, the
+    criterion names that role. `check_row_policies.py` refuses the stamp on a
+    touched table with no block, a policy changed by a migration since the
+    block was printed, a standing policy the block leaves out, and a blank
+    `Reads:` or `Writes:`. (Ruled by the human 2026-10-12, `q-fin4d16a5-06`: issue
+    485 took a strike on the `pending_uploads` delete policy, migration 0058,
+    which admits admin; `decisions.md` holds it.)
+
 The seam agent adds: gaps that fall between two issues, invariants one issue
 scopes that another widens, and accidental dependencies (a fix that holds only
 because of something a sibling issue deletes).
@@ -547,12 +588,18 @@ here.
     carries issues minted before the rule (128 of one tracker's 641 on
     2026-09-13), so a grade of the whole directory would block every stamp there.
     Ruled by the human 2026-09-13, issue 02 of the tracker-tooling set.
-- **Then two refusals over the same files, and stamp only when both exit 0:**
+- **Then five refusals over the same files, and stamp only when all five exit 0:**
 
     ```bash
     python3 ~/.claude/skills/run-issues/check_issue_ready.py --all-guards \
         --issue <each file this pass hardened>
     python3 ~/.claude/skills/harden-issues/check_criteria_edit.py \
+        --issue <each file this pass hardened>
+    python3 ~/.claude/skills/harden-issues/check_overlap_rule.py \
+        --issue <each file this pass hardened>
+    python3 ~/.claude/skills/harden-issues/check_large_clause.py \
+        --issue <each file this pass hardened>
+    python3 ~/.claude/skills/harden-issues/check_row_policies.py \
         --issue <each file this pass hardened>
     ```
 
@@ -561,7 +608,11 @@ here.
     its clause, and an edit that only added to a criterion a run has reset
     (class 5). Run the second before the commit that
     holds the pass's edits, because it compares against `HEAD`; after that
-    commit, pass `--base <the commit before it>`.
+    commit, pass `--base <the commit before it>`. The third refuses an issue
+    with no answer on its overlapping writes (class 12). The fourth refuses a
+    "no new LARGE line" clause whose sentence lacks "that no written ruling or
+    default keeps", so a line a ruling already kept never reads as new. The
+    fifth refuses an issue whose touched tables carry no row policies (class 13).
 - Then stamp the issue, one line under `Status:`:
   `Hardened: <date> — <n> sharpened, <m> questions resolved, <r> rulings applied.`
 - **Stamping also sets `Status: ready-for-agent`.** The two must agree, and the

@@ -915,7 +915,7 @@ def main(argv=None) -> int:
     again = (run_suite.recheck([*vitest, "run"], named_red,
                                store / "logs" / f"{stem}-recheck.log")
              if suite_exit not in (0, run_suite.COULD_NOT_START) and named_red else None)
-    flaky = named_red if again and again.get("run") and again["exit"] == 0 else []
+    flaky = named_red if again and again.get("run") and again["flake"] else []
     report = run_suite.keep_report(reports, started, kept)
     if base:
         kept.mkdir(parents=True, exist_ok=True)
@@ -960,6 +960,10 @@ def main(argv=None) -> int:
             print(f"FLAKY: {name} failed in the scoped suite and passed alone "
                   f"({again['log']}). It has flaked {counts[name]} times in this "
                   f"repository. The reading is green; do not run it again.")
+    elif again and not again.get("run"):
+        print(f"failing files not rechecked: {again['why']}")
+    elif again:
+        print(f"recheck: {run_suite.recheck_line(again)}")
 
     print(f"scoped suite exit {suite_exit}, tree {tree_id}: {len(files)} files "
           f"whose imports reach the change since {args.since}, {len(readers)} "

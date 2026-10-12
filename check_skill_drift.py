@@ -212,11 +212,14 @@ CATALOGUE: list[Predicate] = [
         "is what notices.",
         line=254,
     ),
+    # The run-issues side was shortened on 2026-10-12 to "`check_verdict.py` has
+    # four refusals; its docstring lists them", which keeps the correction and
+    # drops the "not three" and the list. The needle follows the live wording.
     Predicate(
         "C5", "present", RUN_ISSUES,
-        "It has four refusals, not three.",
+        "`check_verdict.py` has four refusals",
         "Same correction, run-issues side.",
-        line=353,
+        line=463,
     ),
     # --- C6. parallel-hunt's cron tested "no worker progress", which
     # run-issues had refuted twice in one run. Repaired.

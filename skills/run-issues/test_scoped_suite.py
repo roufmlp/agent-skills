@@ -59,7 +59,10 @@ FAKE_VITEST = textwrap.dedent("""\
         for name in flaky:
             print(f" FAIL  {name} > a suite > a case")
         sys.exit(1)
-    print(" Test Files  2 passed (2)")
+    # A recheck reports the files it was given; FAKE_RAN overrides that count.
+    ran = (os.environ.get("FAKE_RAN", str(len([a for a in args if a.endswith(".ts")])))
+           if "--no-file-parallelism" in args else "2")
+    print(f" Test Files  {ran} passed ({ran})")
     sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """)
 
@@ -632,6 +635,23 @@ class TheFlakeRecheck(Repo):
         self.assertEqual((record["exit"], record["suite_exit"], record["failing"],
                           record["flaky"]), (0, 1, [], ["tests/a.test.ts"]))
         self.assertEqual([e["stage"] for e in self.ledger()], ["scoped"])
+
+    def test_a_recheck_that_ran_other_files_is_no_flake(self):
+        done = self.scoped(env={"FAKE_FLAKY": "tests/a.test.ts", "FAKE_RAN": "2"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        record = self.records()[-1]
+        self.assertEqual((record["failing"], record["recheck"]["ran"]),
+                         (["tests/a.test.ts"], 2))
+        self.assertEqual(self.ledger(), [])
+        self.assertIn("named 1 file(s) and vitest reported 2 run", done.stdout)
+
+    def test_more_failing_files_than_the_cap_are_not_rechecked_and_it_says_why(self):
+        names = ",".join(f"tests/f{n}.test.ts" for n in range(run_suite.RECHECK_CAP + 1))
+        done = self.scoped(env={"FAKE_FLAKY": names})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(self.rechecks(), [])
+        self.assertIn("failing files not rechecked: 6 failing files, over the cap of 5",
+                      done.stdout)
 
     def test_a_file_that_fails_alone_too_stays_red(self):
         done = self.scoped(env={"FAKE_EXIT": "1", "FAKE_FAILING": "tests/a.test.ts"})

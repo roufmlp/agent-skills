@@ -253,6 +253,45 @@ Each class has shipped a real defect through green gates.
     issue: a cut strands criteria written against the whole. (Five criteria
     resets shared this shape — 296, 327, 332, 335, 419b — every one on a stamped
     file, two rejected attempts each before strike-2 found the spec at fault.)
+12. **Overlapping writes.** For every write the issue adds, find each other
+    write that can land on the same record while it runs: an undo, a reversal,
+    a status change, a money change, a second actor on the same job, the same
+    write twice. Look in the code (`grep` the table and the status the write
+    touches) and in the open issues, never only in the criterion's words. Where
+    one exists, the criterion that adds the write carries four lines inside it:
+
+    ```
+    Writers: <every other write that can land on the same record meanwhile>
+    Readers: <the reads the rule binds>
+    Loser sees: <what the write that loses answers, and what it saved>
+    Outside the list: a writer or reader a gate finds that this list does not name is a register row, not a rejection.
+    ```
+
+    Then write `## Overlapping writes` with one bullet per such criterion,
+    `- Criterion 2, the credit Undo.`, or `- None: <why no write this issue
+    adds can meet another on one record>`. Every issue gets the section. The
+    rule names which write wins each pair; where running the two one after the
+    other saves both, it says so, or no build can meet it. Which write wins,
+    when the code does not settle it, is a fork and a question. (Issue 370's
+    credit Undo: four attempts, two criteria resets, every rejection one more
+    writer or reader the criterion never named. Ruled by the human 2026-10-06,
+    `q-fin-671b22-04`.) The session runs
+    `~/.claude/skills/harden-issues/check_overlap_rule.py`, which refuses the
+    stamp on a missing section or a named criterion short of a line.
+13. **Row policies.** `Touches:` names files; the table a file reaches, and the
+    policy that governs it, sit in a migration the issue never lists. Run
+    `python3 ~/.claude/skills/harden-issues/check_row_policies.py --print --issue <file>`
+    and paste what it prints into the issue as `## Row policies`. Fill the two
+    blanks on each policy line, `Reads:` and `Writes:`, with the roles the
+    printed `using` and `with check` text lets through: read the expression, not
+    the policy's name. A criterion whose behaviour turns on who a policy admits
+    names that role. The block is a fact the script printed; never retype it, and
+    print it again after any migration lands. (Issue 485: the `pending_uploads`
+    delete policy, migration 0058, admits admin, and no criterion knew. Ruled by
+    the human 2026-10-12, `q-fin4d16a5-06`.) The session runs
+    `~/.claude/skills/harden-issues/check_row_policies.py`, which refuses the
+    stamp on a touched table with no block, a changed or unnamed policy, and a
+    blank `Reads:` or `Writes:`.
 
 ## What you write
 

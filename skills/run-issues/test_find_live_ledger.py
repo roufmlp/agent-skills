@@ -7,6 +7,7 @@ neutral. Eleven are snapshots; one names the tree it sits in. That shape is the 
 shape the tests pin.
 """
 
+import json
 import sys
 import unittest
 
@@ -622,6 +623,76 @@ class OverlapByPaths(unittest.TestCase):
         write_issue(self.root, "14", "`src/app/page.tsx`")
         write_issue(self.root, "14", "`src/lib/orders.ts`", feature="another-feature")
         self.assertEqual(self.overlap("14").returncode, 0)
+
+
+class OverlapSkipsTheRepositorysTestRoots(OverlapByPaths):
+    """The human, 2026-10-09: the repository names its test and evidence roots in
+    `.claude/run-isolation.json` under `overlapIgnore`, and a `Touches:` path
+    under one of them never decides an overlap. Ruling Q17's path half exists
+    to stop two runs building one source module twice; a test-file meet is
+    settled at the merge. Measured that day: 43 of 256 issue files in one tracker
+    touch the whole `tests/`, which made every issue with a test meet them."""
+
+    def contract(self, value):
+        os.makedirs(os.path.join(self.root, ".claude"), exist_ok=True)
+        with open(os.path.join(self.root, ".claude", "run-isolation.json"), "w") as h:
+            json.dump({"mechanism": "database-per-tree", "overlapIgnore": value}, h)
+
+    def test_a_meet_under_an_ignored_root_is_let_through(self):
+        self.contract(["tests/", "e2e/"])
+        write_issue(self.root, "12", "`src/a.ts`, `tests/`")
+        write_issue(self.root, "14", "`src/b.ts`, `tests/bills/`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_an_issue_that_touches_only_ignored_roots_is_not_a_no_paths_issue(self):
+        self.contract(["tests/", "e2e/"])
+        write_issue(self.root, "12", "`tests/`")
+        write_issue(self.root, "14", "`tests/build-checks/`, `e2e/`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_a_shared_source_path_is_still_refused(self):
+        self.contract(["tests/"])
+        write_issue(self.root, "12", "`src/a.ts`, `tests/`")
+        write_issue(self.root, "14", "`src/a.ts`, `tests/x/`")
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("`src/a.ts` meets `src/a.ts`", done.stderr)
+        self.assertNotIn("tests/", done.stderr)
+
+    def test_a_path_beside_an_ignored_root_is_not_under_it(self):
+        self.contract(["tests/"])
+        write_issue(self.root, "12", "`tests-data/`")
+        write_issue(self.root, "14", "`tests-data/a.ts`")
+        self.assertEqual(self.overlap("14").returncode, 1)
+
+    def test_no_paths_still_overlaps(self):
+        self.contract(["tests/"])
+        write_issue(self.root, "12", "`tests/`")
+        write_issue(self.root, "14", None)
+        done = self.overlap("14")
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("14 carries no `Touches:` paths", done.stderr)
+
+    def test_without_the_key_every_path_counts(self):
+        write_issue(self.root, "12", "`tests/`")
+        write_issue(self.root, "14", "`tests/bills/`")
+        self.assertEqual(self.overlap("14").returncode, 1)
+
+    def test_a_list_it_cannot_read_is_dropped_whole_so_every_path_counts(self):
+        """Fail closed: an entry that is not a directory form ending in `/`, or a
+        value that is not a list of strings, ignores nothing."""
+        write_issue(self.root, "12", "`tests/`")
+        write_issue(self.root, "14", "`tests/bills/`")
+        for bad in (["tests"], ["tests/", 7], "tests/", ["tests/**"], ["/"], [""]):
+            with self.subTest(bad=bad):
+                self.contract(bad)
+                self.assertEqual(self.overlap("14").returncode, 1)
+        with self.subTest("not json"):
+            with open(os.path.join(self.root, ".claude", "run-isolation.json"), "w") as h:
+                h.write("{")
+            self.assertEqual(self.overlap("14").returncode, 1)
 
 
 class TreeOf(unittest.TestCase):

@@ -80,6 +80,12 @@ SKILL_MARKS = [
     # Class 11.
     "**Joint satisfiability.**",
     "a cut strands criteria written against the whole",
+    # Class 12, ruling `q-fin-671b22-04`. Issue 370's four attempts are the story.
+    "**Overlapping writes.**",
+    "Every hardened issue carries `## Overlapping writes`",
+    # Class 13, ruling `q-fin4d16a5-06`. Issue 485's delete policy on one table is the story.
+    "**Row policies.**",
+    "check_row_policies.py --print --issue <file>",
     # The mark rule, and the sentence inside its parenthetical that is a rule
     # rather than an incident.
     "or the mark is refused at authoring time",
@@ -469,6 +475,67 @@ class OnePendingDefaultMark(unittest.TestCase):
             "A provisionally stamped issue is in scope for `/run-issues`' own `all`")
         sentence = self.skill[start:self.skill.index(".", start)]
         self.assertIn("Level: full", sentence)
+
+
+class OverlappingWritesAreRefusedNotRemembered(unittest.TestCase):
+    """The human's ruling `q-fin-671b22-04` of 2026-10-06: one general check that an
+    issue adding a write which can overlap another names those writers, the
+    readers the rule binds and what the losing write sees. A class nobody runs a
+    script for is the reminder the three-class test rejects, so the stamp step
+    must name the script, and both briefs must carry the class."""
+
+    def test_the_stamp_step_runs_the_script(self):
+        skill = squash(read(SKILL))
+        self.assertIn("python3 ~/.claude/skills/harden-issues/check_overlap_rule.py", skill)
+        self.assertIn("stamp only when all five exit 0", skill)
+
+    def test_the_script_is_on_disk_beside_the_skill(self):
+        self.assertTrue((HARDEN / "check_overlap_rule.py").is_file())
+
+    def test_the_attacker_works_the_class(self):
+        attacker = squash(read(AGENTS / "harden-issues-attacker.md"))
+        for mark in ("12. **Overlapping writes.**", "Loser sees:", "check_overlap_rule.py"):
+            self.assertIn(mark, attacker)
+
+    def test_the_seam_reads_writers_across_issues(self):
+        seam = squash(read(AGENTS / "harden-issues-seam.md"))
+        self.assertIn("Writers a sibling adds to another issue's record", seam)
+
+
+
+class TheLargeClauseNamesItsExemption(unittest.TestCase):
+    """The human's ruling `q-fin-6f777a-04` of 2026-10-11: the stamp step refuses a
+    "no new LARGE line" clause without "that no written ruling or default keeps".
+    A check in the stamp script, not a sentence in the attacker brief."""
+
+    def test_the_stamp_step_runs_the_script(self):
+        skill = squash(read(SKILL))
+        self.assertIn("python3 ~/.claude/skills/harden-issues/check_large_clause.py", skill)
+
+    def test_the_script_is_on_disk_beside_the_skill(self):
+        self.assertTrue((HARDEN / "check_large_clause.py").is_file())
+
+
+class RowPoliciesArePrintedNotRemembered(unittest.TestCase):
+    """The human's ruling `q-fin4d16a5-06` of 2026-10-12: the attacker writes the row
+    policies of every table in `Touches:` into the issue as a fact. A reminder to
+    look them up is the class the three-class test rejects, so the stamp step must
+    name the script, the script must sit beside the skill, and the attacker must
+    carry the class."""
+
+    def test_the_stamp_step_runs_the_script(self):
+        skill = squash(read(SKILL))
+        self.assertIn("python3 ~/.claude/skills/harden-issues/check_row_policies.py", skill)
+
+    def test_the_script_and_its_drill_are_on_disk_beside_the_skill(self):
+        self.assertTrue((HARDEN / "check_row_policies.py").is_file())
+        self.assertTrue((HARDEN / "test_check_row_policies.py").is_file())
+
+    def test_the_attacker_prints_the_block_rather_than_retyping_it(self):
+        attacker = squash(read(AGENTS / "harden-issues-attacker.md"))
+        for mark in ("13. **Row policies.**", "check_row_policies.py --print --issue <file>",
+                     "never retype it"):
+            self.assertIn(mark, attacker)
 
 
 if __name__ == "__main__":

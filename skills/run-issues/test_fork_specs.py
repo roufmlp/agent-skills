@@ -310,5 +310,68 @@ class GreenAndOther(Fork):
         self.assertEqual(done.returncode, 3, done.stdout)
 
 
+PROBE = "e2e/sign-in-probe.spec.ts"
+
+
+class TheProbe(Fork):
+    """The human, 2026-10-05, `q-fin-f831bf-02`. Run `batch-f831bf` named
+    `e2e/fidelity-shots.spec.ts` alone, so no other spec could prove the road
+    open, the gate refused 363, 366, 368 and 371, and the run waited 26 minutes
+    for the human's override. A repo now declares one probe spec in
+    `.claude/run-isolation.json`; it runs only when a skip has no proof."""
+
+    def declare_probe(self, spec=PROBE):
+        (self.repo / spec).write_text("test('x', () => {});\n")
+        contract = self.repo / ".claude" / "run-isolation.json"
+        contract.parent.mkdir(exist_ok=True)
+        contract.write_text(json.dumps({"e2eProbe": spec}))
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", "declare the probe")
+        self.fork = git(self.repo, "rev-parse", "--short=8", "HEAD")
+
+    def alone(self):
+        other = self.issue.parent / "363-alone.md"
+        other.write_text(f"## Acceptance criteria\n\n1. `{CONTRAST}` passes.\n")
+        return other
+
+    def test_a_passing_probe_clears_a_skip_named_alone(self):
+        self.declare_probe()
+        done = self.check(specs={CONTRAST: {"skipped": 1}}, issues=[self.alone()])
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn("REFUSED", done.stdout)
+        self.assertIn(f"skipped at the fork {self.fork}: {CONTRAST}", done.stdout)
+        self.assertIn(PROBE, done.stdout)
+        self.assertEqual([c["argv"][-1] for c in self.calls()].count(PROBE), 1)
+
+    def test_a_probe_that_also_skips_proves_nothing(self):
+        self.declare_probe()
+        done = self.check(specs={CONTRAST: {"skipped": 1}, PROBE: {"skipped": 1}},
+                          issues=[self.alone()])
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("REFUSED 363", done.stdout)
+        self.assertIn("road may be missing", done.stdout)
+
+    def test_the_probe_does_not_run_without_a_skip_to_clear(self):
+        self.declare_probe()
+        done = self.check(specs={CONTRAST: {"passed": 13}, CONFIG: {"passed": 4}})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn(PROBE, [c["argv"][-1] for c in self.calls()])
+
+    def test_the_probe_does_not_run_when_another_spec_proved_the_road(self):
+        self.declare_probe()
+        done = self.check(specs={CONTRAST: {"skipped": 1}, CONFIG: {"passed": 4}})
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertNotIn(PROBE, [c["argv"][-1] for c in self.calls()])
+
+    def test_a_declared_probe_absent_at_the_fork_proves_nothing(self):
+        self.declare_probe()
+        contract = self.repo / ".claude" / "run-isolation.json"
+        contract.write_text(json.dumps({"e2eProbe": "e2e/gone.spec.ts"}))
+        git(self.repo, "commit", "-q", "-am", "point at a missing probe")
+        done = self.check(specs={CONTRAST: {"skipped": 1}}, issues=[self.alone()])
+        self.assertEqual(done.returncode, 1, done.stdout)
+        self.assertIn("e2e/gone.spec.ts", done.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

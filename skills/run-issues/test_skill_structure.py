@@ -3406,5 +3406,19 @@ class TheWakeupCronIsMadeRecordedAndDeleted(unittest.TestCase):
         self.assertNotIn(mark, squash(read(SKILL)))
 
 
+
+class TheCalendarRedReadsMainFirst(unittest.TestCase):
+    """The human's ruling `q-fin4a2388-06` of 2026-10-11: a test outside the batch red on
+    the calendar alone reads main's log before the fix starts, as a script step."""
+
+    def test_the_skill_runs_the_script(self):
+        skill = squash(read(SKILL))
+        self.assertIn("python3 ~/.claude/skills/run-issues/check_main_fix.py --test", skill)
+        self.assertIn("one implementer and one review gate, own commit, no carve", skill)
+
+    def test_the_script_is_on_disk_beside_the_skill(self):
+        self.assertTrue((RUN_ISSUES / "check_main_fix.py").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

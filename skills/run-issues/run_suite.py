@@ -71,6 +71,12 @@ is green. The human, 2026-10-11, changing a ruling of 2026-10-05. One project's
 against a 450 ms bound), and each such red re-ran all 453 harness files. Each
 ledger line names its `suite`, `app` or `harness`.
 
+A recheck proves it ran the files it named before it calls a red a flake: it
+needs exit 0 and vitest's `Test Files ... (N)` footers summing to the count
+named (`files_run`, recorded as `ran`). `harness_args` appends names to any
+`run <script>`, and a script that drops them can run other files, or none,
+and exit 0. One project's script honours them; this guards the next repository.
+
 At `verify` and `correction` it may answer without a run. The perf audit of
 2026-09-28 (one project, `.scratch/workflow-audit/perf-audit-2026-09-28/`)
 counted 4 to 9 whole suites per full issue:
@@ -214,6 +220,8 @@ ANSI = re.compile(r"\x1b\[[0-9;]*m")
 # `FAIL  <a sentence> > <case>`, and a sentence is not a file.
 FAIL_LINE = re.compile(
     r"^\s*FAIL\s+(?:\|[^|]*\|\s+)?(.+?\.[cm]?[jt]sx?)(?:\s+>\s|\s+\[\s|\s*$)")
+# vitest's file footer: ` Test Files  1 failed | 2 passed (3)`.
+FILES_LINE = re.compile(r"^\s*Test Files\s.*\((\d+)\)\s*$")
 
 
 def git(tree, *args, env=None):
@@ -415,9 +423,32 @@ def recheck(command: list[str], failing: list[str], log: pathlib.Path,
                                      "name files to"}
     began = time.monotonic()
     exit_code, text = run_logged(placed, log)
+    ran = files_run(text)
     return {"run": True, "command": placed, "exit": exit_code,
             "seconds": round(time.monotonic() - began, 1), "log": str(log),
-            "failing": failing_files(text)}
+            "failing": failing_files(text), "named": len(failing), "ran": ran,
+            "flake": exit_code == 0 and ran == len(failing)}
+
+
+def files_run(text: str) -> int | None:
+    """The files vitest says it ran: the sum of the bracketed totals on every
+    `Test Files ... (N)` footer, or None where it printed none. One project's
+    harness script can run two configs, and each prints its own footer."""
+    totals = [int(match.group(1)) for match in
+              map(FILES_LINE.match, ANSI.sub("", text).splitlines()) if match]
+    return sum(totals) if totals else None
+
+
+def recheck_line(again: dict) -> str:
+    """Why a recheck that ran did not make its red a flake. A script that
+    drops the names it is given can run other files, or none, and exit 0."""
+    if again["exit"] != 0:
+        return (f"the failing files ran alone and exited {again['exit']}, so "
+                f"this red is no flake ({again['log']})")
+    reported = ("printed no Test Files line" if again["ran"] is None
+                else f"reported {again['ran']} run")
+    return (f"the recheck exited 0 but named {again['named']} file(s) and "
+            f"vitest {reported}, so this red is no flake ({again['log']})")
 
 
 def flake_ledger(tree: pathlib.Path) -> pathlib.Path:
@@ -673,7 +704,7 @@ def run_harness(stage: str, tree: pathlib.Path, tree_id: str, contract,
     again = recheck(command, named, log.with_name(f"{log.stem}-recheck.log"),
                     place=harness_args)
     reading["recheck"] = again
-    if again.get("run") and again["exit"] == 0:
+    if again.get("run") and again["flake"]:
         reading.update({"suite_exit": exit_code, "exit": 0, "failing": [],
                         "flaky": named})
         reading["flaked"] = record_flakes(tree, named, {
@@ -698,8 +729,7 @@ def harness_line(harness: dict | None) -> str:
     if again and not again.get("run"):
         lines.append(f"failing harness files not rechecked: {again['why']}")
     elif again and not harness.get("flaky"):
-        lines.append(f"harness recheck: the failing files ran alone and exited "
-                     f"{again['exit']}, so this red is no flake ({again['log']})")
+        lines.append(f"harness recheck: {recheck_line(again)}")
     return "\n".join(lines)
 
 
@@ -900,7 +930,7 @@ def main(argv=None) -> int:
     named = failing_files(text)
     again = (recheck(plain, named, store / "logs" / f"{stem}-recheck.log")
              if suite_exit not in (0, COULD_NOT_START) and named else None)
-    flaky = named if again and again.get("run") and again["exit"] == 0 else []
+    flaky = named if again and again.get("run") and again["flake"] else []
     harness = run_harness(args.stage, tree, tree_id, contract,
                           store / "logs" / f"{stem}-harness.log")
     ended = now()
@@ -944,8 +974,7 @@ def main(argv=None) -> int:
     elif again and not again.get("run"):
         print(f"failing files not rechecked: {again['why']}")
     elif again:
-        print(f"recheck: the failing files ran alone and exited {again['exit']}, "
-              f"so this red is no flake ({again['log']})")
+        print(f"recheck: {recheck_line(again)}")
     if failing:
         print("failing files:")
         for name in failing:

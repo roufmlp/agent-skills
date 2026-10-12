@@ -58,7 +58,7 @@ FAKE_SUITE = textwrap.dedent("""\
 # `test` script it plays. It appends its argv to `argv.jsonl`, writes a report
 # where `--coverage.reportsDirectory=` points when `--coverage.enabled` is
 # given, prints vitest's footer and a FAIL line per name in FAKE_FAILING, and
-# exits with FAKE_EXIT.
+# exits with FAKE_EXIT. A run named files reports that many in its footer.
 FAKE_VITEST = textwrap.dedent("""\
     import json, os, pathlib, sys
     here = pathlib.Path(__file__).resolve().parent
@@ -84,7 +84,11 @@ FAKE_VITEST = textwrap.dedent("""\
         for name in flaky:
             print(f" FAIL  {name} > a suite > a case")
         sys.exit(1)
-    print(" Test Files  3 passed (3)")
+    # A named run reports the files it was given. FAKE_RAN overrides that: a
+    # comma list prints one footer per config, and "none" prints no footer.
+    ran = os.environ.get("FAKE_RAN", str(len(named)) if named else "3")
+    for count in ran.split(",") if ran != "none" else []:
+        print(f" Test Files  {count} passed ({count})")
     print("   Duration  1.02s")
     sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """)
@@ -724,6 +728,27 @@ class TheHarnessFlakeRecheck(TheHarnessSuite):
         self.assertNotIn("flaky", record["harness"])
         self.assertEqual(self.ledger(), [])
 
+    def test_a_harness_recheck_that_ran_other_files_is_no_flake(self):
+        self.npm_contract({"FAKE_FLAKY": "tests/views/home-badge-time.test.ts",
+                           "FAKE_RAN": "0"})
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        record = self.records()[-1]
+        self.assertEqual((record["failing"], record["harness"]["recheck"]["ran"]),
+                         (["tests/views/home-badge-time.test.ts"], 0))
+        self.assertNotIn("flaky", record["harness"])
+        self.assertEqual(self.ledger(), [])
+        self.assertIn("named 1 file(s) and vitest reported 0 run", done.stdout)
+
+    def test_a_harness_recheck_with_no_summary_line_is_no_flake(self):
+        self.npm_contract({"FAKE_FLAKY": "tests/views/home-badge-time.test.ts",
+                           "FAKE_RAN": "none"})
+        done = self.run_suite(stage="finale")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertNotIn("flaky", self.records()[-1]["harness"])
+        self.assertEqual(self.ledger(), [])
+        self.assertIn("printed no Test Files line", done.stdout)
+
     def test_more_failing_harness_files_than_the_cap_are_not_rechecked(self):
         names = ",".join(f"tests/f{n}.test.ts" for n in range(run_suite.RECHECK_CAP + 1))
         bin_dir = self.npm_contract({"FAKE_FLAKY": names})
@@ -1041,6 +1066,32 @@ class TheFlakeRecheck(Repo):
                           record["flaky"]), (0, 1, [], ["tests/a.test.ts"]))
         self.assertTrue(pathlib.Path(record["recheck"]["log"]).exists())
         self.assertEqual([e["file"] for e in self.ledger()], ["tests/a.test.ts"])
+
+    def test_a_recheck_that_ran_other_files_is_no_flake_and_says_why(self):
+        bin_dir, done = self.red({"FAKE_FLAKY": "tests/a.test.ts", "FAKE_RAN": "3"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(len(self.argvs(bin_dir)), 2)
+        record = self.records()[-1]
+        self.assertEqual((record["exit"], record["failing"], record["recheck"]["ran"]),
+                         (1, ["tests/a.test.ts"], 3))
+        self.assertNotIn("flaky", record)
+        self.assertEqual(self.ledger(), [])
+        self.assertIn("named 1 file(s) and vitest reported 3 run", done.stdout)
+
+    def test_a_recheck_with_no_summary_line_is_no_flake(self):
+        _, done = self.red({"FAKE_FLAKY": "tests/a.test.ts", "FAKE_RAN": "none"})
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        record = self.records()[-1]
+        self.assertEqual((record["exit"], record["recheck"]["ran"]), (1, None))
+        self.assertEqual(self.ledger(), [])
+        self.assertIn("named 1 file(s) and vitest printed no Test Files line",
+                      done.stdout)
+
+    def test_a_recheck_split_over_two_configs_sums_both_footers(self):
+        _, done = self.red({"FAKE_FLAKY": "tests/a.test.ts,tests/b.test.ts",
+                            "FAKE_RAN": "1,1"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.records()[-1]["recheck"]["ran"], 2)
 
     def test_a_flake_line_names_the_app_suite(self):
         self.red({"FAKE_FLAKY": "tests/a.test.ts"})

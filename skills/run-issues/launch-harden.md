@@ -6,7 +6,7 @@ is not empty, so this phase runs. A run whose scope is entirely stamped never
 reads a word of this, and costs exactly what every run before the fold cost.
 
 **This file holds the phase. It does not hold the pass.** How an issue is
-attacked — the eleven classes, the write-authority bar, the stamp, the question
+attacked — the checklist classes, the write-authority bar, the stamp, the question
 form — lives in `harden-issues/SKILL.md` and in that skill's `decisions.md`,
 which is where the agents you spawn read it from. Never restate a class here:
 two copies of a checklist drift, and both read as authoritative while they

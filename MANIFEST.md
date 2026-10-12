@@ -13,6 +13,12 @@ Listed in the order the loop runs.
 | `skills/harden-issues/test_skill_structure.py` | `~/.claude/skills/harden-issues/test_skill_structure.py` (refuses a slim that carries a rule out with its story) |
 | `skills/harden-issues/check_criteria_edit.py` | `~/.claude/skills/harden-issues/check_criteria_edit.py` (refuses a hardening edit that adds a criterion beside a reset one, writes a count nobody measured, or gives an example input and outcome with no command in its clause; imports the criterion reader from `run-issues/check_issue_ready.py`) |
 | `skills/harden-issues/test_check_criteria_edit.py` | `~/.claude/skills/harden-issues/test_check_criteria_edit.py` (41 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/harden-issues/check_overlap_rule.py` | `~/.claude/skills/harden-issues/check_overlap_rule.py` (refuses a hardened issue that has not answered which of its writes can meet another write on the same record, or that names a criterion short of the four labelled lines; reads only the files handed in; shipped from 2026-10-12, with the one tracker named in its story replaced) |
+| `skills/harden-issues/test_check_overlap_rule.py` | `~/.claude/skills/harden-issues/test_check_overlap_rule.py` (20 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/harden-issues/check_large_clause.py` | `~/.claude/skills/harden-issues/check_large_clause.py` (refuses a "no new LARGE line" clause whose own sentence does not say "that no written ruling or default keeps"; reads only the files handed in; shipped from 2026-10-12) |
+| `skills/harden-issues/test_check_large_clause.py` | `~/.claude/skills/harden-issues/test_check_large_clause.py` (10 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
+| `skills/harden-issues/check_row_policies.py` | `~/.claude/skills/harden-issues/check_row_policies.py` (replays `supabase/migrations/` and prints the row policies of every table an issue touches, then refuses a stamp on an issue whose `## Row policies` section is missing, stale or unfilled; shipped from 2026-10-12, and the paragraphs under this table say how it was scrubbed) |
+| `skills/harden-issues/test_check_row_policies.py` | `~/.claude/skills/harden-issues/test_check_row_policies.py` (41 cases on migrations and sources built in `tmp`; carries no corpus and skips nothing; the fixture table, `pending_uploads`, was renamed from the author's table on 2026-10-12) |
 | `skills/run-issues/SKILL.md` | `~/.claude/skills/run-issues/SKILL.md` |
 | `skills/run-issues/decisions.md` | `~/.claude/skills/run-issues/decisions.md` |
 | `skills/run-issues/finale.md` | `~/.claude/skills/run-issues/finale.md` |
@@ -76,9 +82,10 @@ Listed in the order the loop runs.
 | `skills/run-issues/scoped_suite.py` | `~/.claude/skills/run-issues/scoped_suite.py` (runs every test whose imports reach a changed file, every test that lists a directory, every test whose text names a changed file, and the repo-wide checks, and records it the way `run_suite.py` does) |
 | `skills/run-issues/fork_specs.py` | `~/.claude/skills/run-issues/fork_specs.py` (at launch, runs each e2e spec an issue's criteria name at the fork, and refuses the issue when the spec is already red) |
 | `skills/run-issues/mint_carved.py` | `~/.claude/skills/run-issues/mint_carved.py` (after a run merges, writes each part it carved out into an issue file, or sends a whole carve back to hardening; `lib/next_batch.py` refuses to plan while one is unminted) |
+| `skills/run-issues/check_main_fix.py` | `~/.claude/skills/run-issues/check_main_fix.py` (reads the base branch's log for a fix of one red test before the run fixes it itself; exit 3 prints the commits to cherry-pick; shipped from 2026-10-12, with `run-issues/SKILL.md`, which calls it) |
 | `skills/run-compare/SKILL.md` | `~/.claude/skills/run-compare/SKILL.md` (answers whether the pipeline is getting cheaper, faster or better; reads, never writes) |
 | `skills/run-compare/test_skill_structure.py` | `~/.claude/skills/run-compare/test_skill_structure.py` (refuses a skill that grows a writing road, a threshold or a spawn) |
-| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (55 files, 2,465 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-11, in the second sync of that day, by running each file) |
+| `skills/run-issues/test_*.py` | `~/.claude/skills/run-issues/test_*.py` (56 files, 2,507 cases, grading the skill text and its scripts; 8 of them skip cases where a corpus of real ledgers is absent, which is every machine but the author's. Counted 2026-10-12 by running each file; three of the files report as pytest does and the rest as unittest does) |
 | `skills/parallel-hunt/SKILL.md` | `~/.claude/skills/parallel-hunt/SKILL.md` |
 | `skills/parallel-hunt/decisions.md` | `~/.claude/skills/parallel-hunt/decisions.md` |
 | `skills/parallel-hunt/glossary.md` | `~/.claude/skills/parallel-hunt/glossary.md` |
@@ -328,18 +335,27 @@ in the 2026-10-04 sync; a later sync may publish them:
 ~/.claude/hooks/test_issue_size_guard.py
 ```
 
-**One tool that arrived after 2026-10-07 waits, with its drill, for the sync that takes
-the skill text calling it.** `check_overlap_rule.py` and its drill are named by the live
-`harden-issues/SKILL.md` and `agents/harden-issues-attacker.md`; the published copies of
-both predate it and call neither, so publishing it now would ship a script nothing here
-runs. The sync that takes `harden-issues/SKILL.md` publishes it. `mint_carved.py` waited
-beside it until the second 2026-10-11 sync took `run-issues/SKILL.md`, which calls it, and
-shipped then with its drill:
+**`check_overlap_rule.py` waited for the sync that takes `harden-issues/SKILL.md`, and it went
+out in the 2026-10-12 sync.** It and its drill were held from 2026-10-07 because the published
+`harden-issues/SKILL.md` and `agents/harden-issues-attacker.md` predated them and called
+neither. Both texts are published now and call it, so the script ships with its drill.
+`mint_carved.py` had waited beside it until the second 2026-10-11 sync took
+`run-issues/SKILL.md`, which calls it.
 
-```withheld
-~/.claude/skills/harden-issues/check_overlap_rule.py
-~/.claude/skills/harden-issues/test_check_overlap_rule.py
-```
+**`check_row_policies.py`, `check_large_clause.py` and `run-issues/check_main_fix.py` ship
+in the same sync, each with its drill, and the first is the one that was close to a
+withhold.** Each is called by the published skill text, and `harden-issues/test_skill_structure.py`
+asserts that each sits beside the skill, so withholding one would have turned the pack red.
+Each docstring told its fault as one tracker's story, which is the reason
+`check_walk_closed.py` stays withheld. What decided it the other way is where the name sits:
+in the walk check it is in the code and in the fixtures, and here it is in the docstring
+prose only. The scrub was the one this pack already makes elsewhere: the product name
+became "one tracker", a path to a run's briefing was dropped, the person became "the human",
+and issue numbers, migration numbers and run ids stayed, as they do in the published
+`SKILL.md` files. The one change to a drill was a rename: the table in the author's story is
+`pending_uploads` in the published `check_row_policies` drill, `SKILL.md`, the attacker
+brief and `decisions.md`. The script reads the table names from the migrations it is
+given, so the rename changes no behaviour, and the 41 cases pass on the renamed fixtures.
 
 **The run harness is withheld, and this is the decision rather than an oversight.**
 `~/.claude/skills/run-issues/harness/` is a fixture project plus a driver that runs a

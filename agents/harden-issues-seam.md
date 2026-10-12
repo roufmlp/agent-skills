@@ -32,6 +32,12 @@ the human 2026-09-07.
 - **Accidental dependencies.** A criterion that holds only because of something a
   sibling issue deletes, moves or renames. These pass in isolation and fail in
   sequence.
+- **Writers a sibling adds to another issue's record.** Each issue names, in
+  `## Overlapping writes` and the criteria it points at, the other writes that
+  can land on its record (class 12). Issue A's `Writers:` lists three; issue B
+  adds a fourth write to the same job. Add B's write to A's list, or A's `None:`
+  is now false. Issue 370's Undo met an Accept, a Confirm, a decline and a second
+  Undo, and its criterion named none of them.
 - **Ordering hazards across the set.** Two migrations whose order matters, where
   neither issue says so. A boundary change in one issue that silently constrains
   another.
