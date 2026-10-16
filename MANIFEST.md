@@ -174,6 +174,8 @@ turns the commands into a shape the reader's project fills. A test that pins the
 literal commands then grades a machine nobody else has. The rule they exist for
 survives in the published prose; the pinning does not travel.
 
+**`check_fidelity_claim.py` and its drill are withheld until the sync that takes `harden-issues/SKILL.md`, for the same reason as `retry_brief.py` below.** Class 14 of the live `SKILL.md` and the attacker brief call the script, and neither published copy carries class 14 yet. Its docstring and fixtures also name one project's issues, which that sync scrubs. Withheld on 2026-10-16.
+
 **`retry_brief.py` and its drill are withheld until the sync that takes `SKILL.md`
 whole, and the reason is the pair rather than the script.** Step 7 of `SKILL.md` is
 what calls it, and the published `SKILL.md` is about 120 lines behind the live copy
@@ -635,6 +637,8 @@ have, which is worse than having no hook:
 ~/.claude/hooks/risk_path_reader.py
 ~/.claude/hooks/headless-chrome-guard.py
 ~/.claude/hooks/test_headless_chrome_guard.py
+~/.claude/skills/harden-issues/check_fidelity_claim.py
+~/.claude/skills/harden-issues/test_check_fidelity_claim.py
 ```
 
 ## The coverage check
