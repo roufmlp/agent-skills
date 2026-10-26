@@ -135,7 +135,10 @@ vocabulary is the run-issues skill's and it grows; a tool that guessed an unknow
 status meant "available" would hand out an issue another session is building, and a
 second writer on one issue is how a run rejects correct work. Issues a run holds are
 listed under the table with the run id and the row status, so a missing issue explains
-itself. A row naming an issue no file carries is also a refusal.
+itself. A row naming an issue no file carries is also a refusal, unless it reads
+`done`: a done row holds nothing to offer, and a blocker naming that number still
+refuses. One run added a test-only fix as its own row, with no issue file, and on
+2026-10-27 that one row refused every batch on one tracker.
 
 THE TWO BLOCKED STATUSES, AND WHY BOTH RELEASE. `blocked (criteria)` is a run that
 never started an issue. Plain `blocked` is the SPENT ATTEMPT CAP: three implementers
@@ -801,6 +804,8 @@ def load_ledgers(runs_dir: Path, issues: dict) -> list:
         mtime = ledger.stat().st_mtime
         for issue_id, status in ledger_rows(text):
             if issue_id not in issues:
+                if status == "done":
+                    continue
                 raise Refusal(
                     f"run {run_id}: ledger row for issue {issue_id}, and no file carries "
                     "that number")

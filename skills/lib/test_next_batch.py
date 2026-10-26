@@ -383,6 +383,17 @@ class Ledgers(unittest.TestCase):
     def tearDown(self):
         self._tmp.cleanup()
 
+    def test_a_done_row_no_file_carries_is_read_as_nothing(self):
+        """One run added a test-only fix as its own row mid-run, `done`, with no
+        issue file. On 2026-10-27 the tool refused every batch on one tracker over
+        it. A `done` row holds nothing to offer, and a blocker naming that number
+        still refuses in `load_issues`."""
+        write_issue(self.root, "07-catalogue", "ready-for-agent")
+        write_ledger(self.feature, "batch-f562a0", [("1b", "done")])
+        out = run(self.root, "--count", "1")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("/run-issues 07\n", out.stdout)
+
     def test_a_done_row_on_a_MERGED_run_hides_the_issue_and_satisfies_a_dependent(self):
         """The 2026-09-13 case, now written with the merge it always assumed.
 
@@ -574,8 +585,11 @@ class Ledgers(unittest.TestCase):
         self.assertEqual(out.stdout, "")
 
     def test_an_issue_row_naming_no_issue_file_refuses(self):
+        """Not `done`, the row may be an issue whose file went missing while a run
+        builds it; the tool will not guess. A `done` row reads as nothing: see
+        `test_a_done_row_no_file_carries_is_read_as_nothing`."""
         write_issue(self.root, "40-ci", "ready-for-agent", blocked_by=None)
-        write_ledger(self.feature, "batch-abc123", [("99", "done")])
+        write_ledger(self.feature, "batch-abc123", [("99", "in-progress")])
         out = run(self.root, "--count", "1")
         self.assertEqual(out.returncode, 1)
         self.assertIn("99", out.stderr)

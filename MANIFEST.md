@@ -107,7 +107,7 @@ Listed in the order the loop runs.
 | `skills/lib/run_python_suites.py` | `~/.claude/skills/lib/run_python_suites.py` (runs every `test_*.py` under `~/.claude/skills` and `~/.claude/hooks` from its own directory, and refuses a suite that executed fewer checks than it defines) |
 | `skills/lib/test_run_python_suites.py` | `~/.claude/skills/lib/test_run_python_suites.py` (65 cases; the fixture trees are built in `tmp`, so it carries no corpus and skips nothing) |
 | `skills/lib/next_batch.py` | `~/.claude/skills/lib/next_batch.py` (orders the next batch of issues so every blocker lands first, and refuses an order it cannot honour) |
-| `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (120 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
+| `skills/lib/test_next_batch.py` | `~/.claude/skills/lib/test_next_batch.py` (129 cases on fixture trees built in `tmp`; carries no corpus and skips nothing) |
 | `skills/lib/check_claude_home.py` | `~/.claude/skills/lib/check_claude_home.py` (refuses a python file that resolves `~/.claude` by climbing parents from `__file__`, which a git worktree breaks) |
 | `skills/lib/check_issue_size.py` | `~/.claude/skills/lib/check_issue_size.py` (counts an issue file's acceptance criteria and refuses one bigger than any issue this pipeline has finished; the count replaces a judgement, and the docstring carries the measured spans it was chosen on) |
 | `skills/lib/test_check_issue_size.py` | `~/.claude/skills/lib/test_check_issue_size.py` (23 cases on fixtures built in `tmp`; carries no corpus and skips nothing) |
