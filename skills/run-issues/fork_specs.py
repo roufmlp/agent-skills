@@ -15,6 +15,13 @@ the eight issues.
 
 ## What it does
 
+0. Refuses, exit 3, a `--harness` that is not a known command, naming it,
+   before anything runs. Ruling `q-fin-d7a848-03` of 2026-10-27: at the
+   launch of run `batch-d7a848` the value carried `(playwright.config.ts,`
+   after the runner, Playwright read it as a grep pattern and failed the spec
+   with a SyntaxError, and the red reading had to be cut from the ledger.
+   Every harness in every run ledger on 2026-10-27 was `npx playwright test`
+   (511 lines), so that is the one form; the runner may be named by a path.
 1. Refuses, exit 3, a tree with uncommitted work outside run state: that tree
    is not the fork, and its reading would not be the fork's.
 2. Reads every issue's `## Acceptance criteria` through `criteria_ids.py`, the
@@ -67,7 +74,7 @@ briefing still names the spec and its red cases, marked as overridden.
 ## Exits
 
 0 every issue may run; 1 one or more issues refused; 3 nothing is known: the
-tree is not the fork, an issue file will not open, or the harness cannot
+harness is not a known command, the tree is not the fork, an issue file will not open, or the harness cannot
 start.
 """
 
@@ -97,6 +104,8 @@ COUNT = re.compile(r"^\s*(\d+) (failed|flaky|passed|skipped|did not run|interrup
 # A case under the `N failed` count: `[project] › file:line:col › title ───`.
 CASE = re.compile(r"^\s*(?:\[[^\]]+\] › )?\S+:\d+:\d+ › (.+?)\s*─*\s*$")
 BLOCKED = "blocked (fork spec red)"
+# The harness forms the check knows, runner first; the spec is appended.
+HARNESSES = (("npx", "playwright", "test"),)
 CONTRACT = ".claude/run-isolation.json"
 
 
@@ -211,6 +220,17 @@ def block_rows(ledger: pathlib.Path, ids: list[str]) -> list[str]:
     return missing
 
 
+def known_harness(harness: str) -> list[str] | None:
+    """The harness as argv when it is a known form, else None."""
+    try:
+        command = shlex.split(harness)
+    except ValueError:
+        return None
+    if not command or (pathlib.PurePath(command[0]).name, *command[1:]) not in HARNESSES:
+        return None
+    return command
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--tree", required=True, help="The run worktree, at the fork.")
@@ -224,7 +244,12 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     tree = pathlib.Path(args.tree).resolve()
     ledger, briefing = pathlib.Path(args.ledger), pathlib.Path(args.briefing)
-    command = shlex.split(args.harness)
+    command = known_harness(args.harness)
+    if command is None:
+        print(f"REFUSED: the harness `{args.harness}` is not a known command. "
+              f"Known: {', '.join(' '.join(form) for form in HARNESSES)}, the "
+              f"spec appended. Nothing ran.")
+        return UNKNOWN
 
     try:
         fork = git(tree, "rev-parse", "--short=8", "HEAD")

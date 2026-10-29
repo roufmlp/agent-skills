@@ -188,7 +188,8 @@ HARNESS_STAGES = ("issue", "verify", "correction", "scoped")
 # `make_copy.py` writes the run tree's path here, in the copy's git config.
 SOURCE_KEY = "run-suite.source"
 MAKE_COPY = ("python3 ~/.claude/skills/run-issues/make_copy.py --tree <the run "
-             "worktree> --dest <a path naming the issue and your role>")
+             "worktree> --dest <a path naming the issue and your role> "
+             "--own-node-modules")
 VITEST = {"vitest", "vitest.mjs"}
 PACKAGE_MANAGERS = {"npm", "pnpm", "yarn", "bun"}
 LAUNCHERS = {"npx", "pnpx", "bunx", "node", "nohup", "time", "caffeinate"}
