@@ -33,12 +33,11 @@ the fix addresses the cause or hides the symptom, and whether the test would sti
 fail if the defect came back. A variant of it grades fixes that touch money,
 authentication or secrets against a stricter rubric.
 
-**Promotion** — the human's step, taken outside the loop: they turn a register row
-into an issue file by their own hand. No role in the loop writes an issue file. The
-author's setup refuses a subagent that tries to create one with
-`gate-issue-write-guard.py`, which this pack does not ship, so here the rule is one
-the roles hold. A round ends with its leftover rows at `deferred`, waiting
-for them.
+**Promotion** — the human's step, taken outside the loop: he turns a register row into
+an issue file by his own hand. No role in the loop writes an issue file, and
+`gate-issue-write-guard.py` refuses a subagent that tries to create one (issue 36 of
+the tracker-tooling set). A round ends with its leftover rows at `deferred`, waiting
+for him.
 
 ## The units of work
 

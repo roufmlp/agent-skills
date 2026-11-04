@@ -9,3 +9,7 @@
 # Python bytecode from running the pack's test suites
 __pycache__/
 *.pyc
+
+# Test caches
+.pytest_cache/
+node_modules/

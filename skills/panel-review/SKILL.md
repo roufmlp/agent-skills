@@ -25,9 +25,8 @@ at step 5.
 
 1. **Pin the surface and the target.** Every claim cites a location, so there has to
    be one: a file, a set of files, a repo path plus a named design, or — for an
-   unwritten decision — a short brief this pass writes and the human confirms. Too
-   vague to quote is not this pass's job; get the artefact written down first, then
-   panel what was written.
+   unwritten decision — a short brief this pass writes and the human confirms. Too vague
+   to quote is not this pass's job; run `/grill-me` first, then panel the brief.
    *Done when* a path exists, plus one line naming who must act on the artefact and
    what they should do next.
 
@@ -54,7 +53,7 @@ at step 5.
    When the gate returns, read the skeleton back before step 6 touches anything:
 
    ```bash
-   python3 ~/.claude/skills/lib/check_verdict.py --file <run dir>/gate.md
+   python3 ~/.claude/skills/workflow/lib/check_verdict.py --file <run dir>/gate.md
    ```
 
    *Done when* that exits zero — no row still reads `pending`, every finding carries
@@ -88,8 +87,8 @@ Four rules on the panel this produces:
    same reason are one persona. Spend the freed seat on an angle nobody holds.
 3. **Adversarial is a stance, not a seat.** Every persona tries to break its own
    concern rather than describe it. A dedicated red-team seat duplicates the others.
-4. **Where the artefact is a system, over-engineering has a payer too** — the human,
-   in complexity and cost. Derive that persona.
+4. **Where the artefact is a system, over-engineering has a payer too** — the human, in
+   complexity and cost. Derive that persona.
 
 Worked derivations, one prose and one system:
 [`references/deriving-a-panel.md`](references/deriving-a-panel.md). Read before step 2.
@@ -161,8 +160,8 @@ and the cost controls:
   may only propose material the artefact already supports, and must name what its
   addition costs.
 - **Never resolve a disagreement by inventing a fact.** Unresolved is an answer.
-- Project constraints travel with every persona verbatim.
-- The report follows whatever writing rules the project holds (mine:
-  [`steering/writingrules.md`](../../steering/writingrules.md)).
-- **The source artefact is edited only when the human asked for the edit**, not when
-  they asked for the review. Never delete the original.
+- Project constraints travel with every persona verbatim — for career copy, titles and
+  dates literal, and nothing published that is not yet public.
+- The report follows `~/.claude/writingrules.md`.
+- **The source artefact is edited only when the human asked for the edit**, not when he
+  asked for the review. Never delete the original.

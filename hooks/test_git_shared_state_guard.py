@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Tests for git-shared-state-guard.
 
-The guard for "one git index serves every session in the main checkout".
-Ruling 12 of its own grilling made the build one sitting rather
+Ticket 41 of the pilot-delivery map, "one git index serves every session in the
+main checkout", grilled 2026-09-07. Ruling 12 made the build one sitting rather
 than a set of issues, on the grounds that the guard's whole behaviour is a test
 file. This is that file.
 
@@ -83,7 +83,7 @@ class TestRuling5WideStagingInTheMainCheckout(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def test_add_of_a_directory_is_refused(self):
-        """The class instance one committed: `.scratch/example-feature/`
+        """The class instance one committed: `.scratch/tenderflow-pilot/`
         holds the register and every run."""
         code, _ = run_hook("git add sub")
         self.assertEqual(code, 2)
@@ -110,7 +110,7 @@ class TestRuling7EveryCommitNamesItsPaths(unittest.TestCase):
     paths and one committed first, taking the other's files with it."""
 
     def test_a_bare_commit_is_refused(self):
-        code, _ = run_hook("git commit -m 'a message naming one change'")
+        code, _ = run_hook("git commit -m 'ticket 36 sitting 1'")
         self.assertEqual(code, 2)
 
     def test_a_commit_naming_its_paths_passes(self):
@@ -268,6 +268,80 @@ class TestRuling13TheStashRuleInEveryCheckout(unittest.TestCase):
         self.assertNotIn("shares one git index", err)
 
 
+class TestSkippedHooks(unittest.TestCase):
+    """Workflow v2 ticket 33: the careful lane's checks are git hooks, so a
+    command that skips or moves them is refused in every checkout."""
+
+    REFUSED = (
+        "git commit --no-verify -m x -- a.txt",
+        "git commit -n -m x -- a.txt",
+        "git commit -anm x",
+        "git merge --no-verify side",
+        "git merge -n side",
+        "git push --no-verify origin main",
+        "git rebase --no-verify main",
+        "git -c core.hooksPath= commit -m x -- a.txt",
+        "git -c core.hookspath=/tmp/x status",
+        "git -ccore.hooksPath=/dev/null log",
+        "git --config-env=core.hooksPath=X status",
+        "git config core.hooksPath .githooks",
+        "git config core.hooksPath /tmp/x",
+        "git config --global core.hooksPath /tmp/x",
+        "git config --unset core.hooksPath",
+        "git config set core.hooksPath .githooks",
+        "git config --local --add core.hooksPath x",
+        "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0= git commit -m x -- a.txt",
+        "cd sub && git commit -n -m x -- b.txt",
+        "echo x && git -c core.hooksPath= commit -m x -- a.txt",
+    )
+    PASSED = (
+        "git commit -m x -- a.txt",
+        "git push -n origin main",
+        "git clean -n",
+        "git config --get core.hooksPath",
+        "git config core.hooksPath",
+        "git config --list",
+        "git config -l",
+        "git config get core.hooksPath",
+        "git config branch.main.mergeoptions --no-ff",
+        "git -c user.name=t commit -m x -- a.txt",
+        "git log --oneline -n 3",
+        "git stash list -n",
+        "sh .githooks/prepare",
+        "npm run prepare",
+        "echo 'git commit --no-verify'",
+        "git commit -m 'the guard refuses --no-verify and core.hooksPath' -- a.txt",
+        "git log --grep=core.hooksPath",
+    )
+
+    def test_refused_in_a_worktree(self):
+        for command in self.REFUSED:
+            with self.subTest(command=command):
+                code, err = run_hook(command, cwd=TREE)
+                self.assertEqual(code, 2, err)
+                self.assertIn("git hook", err)
+                self.assertIn("prepare", err)
+
+    def test_refused_in_the_main_checkout_too(self):
+        for command in self.REFUSED[:1] + self.REFUSED[7:8] + self.REFUSED[11:12]:
+            with self.subTest(command=command):
+                code, _ = run_hook(command)
+                self.assertEqual(code, 2)
+
+    def test_passed(self):
+        for command in self.PASSED:
+            with self.subTest(command=command):
+                code, err = run_hook(command, cwd=TREE)
+                self.assertEqual(code, 0, err)
+
+    def test_the_refusal_names_the_road_and_the_ticket(self):
+        _, err = run_hook("git commit --no-verify -m x -- a.txt", cwd=TREE)
+        self.assertIn("Fix what the hook refused", err)
+        self.assertIn("sh .githooks/prepare", err)
+        self.assertIn("Ticket 33 of the workflow v2 map", err)
+        self.assertNotIn("shares one git index", err)
+
+
 def merge_fixture(name):
     """A main checkout holding a conflicted merge, resolved and staged.
 
@@ -317,8 +391,8 @@ def run_hook_out(command, cwd):
 
 class TestConcludingAMergeInTheMainCheckout(unittest.TestCase):
     """A conflicted merge cannot be concluded by a commit that names paths:
-    git refuses "a partial commit during a merge". One measured session had to
-    conclude such a merge with plumbing, past this guard. A merge
+    git refuses "a partial commit during a merge". On 2026-09-23 session S4 had
+    to conclude merge `14e658d` in the skills checkout with plumbing. A merge
     commit passes when every staged path is one the merge brings, and says
     which paths it carries. Anything else staged keeps ruling 7's refusal."""
 
@@ -364,7 +438,7 @@ class TestConcludingAMergeInTheMainCheckout(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def test_a_bare_commit_with_no_merge_in_progress_is_still_refused(self):
-        code, out, _ = run_hook_out("git commit -m 'a message naming one change'", MAIN)
+        code, out, _ = run_hook_out("git commit -m 'ticket 36 sitting 1'", MAIN)
         self.assertEqual(code, 2)
         self.assertEqual(out, "")
 
@@ -408,7 +482,7 @@ class TestItCannotBeReachedAround(unittest.TestCase):
 
     def test_a_cd_into_the_main_checkout_is_followed(self):
         """Instance one, byte for byte: the `cd` was meant to reach a file."""
-        code, _ = run_hook(f"cd {MAIN} && git add -A && git commit -m 'a message naming one change'",
+        code, _ = run_hook(f"cd {MAIN} && git add -A && git commit -m 'ticket 36'",
                            cwd=TREE)
         self.assertEqual(code, 2)
 
@@ -461,12 +535,9 @@ class TestRuling4TheRefusalNamesTheRoad(unittest.TestCase):
         _, err = run_hook("git add -A")
         self.assertIn(MAIN, err)
 
-    def test_every_refusal_says_why_naming_paths_is_not_enough(self):
-        """H2 keeps a tracker id out of the message, so the evidence has to
-        travel as the fact itself: the second instance staged its two paths by
-        name and lost them to another session's wide add regardless."""
+    def test_every_refusal_cites_the_ticket(self):
         _, err = run_hook("git add -A")
-        self.assertIn("does not protect it", err)
+        self.assertIn("Ticket 41", err)
 
 
 class TestItRefusesNothingElse(unittest.TestCase):

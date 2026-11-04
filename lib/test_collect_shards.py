@@ -1,0 +1,1187 @@
+#!/usr/bin/env python3
+"""Tests for collect_shards.
+
+The register and the decisions queue are generated files. Their content lives
+in shards, one per writing worktree, committed on that worktree's own branch
+(ticket 38 of the pilot-delivery map, the one-run-per-feature layout ticket,
+rulings 5, 14, 15 and 18).
+
+Two facts drive every test below, and both were measured on 2026-09-05 rather
+than assumed.
+
+A shard name appears in more than one tree. Run state is committed, so a tree
+branched from main carries every shard main held at the cut, and a merged
+branch puts its own shard into main. Twelve copies of one name is the ordinary
+case, and only one of them is the live one. That is the same trap
+`find_live_ledger.py` was rewritten for on 2026-09-05, where a run counted
+twice filled a two-run ceiling.
+
+The generated file is a PURE concatenation, with no header of its own. Ruling
+14 says every existing citation of `register.md` stays true, and the live file
+carries line citations — `register.md:1986` in the daily brief's applied log and
+`register.md:16-19` in `scripts/watch-production.mjs`. One added line at the top
+falsifies both.
+"""
+
+import contextlib
+import io
+import os
+import tempfile
+import unittest
+
+from collect_shards import (
+    ANSWERED,
+    CLOSED,
+    HISTORY,
+    MAIN,
+    QUEUE,
+    REGISTER,
+    RULED,
+    collect,
+    drift,
+    main,
+    my_shard,
+    render,
+    ruled_entries,
+    EmptyRefused,
+    PoisonRefused,
+    SplitRefused,
+    control_bytes,
+    split,
+    unmatched_answers,
+    write,
+    writer_name,
+)
+
+
+def make(root, relative, text=""):
+    """Write `text` to `root/relative`, making the directories it needs."""
+    path = os.path.join(root, relative)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    return path
+
+
+class TreeFixture(unittest.TestCase):
+    """A main checkout plus two linked worktrees, as directories only.
+
+    Every function under test takes the tree list as an argument, so nothing
+    here needs a real git repository.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.main = os.path.join(self.tmp.name, "procurement")
+        self.tree_a = os.path.join(self.main, ".claude", "worktrees", "run-a")
+        self.tree_b = os.path.join(self.main, ".claude", "worktrees", "run-b")
+        for tree in (self.main, self.tree_a, self.tree_b):
+            os.makedirs(tree, exist_ok=True)
+        self.trees = [self.main, self.tree_a, self.tree_b]
+        self.feature = "tenderflow-pilot"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def run_main(self, *argv):
+        """`main()` with this fixture's trees, capturing both streams."""
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(list(argv) + ["--trees", *self.trees])
+        return code, out.getvalue(), err.getvalue()
+
+    def shard(self, tree, name, text, owner=None):
+        """Write shard `name` into `tree`, under the directory `owner` owns.
+
+        `owner` defaults to the tree's own name, which is the ordinary case: a
+        writer writes inside its own tree. Pass it to plant a stale copy of
+        another tree's shard, which is what every worktree carries after a cut.
+        """
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/{self.feature}/register.d/{holder}/{name}.md", text)
+
+
+class TwoWritersInOneTreeTest(TreeFixture):
+    """The fault that decided the shard key, found 2026-09-05 while updating
+    the hunt briefs.
+
+    `/parallel-hunt` ruling 6 keeps the finder and the fixer in ONE worktree, on
+    purpose: a second tree would hide the finder's pinning tests from the fixer.
+    A run's two gates can also run at once in one tree. Agents write with a
+    read-modify-write edit, not an appending open, so two of them on one file
+    lose a row exactly the way the single register did — which is the fault this
+    whole ticket exists to close.
+
+    So the shard is keyed by the writer's row PREFIX, inside the writer's own
+    tree (rulings 5 and 15 together). `rg454` and `vg454` are two files.
+    """
+
+    def test_two_writers_in_one_tree_get_two_shards(self):
+        a = my_shard(REGISTER, self.tree_a, self.trees, self.feature, prefix="rg454")
+        b = my_shard(REGISTER, self.tree_a, self.trees, self.feature, prefix="vg454")
+
+        self.assertNotEqual(a, b)
+        self.assertTrue(a.endswith(os.path.join("run-a", "rg454.md")), a)
+        self.assertTrue(b.endswith(os.path.join("run-a", "vg454.md")), b)
+
+    def test_both_shards_reach_the_generated_register(self):
+        self.shard(self.tree_a, "rg454", "| rg454-01 | from the review gate |\n")
+        self.shard(self.tree_a, "vg454", "| vg454-01 | from the verify gate |\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature))
+
+        self.assertIn("rg454-01", out)
+        self.assertIn("vg454-01", out)
+
+    def test_a_writer_with_no_prefix_falls_back_to_the_tree_s_own_name(self):
+        """A hand session and the production watcher carry no row prefix."""
+        path = my_shard(REGISTER, self.tree_a, self.trees, self.feature)
+        self.assertTrue(path.endswith(os.path.join("run-a", "run-a.md")), path)
+
+    def test_a_prefix_that_would_escape_its_directory_is_refused(self):
+        with self.assertRaises(ValueError):
+            my_shard(REGISTER, self.tree_a, self.trees, self.feature, prefix="../main")
+
+
+class ReservedNameTest(TreeFixture):
+    """A writer may not claim a name the renderer treats as machinery.
+
+    `answered`, `closed` and `00-history` are read, not rendered, or sorted
+    first. Handing one to an ordinary writer makes everything it writes vanish
+    with no error, which is the fault this whole ticket exists to close.
+    """
+
+    def test_a_writer_cannot_claim_the_briefs_answered_shard(self):
+        with self.assertRaises(ValueError):
+            my_shard(QUEUE, self.tree_a, self.trees, prefix=ANSWERED)
+
+    def test_a_writer_cannot_claim_the_history_shard(self):
+        with self.assertRaises(ValueError):
+            my_shard(REGISTER, self.tree_a, self.trees, self.feature, prefix=HISTORY)
+
+    def test_promotion_claims_closed_by_saying_so(self):
+        """`closed` is promotion's own road, and it opts in explicitly."""
+        path = my_shard(REGISTER, self.tree_a, self.trees, self.feature,
+                        prefix=CLOSED, machinery=True)
+        self.assertTrue(path.endswith(os.path.join("run-a", "closed.md")), path)
+
+    def test_a_gate_that_types_closed_by_accident_is_refused(self):
+        with self.assertRaises(ValueError):
+            my_shard(REGISTER, self.tree_a, self.trees, self.feature, prefix=CLOSED)
+
+    def test_closed_is_an_ordinary_name_on_the_queue_which_never_reads_it(self):
+        """A name is reserved on the board that reads it, and nowhere else."""
+        path = my_shard(QUEUE, self.tree_a, self.trees, prefix=CLOSED)
+        self.assertTrue(path.endswith(os.path.join("run-a", "closed.md")), path)
+
+    def test_the_brief_claims_answered_by_saying_so(self):
+        path = my_shard(QUEUE, self.tree_a, self.trees, prefix=ANSWERED, machinery=True)
+        self.assertTrue(path.endswith(os.path.join("run-a", "answered.md")), path)
+
+
+class ClosedIdShapeTest(TreeFixture):
+    def test_a_comment_line_in_closed_md_closes_nothing(self):
+        """Measured 2026-09-05: a bare-word matcher read ten ids out of one
+        sentence, `ID` among them, and `ID` is the register's own table header."""
+        self.shard(self.main, HISTORY,
+                   "| ID | one-line summary | audience |\n"
+                   "| rg1-01 | a live row | operator |\n")
+        self.shard(self.tree_a, CLOSED,
+                   "Closed by promotion, run batch-b5e96d, 2026-09-05. One ID per line.\n"
+                   "rg1-01\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("| ID | one-line summary", out)
+        self.assertNotIn("rg1-01", out)
+
+
+class OwnershipTest(TreeFixture):
+    def test_a_shard_is_owned_by_the_tree_its_directory_names(self):
+        """The stale copy in the main checkout loses to the live one."""
+        self.shard(self.main, "rg454", "stale, cut at the branch point\n", owner="run-a")
+        live = self.shard(self.tree_a, "rg454", "the row written this morning\n")
+
+        chosen = collect(REGISTER, self.trees, feature=self.feature)
+
+        self.assertEqual([path for _, path in chosen], [live])
+
+    def test_a_shard_whose_owning_tree_is_gone_falls_back_to_the_main_copy(self):
+        """A merged run's tree is removed; its shard survives in main."""
+        merged = self.shard(self.main, "rg390", "rows from a run that merged\n",
+                            owner="run-gone")
+
+        chosen = collect(REGISTER, self.trees, feature=self.feature)
+
+        self.assertEqual([path for _, path in chosen], [merged])
+
+    def test_a_stray_copy_in_a_third_tree_never_wins(self):
+        """Only the owning tree and the main checkout can hold the live copy."""
+        self.shard(self.tree_b, "rg454", "a copy that rode in on a branch\n", owner="run-a")
+        live = self.shard(self.tree_a, "rg454", "the live rows\n")
+
+        chosen = collect(REGISTER, self.trees, feature=self.feature)
+
+        self.assertEqual([path for _, path in chosen], [live])
+
+
+class OrderTest(TreeFixture):
+    def test_history_leads_and_the_rest_sort_by_name(self):
+        """`00-history.md` first, so today's file regenerates byte for byte."""
+        self.shard(self.main, "00-history", "everything written before the split\n")
+        self.shard(self.tree_b, "run-b", "b\n")
+        self.shard(self.tree_a, "run-a", "a\n")
+
+        names = [name for name, _ in collect(REGISTER, self.trees, feature=self.feature)]
+
+        self.assertEqual(names, ["00-history", "run-a", "run-b"])
+
+
+class WriterNameTest(TreeFixture):
+    def test_the_main_checkout_writes_the_shard_called_main(self):
+        self.assertEqual(writer_name(self.main, self.trees), "main")
+
+    def test_a_worktree_writes_the_shard_named_after_itself(self):
+        self.assertEqual(writer_name(self.tree_a, self.trees), "run-a")
+
+    def test_a_directory_inside_a_worktree_names_that_worktree(self):
+        deep = os.path.join(self.tree_a, "src", "lib")
+        os.makedirs(deep, exist_ok=True)
+        self.assertEqual(writer_name(deep, self.trees), "run-a")
+
+
+class RenderTest(TreeFixture):
+    def test_one_history_shard_regenerates_the_file_byte_for_byte(self):
+        """Day one: the whole of today's register becomes `00-history.md`.
+
+        This is the test ruling 14 rests on. If the generated bytes differ from
+        the file that was split, every line citation into `register.md` moves.
+        """
+        original = "# Register\n\nrow one\nrow two\n"
+        self.shard(self.main, HISTORY, original)
+
+        self.assertEqual(render(collect(REGISTER, self.trees, feature=self.feature)), original)
+
+    def test_a_file_with_no_final_newline_survives_being_the_only_shard(self):
+        original = "# Register\n\nthe last row, unterminated"
+        self.shard(self.main, HISTORY, original)
+
+        self.assertEqual(render(collect(REGISTER, self.trees, feature=self.feature)), original)
+
+    def test_a_shard_that_does_not_end_in_a_newline_never_runs_into_the_next(self):
+        self.shard(self.main, HISTORY, "history")
+        self.shard(self.tree_a, "rg1", "| rg1 | a row |\n")
+
+        self.assertEqual(
+            render(collect(REGISTER, self.trees, feature=self.feature)),
+            "history\n| rg1 | a row |\n",
+        )
+
+    def test_nothing_is_added_between_shards(self):
+        """No header, no separator, no banner. A pure concatenation."""
+        self.shard(self.main, HISTORY, "a\n")
+        self.shard(self.tree_a, "rg1", "b\n")
+
+        self.assertEqual(render(collect(REGISTER, self.trees, feature=self.feature)), "a\nb\n")
+
+
+class DriftTest(TreeFixture):
+    def test_a_generated_file_matching_its_shards_reports_no_drift(self):
+        self.shard(self.main, HISTORY, "a\n")
+        make(self.main, f".scratch/{self.feature}/register.md", "a\n")
+
+        self.assertEqual(drift(REGISTER, self.main, self.trees, feature=self.feature), "")
+
+    def test_a_hand_edit_to_the_generated_file_is_drift(self):
+        """A write that got past the hook still has to be found."""
+        self.shard(self.main, HISTORY, "a\n")
+        make(self.main, f".scratch/{self.feature}/register.md", "a\nsomebody typed this\n")
+
+        self.assertIn("differs", drift(REGISTER, self.main, self.trees, feature=self.feature))
+
+    def test_a_missing_generated_file_is_drift_and_says_so(self):
+        self.shard(self.main, HISTORY, "a\n")
+
+        self.assertIn("not there", drift(REGISTER, self.main, self.trees, feature=self.feature))
+
+
+class WriteTest(TreeFixture):
+    def test_writing_lands_the_concatenation_in_the_main_checkout(self):
+        self.shard(self.main, HISTORY, "a\n")
+        self.shard(self.tree_a, "rg1", "b\n")
+
+        written = write(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(written, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "a\nb\n")
+
+    def test_writing_the_same_content_twice_leaves_the_file_alone(self):
+        """The hunt's resume cron reads an mtime. An idle rewrite is a lie to it."""
+        self.shard(self.main, HISTORY, "a\n")
+        written = write(REGISTER, self.main, self.trees, feature=self.feature)
+        before = os.stat(written).st_mtime_ns
+        os.utime(written, ns=(before - 10**9, before - 10**9))
+        stamped = os.stat(written).st_mtime_ns
+
+        write(REGISTER, self.main, self.trees, feature=self.feature)
+
+        self.assertEqual(os.stat(written).st_mtime_ns, stamped)
+
+
+class CommandLineTest(TreeFixture):
+    """The modes, each one a reader named in the sitting-3 walk."""
+
+    def test_split_uses_the_tree_the_caller_stands_in(self):
+        make(self.tree_a, f".scratch/{self.feature}/register.md", "mine\n")
+        code, out, _ = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--split",
+            "--cwd", self.tree_a)
+        self.assertEqual(code, 0)
+        self.assertIn(os.path.join("worktrees", "run-a"), out)
+
+    def test_an_unmatched_answered_id_is_reported_by_the_collector(self):
+        """A typo in the brief's shard answers nothing. Somebody has to hear."""
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md",
+             "## Item `q-main-01`\n\nbody\n")
+        make(self.main, f".scratch/decisions-queue.d/main/{ANSWERED}.md",
+             "q-main-01\nq-main-77\n")
+
+        code, _, err = self.run_main("--kind", "queue")
+
+        self.assertEqual(code, 0)  # A note, never a stop.
+        self.assertIn("q-main-77", err)
+
+    def test_the_default_mode_writes_the_board_and_prints_its_path(self):
+        self.shard(self.main, HISTORY, "a\n")
+        code, out, _ = self.run_main("--kind", "register", "--feature", self.feature)
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), REGISTER.generated(self.main, self.feature))
+
+    def test_check_passes_on_a_generated_board(self):
+        self.shard(self.main, HISTORY, "a\n")
+        self.run_main("--kind", "register", "--feature", self.feature)
+        code, _, _ = self.run_main("--kind", "register", "--feature", self.feature, "--check")
+        self.assertEqual(code, 0)
+
+    def test_check_refuses_a_hand_edited_board(self):
+        self.shard(self.main, HISTORY, "a\n")
+        make(self.main, f".scratch/{self.feature}/register.md", "a\nby hand\n")
+        code, _, err = self.run_main("--kind", "register", "--feature", self.feature, "--check")
+        self.assertEqual(code, 1)
+        self.assertIn("differs", err)
+
+    def test_mtime_reads_the_newest_shard_and_never_the_generated_file(self):
+        """`/parallel-hunt` decides a round is dead on this number.
+
+        Under generation the board's own mtime moves when the collector runs,
+        which is not when the round moved. The shards are what move with the
+        work.
+        """
+        self.shard(self.main, HISTORY, "a\n")
+        newest = self.shard(self.tree_a, "rg1", "b\n")
+        os.utime(newest, (1_700_000_500, 1_700_000_500))
+        os.utime(self.shard(self.main, HISTORY, "a\n"), (1_700_000_000, 1_700_000_000))
+        self.run_main("--kind", "register", "--feature", self.feature)
+        board = REGISTER.generated(self.main, self.feature)
+        os.utime(board, (1_900_000_000, 1_900_000_000))
+
+        code, out, _ = self.run_main("--kind", "register", "--feature", self.feature, "--mtime")
+
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), "1700000500")
+
+    def test_mtime_with_no_shards_prints_nothing_and_says_so(self):
+        code, out, err = self.run_main("--kind", "register", "--feature", self.feature, "--mtime")
+        self.assertEqual(code, 1)
+        self.assertEqual(out.strip(), "")
+        self.assertIn("no shard", err)
+
+    def test_my_shard_names_the_file_this_session_appends_to(self):
+        code, out, _ = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--my-shard", "--cwd", self.tree_a)
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            out.strip(),
+            os.path.join(REGISTER.shards(self.tree_a, self.feature), "run-a", "run-a.md"))
+
+    def test_my_shard_from_outside_every_tree_refuses_rather_than_guessing(self):
+        code, _, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--my-shard", "--cwd", self.tmp.name)
+        self.assertEqual(code, 1)
+        self.assertIn("no worktree", err)
+
+    def test_the_queue_carries_no_feature_and_sits_at_the_scratch_root(self):
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md", "queued\n")
+        code, out, _ = self.run_main("--kind", "queue")
+        self.assertEqual(code, 0)
+        self.assertEqual(out.strip(), os.path.join(self.main, ".scratch", "decisions-queue.md"))
+
+    def test_the_register_refuses_without_a_feature(self):
+        """A per-feature board with no feature would write `.scratch/register.md`."""
+        code, _, err = self.run_main("--kind", "register")
+        self.assertEqual(code, 1)
+        self.assertIn("--feature", err)
+
+
+class AnsweredTest(TreeFixture):
+    """Ruling 18: the brief marks an item answered in its own shard.
+
+    The queue's writers each own a shard, so nothing may reach into another
+    writer's file to delete a section. The brief writes an id into
+    `answered.md`, which it alone owns, and the concatenation hides the item.
+    """
+
+    def queue_shard(self, tree, name, text, owner=None):
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/decisions-queue.d/{holder}/{name}.md", text)
+
+    def test_an_answered_item_and_its_whole_body_disappear(self):
+        self.queue_shard(
+            self.main, HISTORY,
+            "## Keep me `q-main-01`\n\nbody one\n\n"
+            "## Answer me `q-main-02`\n\nbody two\nmore of body two\n\n"
+            "## Keep me too `q-main-03`\n\nbody three\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-02\n")
+
+        out = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertIn("Keep me `q-main-01`", out)
+        self.assertIn("Keep me too `q-main-03`", out)
+        self.assertNotIn("q-main-02", out)
+        self.assertNotIn("more of body two", out)
+
+    def test_an_item_with_no_id_can_never_be_hidden(self):
+        """History carries items written before ids existed. They stay visible."""
+        self.queue_shard(self.main, HISTORY, "## An old item, no id\n\nbody\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-02\n")
+
+        self.assertIn("An old item", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_the_answered_shard_is_never_part_of_the_queue_it_filters(self):
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-99\n")
+
+        self.assertNotIn("q-main-99", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_an_answered_id_crosses_shard_boundaries(self):
+        """The brief answers an item another worktree wrote. That is the point."""
+        self.queue_shard(self.tree_a, "fin-a", "## From the run `q-run-a-01`\n\nbody\n")
+        self.queue_shard(self.main, ANSWERED, "q-run-a-01\n")
+
+        self.assertNotIn("From the run", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_answered_ids_are_read_as_whole_tokens(self):
+        """`q-main-1` must not answer `q-main-11`."""
+        self.queue_shard(self.main, HISTORY, "## Eleven `q-main-11`\n\nbody\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-1\n")
+
+        self.assertIn("Eleven", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_the_register_hides_nothing(self):
+        """Only the queue carries this rule. A register row leaves by promotion."""
+        self.shard(self.main, HISTORY, "## A row `q-main-02`\n\nbody\n")
+        make(self.main, f".scratch/{self.feature}/register.d/main/{ANSWERED}.md", "q-main-02\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("A row", out)
+
+
+class ClosedRowTest(TreeFixture):
+    """Promotion resolves every row, and no row survives it.
+
+    It cannot delete a row out of another tree's shard: ruling 15 says a
+    session writes inside its own tree and nowhere else, and the rows it closes
+    were written by a gate in one tree, a hardening pass in another and the
+    production watcher in the main checkout. So it writes the ids it resolved
+    into its OWN `closed.md`, exactly as the daily brief writes answered item
+    ids, and the generated register stops carrying them.
+    """
+
+    def test_a_closed_row_leaves_the_register(self):
+        self.shard(self.main, HISTORY,
+                   "| rg1-01 | still open | operator | high | open | b.md |\n"
+                   "| rg1-02 | promoted | operator | high | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "rg1-02\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("rg1-01", out)
+        self.assertNotIn("rg1-02", out)
+
+    def test_only_the_row_goes_and_never_the_prose_around_it(self):
+        """The register carries headings and paragraphs between its rows."""
+        self.shard(self.main, HISTORY,
+                   "## PROMOTION CLOSED — run batch-x\n\n"
+                   "Row rg1-02 was promoted to issue 561.\n\n"
+                   "| rg1-02 | promoted | operator | high | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "rg1-02\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("Row rg1-02 was promoted to issue 561.", out)
+        self.assertNotIn("| rg1-02 |", out)
+
+    def test_the_id_must_be_the_row_s_own_first_cell(self):
+        """A row that merely cites another row's id is not that row."""
+        self.shard(self.main, HISTORY,
+                   "| rg1-09 | supersedes rg1-02 | operator | high | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "rg1-02\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("rg1-09", out)
+
+    def test_the_closed_shard_never_renders_into_the_register(self):
+        self.shard(self.main, HISTORY, "| rg1-01 | open | operator | high | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "rg1-77\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertNotIn("rg1-77", out)
+
+    def test_the_queue_closes_nothing(self):
+        """The queue answers items; it has no rows to close."""
+        self.assertFalse(QUEUE.hides_closed)
+
+
+class DigitLeadingRowIdTest(TreeFixture):
+    """A row id may open with a digit, and both id patterns must read it.
+
+    `/run-issues` names a row after the issue it came from, so the review gate
+    of issue 03 stamps `03-review-01`. Both patterns used to require a leading
+    letter, so promotion resolved such a row, wrote the id into `closed.md`,
+    and the board went on rendering it for ever. MEASURED 2026-09-21 on
+    OrderFlow's live register: THIRTEEN table rows carried one of TEN distinct
+    digit-leading ids, and every one of the ten sat in a `closed.md` shard.
+    (Promotion had reported seventeen and the runner ten; ten is the number of
+    distinct ids and thirteen the number of rendered rows, which is what the
+    board actually carries.)
+
+    The id must still hold a letter. Widening to digits alone would make a bare
+    number an id, and a register table whose first cell is a count would vanish
+    the day promotion wrote that number on a line of its own — the same fault
+    `ClosedIdShapeTest` records for the word `ID`.
+    """
+
+    def test_a_closed_row_whose_id_opens_with_a_digit_leaves_the_register(self):
+        self.shard(self.main, HISTORY,
+                   "| 03-review-01 | promoted | operator | medium | open | b.md |\n"
+                   "| 03-review-02 | still open | operator | medium | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "03-review-01\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertNotIn("| 03-review-01 |", out)
+        self.assertIn("| 03-review-02 |", out)
+
+    def test_the_letter_after_the_number_reads_too(self):
+        """The instance carried `03b-review-01` beside `03-review-01`: a split
+        issue keeps its parent's number and takes a letter suffix."""
+        self.shard(self.main, HISTORY,
+                   "| 03b-review-04 | promoted | operator | medium | open | b.md |\n")
+        self.shard(self.tree_a, CLOSED, "`03b-review-04`\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertNotIn("03b-review-04", out)
+
+    def test_a_first_cell_of_only_digits_is_not_an_id(self):
+        """A count in a table's first cell must survive a closed line that
+        happens to read the same number."""
+        self.shard(self.main, HISTORY,
+                   "| 17 | rows promoted | operator |\n"
+                   "| rg1-01 | a live row | operator |\n")
+        self.shard(self.tree_a, CLOSED, "17\nrg1-01\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("| 17 | rows promoted", out)
+        self.assertNotIn("rg1-01", out)
+
+    def test_a_bare_number_in_the_closed_shard_closes_nothing(self):
+        """Promotion writes prose above its ids, and prose carries numbers."""
+        self.shard(self.main, HISTORY,
+                   "| 2026 | the year column | operator |\n")
+        self.shard(self.tree_a, CLOSED,
+                   "Closed by promotion, run batch-b5e96d. 2026\n"
+                   "2026\n")
+
+        out = render(collect(REGISTER, self.trees, feature=self.feature), board=REGISTER)
+
+        self.assertIn("| 2026 | the year column", out)
+
+
+class UnknownAnsweredIdTest(TreeFixture):
+    def test_an_answered_id_matching_no_item_is_named_rather_than_ignored(self):
+        """A typo in the brief's shard silently answers nothing. Say so."""
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md",
+             "## Item `q-main-01`\n\nbody\n")
+        make(self.main, f".scratch/decisions-queue.d/main/{ANSWERED}.md",
+             "q-main-01\nq-main-77\n")
+
+        self.assertEqual(unmatched_answers(collect(QUEUE, self.trees)), ["q-main-77"])
+
+
+class RuledInSessionTest(TreeFixture):
+    """An attended session retires a question Abdul ruled at the keyboard.
+
+    Abdul ruled on 2026-08-08 that an attended session sweeps its own queue at
+    close, which made a second place where an answer happens. The retirement
+    path was built when the daily brief was the only such place, so a ruled
+    question stayed on the board and each session wrote a prose note asking for
+    it. A note an agent must remember to write is the class `~/.claude/CLAUDE.md`
+    rules does not work, so the session writes `ruled.md` and the collector acts.
+
+    `ruled` hides an item exactly as `answered` does. It is a SEPARATE name so a
+    retirement Abdul took in session can still be told from one the brief made,
+    and so the brief can fold them in and empty the file.
+    """
+
+    def queue_shard(self, tree, name, text, owner=None):
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/decisions-queue.d/{holder}/{name}.md", text)
+
+    def test_a_ruled_item_disappears_from_the_board(self):
+        self.queue_shard(
+            self.main, HISTORY,
+            "## Keep me `q-main-01`\n\nbody one\n\n"
+            "## Ruled in session `q-main-02`\n\nbody two\n")
+        self.queue_shard(self.main, RULED,
+                         "q-main-02 2026-09-13 02b, ## RULED by Abdul\n")
+
+        out = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertIn("Keep me `q-main-01`", out)
+        self.assertNotIn("Ruled in session", out)
+
+    def test_the_ruled_shard_is_never_part_of_the_board_it_filters(self):
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-99 2026-09-13 somewhere\n")
+
+        self.assertNotIn("q-main-99", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_a_ruled_id_crosses_shard_boundaries(self):
+        """The session retires an item another worktree wrote. That is the point."""
+        self.queue_shard(self.tree_a, "fin-a", "## From the run `q-run-a-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-run-a-01 2026-09-13 issue 02b\n")
+
+        self.assertNotIn("From the run", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_ruled_ids_are_read_as_whole_tokens(self):
+        """`q-main-1` must not retire `q-main-11`, the same rule `answered` holds."""
+        self.queue_shard(self.main, HISTORY, "## Eleven `q-main-11`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-1 2026-09-13 somewhere\n")
+
+        self.assertIn("Eleven", render(collect(QUEUE, self.trees), board=QUEUE))
+
+    def test_answered_and_ruled_both_hide_in_one_render(self):
+        """The two files are read together. Neither shadows the other."""
+        self.queue_shard(
+            self.main, HISTORY,
+            "## Brief answered `q-main-01`\n\nbody one\n\n"
+            "## Session ruled `q-main-02`\n\nbody two\n\n"
+            "## Still open `q-main-03`\n\nbody three\n")
+        self.queue_shard(self.main, ANSWERED, "q-main-01\n")
+        self.queue_shard(self.main, RULED, "q-main-02 2026-09-13 issue 02b\n")
+
+        out = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertNotIn("Brief answered", out)
+        self.assertNotIn("Session ruled", out)
+        self.assertIn("Still open", out)
+
+    def test_the_register_never_reads_ruled(self):
+        """`ruled` is reserved on the board that reads it, and nowhere else."""
+        self.shard(self.main, HISTORY, "## A row `q-main-02`\n\nbody\n")
+        make(self.main, f".scratch/{self.feature}/register.d/main/{RULED}.md",
+             "q-main-02 2026-09-13 somewhere\n")
+
+        out = render(collect(REGISTER, self.trees, self.feature), board=REGISTER)
+
+        self.assertIn("A row", out)
+
+    def test_an_ordinary_writer_cannot_claim_ruled(self):
+        """Everything it wrote there would be read for ids and never rendered."""
+        with self.assertRaises(ValueError):
+            my_shard(QUEUE, self.tree_a, self.trees, prefix=RULED)
+
+    def test_an_attended_session_claims_ruled_by_saying_so(self):
+        path = my_shard(QUEUE, self.tree_a, self.trees, prefix=RULED, machinery=True)
+        self.assertTrue(path.endswith(os.path.join("run-a", "ruled.md")), path)
+
+    def test_a_ruled_id_matching_no_item_is_named_rather_than_ignored(self):
+        """A typo retires nothing, silently. The same guard `answered` has."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED, "q-main-77 2026-09-13 somewhere\n")
+
+        self.assertEqual(unmatched_answers(collect(QUEUE, self.trees)), ["q-main-77"])
+
+    def test_the_board_gains_no_header_when_something_is_ruled(self):
+        """Ruling 14: the board is a pure concatenation and carries line citations.
+
+        The visible record of an in-session retirement is the collector's own
+        note and the committed shard, never a banner that moves every line.
+        """
+        self.queue_shard(self.main, HISTORY,
+                         "## Keep me `q-main-01`\n\nbody one\n")
+        without = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.queue_shard(self.main, RULED, "q-main-99 2026-09-13 somewhere\n")
+        with_ruled = render(collect(QUEUE, self.trees), board=QUEUE)
+
+        self.assertEqual(without, with_ruled)
+
+    def test_the_collector_reports_what_a_session_retired(self):
+        """The brief has to see these to fold them in. Printing is the road."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+        self.queue_shard(self.main, RULED,
+                         "q-main-01 2026-09-13 issue 02b, ## RULED by Abdul\n")
+
+        code, _, err = self.run_main("--kind", "queue")
+
+        self.assertEqual(code, 0)  # A note, never a stop.
+        self.assertIn("q-main-01", err)
+        self.assertIn("issue 02b", err)
+
+    def test_nothing_is_reported_when_no_session_retired_anything(self):
+        """An empty note reads as something having broken. Say nothing instead."""
+        self.queue_shard(self.main, HISTORY, "## Item `q-main-01`\n\nbody\n")
+
+        code, _, err = self.run_main("--kind", "queue")
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("ruled", err.lower())
+
+
+class RuledEntriesTest(TreeFixture):
+    """`ruled.md` carries three things per line: the id, the date, the source.
+
+    The source is where the ruling is recorded, so a reader can check it. The
+    parse is deliberately loose, the same way `answered.md`'s is: the id is the
+    token that matters and the rest is carried through for the note.
+    """
+
+    def queue_shard(self, tree, name, text, owner=None):
+        holder = owner or ("main" if tree == self.main else os.path.basename(tree))
+        return make(tree, f".scratch/decisions-queue.d/{holder}/{name}.md", text)
+
+    def test_an_entry_carries_its_whole_line(self):
+        self.queue_shard(self.main, RULED,
+                         "q-main-01 2026-09-13 issue 02b, ## RULED by Abdul\n")
+
+        entries = ruled_entries(collect(QUEUE, self.trees))
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0][0], "q-main-01")
+        self.assertIn("issue 02b", entries[0][1])
+
+    def test_a_blank_line_and_a_comment_carry_nothing(self):
+        self.queue_shard(self.main, RULED,
+                         "# a heading somebody wrote\n\n"
+                         "q-main-01 2026-09-13 issue 02b\n")
+
+        self.assertEqual([entry[0] for entry in ruled_entries(collect(QUEUE, self.trees))],
+                         ["q-main-01"])
+
+    def test_entries_come_back_sorted_so_the_note_is_stable(self):
+        self.queue_shard(self.main, RULED,
+                         "q-main-02 2026-09-13 b\nq-main-01 2026-09-13 a\n")
+
+        self.assertEqual([entry[0] for entry in ruled_entries(collect(QUEUE, self.trees))],
+                         ["q-main-01", "q-main-02"])
+
+
+class SplitTest(TreeFixture):
+    """The one-off migration: today's file becomes `00-history.md`.
+
+    It is a script and not a hand edit because it has to refuse. Run twice it
+    would bury the shards under a second history, and run against a file
+    another session is holding open it would commit somebody's half-written
+    rows as frozen history.
+    """
+
+    def test_the_whole_file_becomes_the_history_shard(self):
+        original = "# Register\n\nrow one\n"
+        make(self.main, f".scratch/{self.feature}/register.md", original)
+
+        split(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(os.path.join(
+                REGISTER.shards(self.main, self.feature), "main", f"{HISTORY}.md"),
+                encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), original)
+
+    def test_the_generated_file_is_unchanged_by_its_own_split(self):
+        """The proof ruling 14 asks for: every line citation still lands."""
+        original = "# Register\n\nrow one\nrow two\nrow three\n"
+        board = make(self.main, f".scratch/{self.feature}/register.md", original)
+
+        split(REGISTER, self.main, self.trees, feature=self.feature)
+        write(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(board, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), original)
+
+    def test_a_second_split_refuses_rather_than_burying_the_first(self):
+        make(self.main, f".scratch/{self.feature}/register.md", "a\n")
+        split(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with self.assertRaises(SplitRefused):
+            split(REGISTER, self.main, self.trees, feature=self.feature)
+
+    def test_a_missing_file_refuses(self):
+        with self.assertRaises(SplitRefused):
+            split(REGISTER, self.main, self.trees, feature=self.feature)
+
+    def test_it_splits_the_tree_it_was_pointed_at_and_no_other(self):
+        """The migration lands on a branch, not in somebody else's tree.
+
+        Run from a worktree it used to rewrite the MAIN checkout, which on
+        2026-09-05 held uncommitted register and queue edits from a live daily
+        brief — the concurrent write this ticket exists to stop.
+        """
+        make(self.tree_a, f".scratch/{self.feature}/register.md", "mine\n")
+        make(self.main, f".scratch/{self.feature}/register.md", "the main copy\n")
+
+        split(REGISTER, self.tree_a, self.trees, feature=self.feature)
+
+        self.assertTrue(os.path.exists(os.path.join(
+            REGISTER.shards(self.tree_a, self.feature), "run-a", f"{HISTORY}.md")))
+        self.assertFalse(os.path.exists(os.path.join(
+            REGISTER.shards(self.main, self.feature), MAIN, f"{HISTORY}.md")))
+
+
+class EmptyRenderTest(TreeFixture):
+    """A generation that finds nothing may not delete the file.
+
+    Measured 2026-09-05, on the live files. `--split` wrote its history shard
+    into a worktree under the holder `main`, so the collector looked for it in
+    the MAIN checkout, found nothing, and wrote an empty register over 4,624
+    lines and an empty queue over 8,978. Git had them; nothing else did.
+    """
+
+    def test_writing_nothing_over_something_refuses(self):
+        board = make(self.main, f".scratch/{self.feature}/register.md", "4,624 lines\n")
+
+        with self.assertRaises(EmptyRefused):
+            write(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(board, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "4,624 lines\n")
+
+    def test_writing_nothing_over_nothing_is_fine(self):
+        """A feature with no register and no shards stays that way."""
+        write(REGISTER, self.main, self.trees, feature=self.feature)
+
+    def test_a_shard_that_is_genuinely_empty_still_writes(self):
+        """Promotion closing every row leaves an empty register, legitimately."""
+        make(self.main, f".scratch/{self.feature}/register.md", "old rows\n")
+        self.shard(self.main, HISTORY, "")
+
+        write(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(REGISTER.generated(self.main, self.feature), encoding="utf-8") as h:
+            self.assertEqual(h.read(), "")
+
+
+class SplitInAWorktreeTest(TreeFixture):
+    def test_the_history_shard_belongs_to_the_tree_that_was_split(self):
+        """Written under `main/`, the collector looks for it in the main
+        checkout, does not find it, and renders nothing."""
+        make(self.tree_a, f".scratch/{self.feature}/register.md", "rows\n")
+
+        split(REGISTER, self.tree_a, self.trees, feature=self.feature)
+
+        self.assertTrue(os.path.exists(os.path.join(
+            REGISTER.shards(self.tree_a, self.feature), "run-a", f"{HISTORY}.md")))
+
+    def test_the_split_regenerates_the_tree_it_split(self):
+        make(self.tree_a, f".scratch/{self.feature}/register.md", "rows\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--split", "--cwd", self.tree_a)
+
+        self.assertEqual(code, 0, err)
+        with open(REGISTER.generated(self.tree_a, self.feature), encoding="utf-8") as h:
+            self.assertEqual(h.read(), "rows\n")
+
+    def test_the_split_leaves_the_main_checkout_alone(self):
+        make(self.tree_a, f".scratch/{self.feature}/register.md", "rows\n")
+        untouched = make(self.main, f".scratch/{self.feature}/register.md", "main's own\n")
+
+        self.run_main("--kind", "register", "--feature", self.feature,
+                      "--split", "--cwd", self.tree_a)
+
+        with open(untouched, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "main's own\n")
+
+
+class WorktreeWriteRefusalTest(TreeFixture):
+    """Abdul's ruling `q-fin-44052e-02`, 2026-09-30, OrderFlow's `rulings.md`.
+
+    The board is always written into the main checkout. During issue 301 of run
+    batch-44052e the runner ran the collector from its linked worktree, and
+    main's TRACKED `register.md` changed under a live run; the runner restored
+    it from git. A memory entry recorded the hazard before the run and did not
+    stop the call, so the answer is a refusal and not a second reminder.
+    """
+
+    def test_a_board_write_from_a_linked_worktree_is_refused(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a)
+
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("REFUSED", err)
+        self.assertIn("--write-main", err)
+        self.assertFalse(os.path.exists(REGISTER.generated(self.main, self.feature)))
+
+    def test_a_directory_inside_a_linked_worktree_is_refused_too(self):
+        inside = os.path.join(self.tree_a, "lib")
+        os.makedirs(inside)
+        code, _, err = self.run_main("--kind", "queue", "--cwd", inside)
+        self.assertEqual(code, 1)
+        self.assertIn("run-a", err)
+
+    def test_a_repo_naming_a_linked_worktree_is_refused(self):
+        """The form OrderFlow's memory entry records: `--repo .` from the worktree."""
+        code, _, _ = self.run_main(
+            "--kind", "queue", "--cwd", self.tmp.name, "--repo", self.tree_a)
+        self.assertEqual(code, 1)
+
+    def test_an_existing_board_is_left_as_it_was(self):
+        board = make(self.main, ".scratch/decisions-queue.md", "main's own\n")
+        make(self.tree_a, ".scratch/decisions-queue.d/run-a/rg1.md", "new\n")
+        self.run_main("--kind", "queue", "--cwd", self.tree_a)
+        with open(board, encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "main's own\n")
+
+    def test_the_flag_names_the_intent_and_the_board_is_written(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a,
+            "--write-main")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.strip(), REGISTER.generated(self.main, self.feature))
+
+    def test_the_main_checkout_writes_without_the_flag(self):
+        """The daily brief stands in main and must never meet the refusal."""
+        self.shard(self.main, HISTORY, "a\n")
+        code, _, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.main,
+            "--repo", self.main)
+        self.assertEqual(code, 0, err)
+
+    def test_a_caller_outside_every_tree_naming_main_writes(self):
+        """The brief's `--repo <repo>` form, run from wherever its session is."""
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md", "queued\n")
+        code, _, err = self.run_main(
+            "--kind", "queue", "--cwd", self.tmp.name, "--repo", self.main)
+        self.assertEqual(code, 0, err)
+
+    def test_the_read_only_modes_still_answer_from_a_linked_worktree(self):
+        self.shard(self.tree_a, "rg1", "a\n")
+        self.run_main("--kind", "register", "--feature", self.feature, "--cwd", self.main)
+        for mode in ("--my-shard", "--check", "--mtime"):
+            with self.subTest(mode=mode):
+                code, _, err = self.run_main(
+                    "--kind", "register", "--feature", self.feature,
+                    "--cwd", self.tree_a, mode)
+                self.assertEqual(code, 0, err)
+
+
+class PrintModeTest(TreeFixture):
+    """Abdul said yes on 2026-10-01 to a mode that prints the board and writes
+    nothing. The hunt's finder and fixer read the whole register from the hunt's
+    worktree, and with `--write-main` that read still changed main's tracked
+    `register.md` under a live run. Printing lets them read without it.
+    """
+
+    def test_print_from_a_linked_worktree_prints_the_board_and_writes_nothing(self):
+        self.shard(self.main, HISTORY, "| r1 | old |\n")
+        self.shard(self.tree_a, "rg1", "| r2 | new |\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--cwd", self.tree_a,
+            "--print")
+
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out, "| r1 | old |\n| r2 | new |\n")
+        self.assertFalse(os.path.exists(REGISTER.generated(self.main, self.feature)))
+
+    def test_a_poisoned_shard_is_refused_rather_than_printed(self):
+        """The same refusal the write carries: a reader must not be blinded."""
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 | a \x00 byte | open |\n")
+
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--print")
+
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("REFUSED", err)
+
+    def test_no_shard_anywhere_is_a_failure_and_never_an_empty_board(self):
+        """A wrong `--feature` or `--repo` finds nothing. An empty print would
+        read as a register with no rows, and a finder would hunt covered ground."""
+        code, out, err = self.run_main(
+            "--kind", "register", "--feature", self.feature, "--print")
+        self.assertEqual(code, 1)
+        self.assertEqual(out, "")
+        self.assertIn("no shard", err)
+
+    def test_a_board_with_every_item_answered_prints_empty_and_passes(self):
+        make(self.main, ".scratch/decisions-queue.d/main/00-history.md",
+             "## Item `q-main-01`\n\nbody\n")
+        make(self.main, f".scratch/decisions-queue.d/main/{ANSWERED}.md", "q-main-01\n")
+        code, out, err = self.run_main("--kind", "queue", "--print")
+        self.assertEqual(code, 0, err)
+        self.assertNotIn("q-main-01", out)
+
+
+class QueueIdTest(TreeFixture):
+    """Ruling 18: every queue item carries an id, so the brief can answer it."""
+
+    def test_every_heading_gains_an_id(self):
+        make(self.main, ".scratch/decisions-queue.md",
+             "## First item\n\nbody\n\n## Second item\n\nbody\n")
+
+        split(QUEUE, self.main, self.trees)
+
+        with open(os.path.join(QUEUE.shards(self.main), "main", f"{HISTORY}.md"),
+                  encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("## First item `q-h-001`", text)
+        self.assertIn("## Second item `q-h-002`", text)
+
+    def test_assigning_ids_moves_no_line(self):
+        """`decisions-queue.md:518` is cited in `scripts/lib/what-is-owed.mjs`."""
+        original = "## First item\n\nbody\n\n## Second item\n\nbody\n"
+        make(self.main, ".scratch/decisions-queue.md", original)
+
+        split(QUEUE, self.main, self.trees)
+        write(QUEUE, self.main, self.trees)
+
+        with open(QUEUE.generated(self.main), encoding="utf-8") as handle:
+            after = handle.read()
+        self.assertEqual(after.count("\n"), original.count("\n"))
+        self.assertEqual(
+            [line.split(" `q-")[0] for line in after.splitlines()],
+            original.splitlines())
+
+    def test_a_heading_that_already_carries_an_id_keeps_it(self):
+        make(self.main, ".scratch/decisions-queue.md", "## Item `q-main-04`\n\nbody\n")
+
+        split(QUEUE, self.main, self.trees)
+
+        with open(os.path.join(QUEUE.shards(self.main), "main", f"{HISTORY}.md"),
+                  encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("`q-main-04`", text)
+        self.assertNotIn("q-h-001", text)
+
+    def test_the_register_is_never_given_item_ids(self):
+        """A register row leaves by promotion, not by being marked answered."""
+        make(self.main, f".scratch/{self.feature}/register.md", "## A section\n\nrow\n")
+
+        split(REGISTER, self.main, self.trees, feature=self.feature)
+
+        with open(os.path.join(
+                REGISTER.shards(self.main, self.feature), "main", f"{HISTORY}.md"),
+                encoding="utf-8") as handle:
+            self.assertNotIn("q-h-", handle.read())
+
+
+
+
+class ControlByteTest(TreeFixture):
+    """The fault run `batch-d41839` shipped, measured on 2026-09-15.
+
+    A gate found a real defect about a NUL byte reaching a database column, and
+    in writing its evidence it put a LITERAL NUL byte into its register shard.
+    The shard was committed with it. From that moment every plain `grep` over
+    the generated register answered NOTHING, with no error, because `grep`
+    treats a file holding a NUL as binary.
+
+    It cost two findings. Issue 08c's verify gate reported that the register
+    carried no row from that run, and the run journal refined that to "stale,
+    not unreachable". The register in fact carried 229 mentions of the batch.
+    Both readings came from a grep that was lying, and a later reader would
+    have believed either one.
+
+    THE GUARD IS WRITTEN AGAINST WHAT THE CONSUMER DOES WITH THE BYTES, never
+    against what the text appears to say (`coderules`). Two consumers decide
+    the set: `grep`, which goes blind on a NUL, and a terminal, which obeys an
+    ESC. Tab, newline and CARRIAGE RETURN are let through — a CR is half of a
+    legitimate line ending and no reader misbehaves on one. Abdul's ruling said
+    "tab and newline"; carriage return is added here with that reason, and it
+    widens what is allowed rather than narrowing it.
+    """
+
+    def poison(self, tree, name, byte):
+        """A shard carrying one raw byte, written past the text layer."""
+        path = self.shard(tree, name, "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 | a row about a " + byte + b" byte | open |\n")
+        return path
+
+    def test_a_nul_byte_in_a_shard_is_named(self):
+        self.poison(self.tree_a, "gate", b"\x00")
+        report = control_bytes(collect(REGISTER, self.trees, self.feature))
+        self.assertIn("gate", report)
+        self.assertIn("0x00", report)
+
+    def test_an_escape_byte_is_named_too(self):
+        self.poison(self.tree_a, "gate", b"\x1b")
+        self.assertIn("0x1b", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_tab_newline_and_carriage_return_pass(self):
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"| r1 |\tone\r\ntwo |\n")
+        self.assertEqual("", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_a_clean_shard_reports_nothing(self):
+        self.shard(self.tree_a, "gate", "| r1 | an ordinary row | open |\n")
+        self.assertEqual("", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_the_report_names_the_line_so_the_byte_can_be_found(self):
+        path = self.shard(self.tree_a, "gate", "")
+        with open(path, "wb") as handle:
+            handle.write(b"clean line\nsecond line\nthird \x00 line\n")
+        self.assertIn("line 3", control_bytes(collect(REGISTER, self.trees, self.feature)))
+
+    def test_check_refuses_a_poisoned_shard(self):
+        self.poison(self.tree_a, "gate", b"\x00")
+        code, _, err = self.run_main("--kind", "register", "--feature", self.feature,
+                                     "--check")
+        self.assertEqual(1, code)
+        self.assertIn("0x00", err)
+
+    def test_the_write_is_refused_rather_than_the_board_poisoned(self):
+        """The board is never built from a poisoned shard.
+
+        Abdul's ruling named `--check`. The write is refused as well, because a
+        check that only reports leaves the poisoned board on disk for every
+        reader until somebody runs the check. `~/.claude/CLAUDE.md`: build the
+        thing that can refuse.
+        """
+        self.poison(self.tree_a, "gate", b"\x00")
+        with self.assertRaises(PoisonRefused):
+            write(REGISTER, self.main, self.trees, self.feature)
+
+    def test_a_poisoned_write_leaves_the_old_board_alone(self):
+        self.shard(self.tree_a, "gate", "| r1 | first, clean | open |\n")
+        target = write(REGISTER, self.main, self.trees, self.feature)
+        before = open(target, encoding="utf-8").read()
+        self.poison(self.tree_b, "second", b"\x00")
+        with self.assertRaises(PoisonRefused):
+            write(REGISTER, self.main, self.trees, self.feature)
+        self.assertEqual(before, open(target, encoding="utf-8").read())
+
+if __name__ == "__main__":
+    unittest.main()

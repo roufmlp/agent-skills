@@ -23,7 +23,7 @@ one-run-per-feature layout ticket; ruling 6, a hunt in its own worktree; ruling
 goes in the round's one shard, at the `Register shard:` path in that block.
 Print the register fresh before you read it, into your session scratchpad, and
 read that file; it runs to thousands of lines:
-`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md`.
+`python3 ~/.claude/skills/workflow/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md`.
 
 **Hunt the live system as this round's user, on this round's host.** Start the
 dev server by name from the repo's `.claude/launch.json` (`Dev server:` in the
@@ -38,22 +38,20 @@ Signed in as that user, `current_workspace()` scopes every read to this round's
 rows; a page that reads empty under it while a seed script reported rows is a
 fixture seeded into the wrong workspace, not a bug.
 
-**Rows you seed land in this round's workspace by themselves, where the project
-wires it that way.** A project's fixture scripts read the `QA workspace:` id off
-this tree's round brief and refuse an override naming any other workspace, so
-there is nothing for you to set. Where the project does NOT do that, say so in
-your evidence rather than pointing a fixture at a workspace by hand. A live
-third-party suite runs only through the round's lock wrapper: the `Zoho lock:`
-line of the round block is the command, with the whole directory in one call and
-the journal path filled in.
+**Rows you seed land in this round's workspace by themselves.** Every fixture
+script in `scripts/` reads the `QA workspace:` id off this tree's round brief,
+through `seedWorkspaceId` in `scripts/lib/run-workspace.mjs`, and refuses a
+`SEED_WORKSPACE_ID` naming any other workspace, so there is nothing to set (ticket
+38, the one-run-per-feature layout ticket, sitting 5). A live Zoho suite runs only through the
+lock wrapper: the `Zoho lock:` line of the round block is the command, with the
+whole directory in one call and the journal path filled in.
 
 **Hunt the live system**, not the code's intentions. For each defect you believe is
 real:
 
 1. Write `bugs/<ID>.md` with the evidence and a reproducer someone else can run.
-2. Write a failing pinning test in the regressions directory — `tests/regressions/`
-   unless the project's test layout puts it elsewhere — named by `<ID>`, that fails
-   for the reason you claim, not incidentally.
+2. Write a failing pinning test at `tests/regressions/<ID>.test.ts` that fails for
+   the reason you claim, not incidentally.
 3. Add a register row with status `candidate`:
    `ID | one-line summary | audience | severity | status | origin | owner-notes`.
    - **`origin` names where the fault came from: the issue and the run that
@@ -92,8 +90,8 @@ input, by what happens on the second attempt rather than the first, by what a re
 production row looks like versus a seed. The defects that survive to production are
 the ones that need two things to be true at once.
 
-**Ownership is strict.** You write the register and NEW files under that same
-regressions directory only. You may not edit shipped code or existing test suites —
+**Ownership is strict.** You write the register and NEW files under
+`tests/regressions/` only. You may not edit shipped code or existing test suites —
 not even to help, not even when the fix is obvious. That belongs to the fixer.
 
 **Delegating.** Bulk *reading* work — log trawls, wide greps, repeated probes —

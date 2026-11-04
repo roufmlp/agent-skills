@@ -1,0 +1,9 @@
+{
+  "name": "workflow",
+  "description": "A fast lane that takes an idea to a live MVP and a careful lane that builds a product once something real goes through it: rules as skills, build agents, refusing hooks and a feature workflow.",
+  "author": { "name": "Abdul Rouf", "url": "https://github.com/roufmlp" },
+  "repository": "https://github.com/roufmlp/agent-skills",
+  "license": "MIT",
+  "keywords": ["workflow", "skills", "agents", "hooks", "tdd", "code-review"],
+  "dependencies": ["mattpocock-skills@claude-plugins-official"]
+}

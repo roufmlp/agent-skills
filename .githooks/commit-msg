@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Refuse a commit that carries private text, before anything leaves the machine.
+
+Git runs this as the `commit-msg` hook once `core.hooksPath` points at
+`.githooks`. It reads three things from the machine, never from the repo:
+
+- the home folder path (`$HOME`, and `/Users/<login>` or `/home/<login>`);
+- the login and the words of `git config user.name`;
+- the private names list, `~/.claude/private-names.txt`: one name or email
+  domain per line, `#` comments, matched case-insensitively as a substring.
+
+Everywhere in the commit (the message, each staged file's name and its staged
+content) it refuses the home path and every private name. In skill and agent
+files (`skills/**` and `agents/**`) it also refuses the login and the name, so
+an agent on another machine reads a role, not a person.
+
+Run `commit-msg --tree` to check every tracked file the same way, which is how
+the switch session proved the tree clean. Exit 1 names each hit and the road
+out: replace the text, or add the name to the list with the owner's approval.
+The list is missing on a fresh machine; the hook then checks the path and the
+name alone and says so.
+"""
+
+import getpass
+import os
+import subprocess
+import sys
+
+LIST = os.path.expanduser("~/.claude/private-names.txt")
+ROLE_DIRS = ("skills/", "agents/")
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
+
+
+def home_paths() -> list[str]:
+    home = os.path.expanduser("~")
+    login = getpass.getuser()
+    return sorted({home, f"/Users/{login}", f"/home/{login}"})
+
+
+def person_words() -> list[str]:
+    """The login and each word of the git user name that is three letters or longer."""
+    words = {getpass.getuser()}
+    try:
+        name = git("config", "user.name").strip()
+    except subprocess.CalledProcessError:
+        name = ""
+    words |= {w for w in name.split() if len(w) >= 3}
+    return sorted(words)
+
+
+def private_names(path: str = LIST) -> list[str]:
+    if not os.path.exists(path):
+        return []
+    names = []
+    for line in open(path, encoding="utf-8"):
+        line = line.split("#", 1)[0].strip()
+        if line:
+            names.append(line)
+    return names
+
+
+def is_role_file(path: str) -> bool:
+    return path.startswith(ROLE_DIRS)
+
+
+def hits_in(text: str, where: str, everywhere: list[str], role_only: list[str], role: bool) -> list[str]:
+    found = []
+    lower = text.lower()
+    for needle in everywhere:
+        if needle.lower() in lower:
+            found.append(f"{where}: carries the private text `{needle}`")
+    if role:
+        for needle in role_only:
+            if needle.lower() in lower:
+                found.append(f"{where}: a skill or agent file names a person, `{needle}`; name the role instead")
+    return found
+
+
+def check_blob(path: str, text: str, everywhere: list[str], role_only: list[str]) -> list[str]:
+    found = hits_in(path, f"file name {path}", everywhere, role_only, is_role_file(path))
+    if "\0" in text[:8000]:
+        return found  # binary: the name was checked, the bytes are not text
+    for number, line in enumerate(text.splitlines(), 1):
+        found += hits_in(line, f"{path}:{number}", everywhere, role_only, is_role_file(path))
+    return found
+
+
+def staged_files() -> list[str]:
+    return [p for p in git("diff", "--cached", "--name-only", "--diff-filter=ACMR").splitlines() if p]
+
+
+def tracked_files() -> list[str]:
+    """Every tracked file plus every untracked file git would not ignore."""
+    return [p for p in git("ls-files", "--cached", "--others", "--exclude-standard").splitlines() if p]
+
+
+def blob(path: str, staged: bool) -> str:
+    if staged:
+        raw = subprocess.run(["git", "show", f":{path}"], check=True, capture_output=True).stdout
+    else:
+        with open(path, "rb") as handle:
+            raw = handle.read()
+    return raw.decode("utf-8", errors="replace")
+
+
+def run(message_path: str | None, tree: bool) -> int:
+    everywhere = home_paths() + private_names()
+    role_only = person_words()
+    found: list[str] = []
+    if message_path:
+        with open(message_path, encoding="utf-8", errors="replace") as handle:
+            message = handle.read()
+        found += hits_in(message, "the commit message", everywhere, role_only, False)
+    files = tracked_files() if tree else staged_files()
+    for path in files:
+        try:
+            text = blob(path, staged=not tree)
+        except (subprocess.CalledProcessError, OSError):
+            continue
+        found += check_blob(path, text, everywhere, role_only)
+    if not found:
+        return 0
+    print("REFUSED: this commit would carry private text.", file=sys.stderr)
+    for hit in found[:50]:
+        print(f"  {hit}", file=sys.stderr)
+    if len(found) > 50:
+        print(f"  ... and {len(found) - 50} more", file=sys.stderr)
+    print("Replace the text and commit again. The list is ~/.claude/private-names.txt; "
+          "a new name goes on it only with the owner's approval.", file=sys.stderr)
+    if not private_names():
+        print(f"(No private names list at {LIST}: only the home path and the name were checked.)", file=sys.stderr)
+    return 1
+
+
+def main(argv: list[str]) -> int:
+    if "--tree" in argv:
+        return run(None, tree=True)
+    message_path = next((a for a in argv if not a.startswith("--")), None)
+    return run(message_path, tree=False)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

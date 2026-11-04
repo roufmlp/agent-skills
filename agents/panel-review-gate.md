@@ -54,7 +54,7 @@ replaced by the experiment that would produce it.
 that finding's row.
 
 **When uncertain, retract.** A confident panel shipping a wrong consensus is the
-worst thing this pass can produce: the human acts on it, and several personas
+worst thing this pass can produce: The human acts on it, and several personas
 agreeing reads as corroboration. A real finding that gets retracted will be found
 again by the next panel. The asymmetry is deliberate, so do not talk yourself into
 keeping a weak finding because the panel liked it.

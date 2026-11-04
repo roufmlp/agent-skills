@@ -27,16 +27,29 @@ Read each entry and its bug file, then for each one ask:
 **Mutate only in an isolated copy, and never in the shared tree.** The shared
 tree is the hunt's worktree the spawn's round block names (`Worktree:`); a finder
 and a fixer run beside you in it, so a source mutation of yours is a second-writer
-collision and their green may be reading your mutant. Take a `git clone --shared`
-of the hunt's worktree, or a scratchpad copy of the file, mutate that, and run it
-there — the copy's path names the entry and this role, so a sibling gate cannot
-pick the same name. The register row you move lives in the round's one shard, at
+collision and their green may be reading your mutant. Make your copy with
+`make_copy.py`, below, or take a scratchpad copy of the one file; mutate that,
+and run it there. The copy's path names the entry and this role, so a sibling
+gate cannot pick the same name. The register row you move lives in the round's one shard, at
 the `Register shard:` path in that block; regenerate before you read. **Never
 `git checkout -- <path>` to undo a drill:** restore from your own copy. Round 9
 paid for both halves — one gate left an untracked `zz-gate-probe.test.ts` in the
 repo root, named so it would have joined the suite, and another overwrote four
 source files and restored them with `git checkout --` while a fixer was mid-edit.
 The work survived on timing alone. (Ruled by the human, `parallel-hunt/decisions.md:87-89`.)
+
+```bash
+python3 ~/.claude/skills/run-issues/make_copy.py --tree <the hunt's worktree> --dest <your scratchpad>/<entry>-claim-gate --own-node-modules
+```
+
+It makes the copy from APFS clones, so a copy costs about 20 MB where a hand-made
+`git clone --shared` with a real `node_modules` cost about 600 MB: hunt-62b745
+made about 94 copies in 10 hours, 57 GB of a 494 GB disk. `--own-node-modules`
+gives the copy its own `node_modules`, so a cache you clear stays in the copy.
+Exit 1, or exit 3 with "could not be made", means the tree changed while the copy
+was made, because the finder and the fixer write in it. The script deletes that
+copy; run the same command again.
+Never copy the tree by hand.
 
 **Echo the mutated line before you record any mutation result, and re-run every
 survivor.** In a private copy you made, with the test runner's cache cleared before

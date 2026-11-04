@@ -1,0 +1,9 @@
+{
+  "name": "roufmlp",
+  "description": "The workflow plugin: two lanes, rules as skills, build agents and refusing hooks.",
+  "owner": { "name": "Abdul Rouf", "url": "https://github.com/roufmlp" },
+  "allowCrossMarketplaceDependenciesOn": ["claude-plugins-official"],
+  "plugins": [
+    { "name": "workflow", "source": "./", "description": "A fast lane from idea to live MVP and a careful lane for products: rules as skills, build agents, refusing hooks and a feature workflow." }
+  ]
+}

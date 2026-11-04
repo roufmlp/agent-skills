@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
 """Refuse the git commands that reach across sessions in one checkout.
 
-Blast radius, before anything else. This is a `PreToolUse` hook on the `Bash`
-matcher. It reads one field, `tool_input.command`, and acts only when a word in
-it is `git`. In a LINKED WORKTREE it refuses one thing: a bare `git stash` and a
-`git stash pop`, because the stash stack is the one piece of git state a
-worktree does not get its own copy of. In the MAIN checkout it also refuses a
-wide `git add`, a `git commit` that names no paths, and the destructive
-whole-tree commands. The one exception is a merge in progress: a pathless
-`git commit` or `git merge --continue` that concludes it passes when every staged
-path is one the merge brings, and says on stdout which paths it carries. Every
-other git command passes, every non-Bash tool call passes, and it writes nothing
-anywhere. On a payload it cannot parse, or on any error of its own, it exits 0.
+Ticket 41 of the pilot-delivery map, "one git index serves every session in the
+main checkout", grilled 2026-09-07. Sixteen rulings; this file is the whole
+build.
 
 ## The fault
 
@@ -20,16 +12,17 @@ A git worktree gets its own index. The MAIN checkout has exactly one, at
 the main checkout stages whatever every other session has touched, and the
 commit that follows carries work its message does not describe.
 
-Two measured instances, about two hours apart:
+Two instances, both 2026-09-07, about two hours apart:
 
     one   a session ran `cd <main> && git add -A && git commit`, meaning the
-          `cd` only to reach a file. It committed 1,472 lines of another
-          session's in-flight state under a message describing none of it.
+          `cd` to reach a file. It committed 1,472 lines of run `batch-207704`'s
+          in-flight state under a message about ticket 36.
 
     two   a session staged exactly two files BY NAME, having learnt from the
           first. Between its `git add` and its `git commit`, another session
-          committed on main with a wide add and took both files with it. The
-          victim's own commit then answered "no changes added to commit".
+          committed on main with a wide add and took both files with it, into
+          `3d5fe7bf`, whose message names ticket 33. The victim's own commit
+          answered "no changes added to commit".
 
 Instance two is why this is a guard and not a habit: staging explicit paths does
 not protect you. Ruling 7 closes it — every commit in the main checkout names
@@ -38,10 +31,10 @@ in the shared index.
 
 ## Scope
 
-Every repository, with no worktree-count test (ruling 3). The reason: a reader
-may cut worktrees in any of their repositories, and a day with none present does
-not mean the session is alone. A guard that goes quiet on that evidence is worse
-than no guard.
+Every repository, with no worktree-count test (ruling 3). Abdul's reason: he uses
+worktrees in the other repositories too, and a day with none present does not
+mean the session is alone. A guard that goes quiet on that evidence is worse than
+no guard.
 
 The main checkout is where git reports the same path for `--git-dir` and
 `--git-common-dir`. A linked worktree has a private index and is never touched —
@@ -68,9 +61,9 @@ it carries.
 
 A merge commit cannot name its paths: git refuses "a partial commit during a
 merge". So ruling 7, read literally, leaves a conflicted merge in the main
-checkout with no porcelain way out. One measured session concluded such a merge
-with `write-tree`, `commit-tree`, `update-ref` and `merge --quit`, which bypassed
-this guard without a word.
+checkout with no porcelain way out. On 2026-09-23 session S4 concluded merge
+`14e658d` in the skills checkout with `write-tree`, `commit-tree`, `update-ref`
+and `merge --quit`, which bypassed this guard without a word.
 
 Ruling 7's purpose is that a commit carries only what its author chose. A merge
 commit's author chose the merge, so while `MERGE_HEAD` exists a pathless
@@ -82,9 +75,21 @@ which paths the merge commit carries. `-a` and `--amend` keep their refusals.
 If the guard cannot read what the merge brings, ruling 7's refusal stands: the
 exception is granted on a measurement, never on its absence.
 
+## Skipped git hooks
+
+"Where the note check lives, and baselines for changed screens" (workflow v2
+ticket 33, 2026-11-01) put the careful lane's note check, duplicate migration
+number check and migration-order check into git hooks in each graduated
+product. `--no-verify` and `-c core.hooksPath=` skip every git hook, and a
+change to `core.hooksPath` points them elsewhere, so this guard refuses all
+three on an agent's git command, in every checkout. The road is to fix what
+the hook refused, and the product's own `prepare` script is the one way to set
+`core.hooksPath`. A read of the value (`git config --get core.hooksPath`)
+passes. Built 2026-11-03, stage two session 2.
+
 The block mechanism — read the payload from stdin, write the reason to stderr,
-exit 2 — is the documented PreToolUse contract, and every published hook beside
-this one carries the same shape.
+exit 2 — is the documented PreToolUse contract, and `generated-file-guard.py` in
+this same directory is the shape copied.
 """
 
 import json
@@ -290,7 +295,7 @@ def is_wide_path(path, cwd):
     """A pathspec that names more than one file the author chose.
 
     `.`, a glob, a magic pathspec, or a directory on disk. Ruling 5 names the
-    directory case: `.scratch/example-feature/` holds the register and every
+    directory case: `.scratch/tenderflow-pilot/` holds the register and every
     run, and that is the class instance one committed.
     """
     if path in (".", "./", "", "*"):
@@ -641,9 +646,9 @@ def refuse(command, cwd, reason, subcommand):
         f"  {cwd}\n"
         f"{preamble}{reason}\n\n"
         f"{road_for(road_key(subcommand, reason))}\n\n"
-        "This closes two measured instances. In the second, the paths were "
-        "staged explicitly by name and another session committed them anyway: "
-        "naming what you stage does not protect it while the index is shared.",
+        "Ticket 41 of the pilot-delivery map records the two instances this "
+        "closes, both on 2026-09-07. Staging explicit paths did not protect the "
+        "second one.",
         file=sys.stderr,
     )
     return 2
@@ -686,6 +691,70 @@ def announce(notices):
     }))
 
 
+# ------------------------------------------------------- skipped git hooks
+
+
+HOOKS_KEY = "core.hookspath"
+NO_VERIFY_SHORT = {"commit", "merge"}  # where `-n` means --no-verify; for push it is --dry-run
+CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--list", "-l", "get", "list"}
+
+
+def refuse_hook_skip(words):
+    """Why a git command skips or moves the git hooks, or None.
+
+    `words` is the whole git call, global options included. A `core.hooksPath`
+    spelled any way inside a global `-c` or `--config-env`, or in a `git config`
+    write, refuses; the driver reads a `GIT_CONFIG_KEY_n=` prefix. So does
+    `--no-verify` on any subcommand, and `-n` (alone or bundled) on commit and
+    merge.
+    """
+    _, _, argv = parse_git(words, "/")
+    subcommand = argv[0] if argv else ""
+    # The global options sit between `git` and the subcommand. A commit
+    # message that mentions the key is one quoted word of the subcommand's
+    # argv, and is not read here.
+    global_words = [w.lower() for w in words[1:len(words) - len(argv)]]
+    if "--no-verify" in argv:
+        return "`--no-verify` skips every git hook, the note check among them."
+    if subcommand in NO_VERIFY_SHORT:
+        options, _ = split_pathspec(argv[1:])
+        if any("n" in short_flags(word) for word in options):
+            return f"`-n` on `git {subcommand}` is `--no-verify`: it skips every git hook."
+    key_in_config = subcommand == "config" and any(HOOKS_KEY in w.lower() for w in argv[1:])
+    if key_in_config or any(HOOKS_KEY in word for word in global_words):
+        if subcommand == "config":
+            config_words = [w.lower() for w in argv[1:]]
+            if any(word in CONFIG_READS for word in config_words):
+                return None
+            key_at = next((i for i, w in enumerate(config_words) if HOOKS_KEY in w), None)
+            writes = any(w in ("--unset", "--unset-all", "--replace-all", "--add", "--edit", "-e",
+                               "unset", "set", "--set") for w in config_words)
+            after_key = [w for w in config_words[key_at + 1:] if not w.startswith("-")] if key_at is not None else []
+            if not writes and not after_key:
+                return None  # `git config core.hooksPath` reads it
+            return "a change to `core.hooksPath` moves every git hook, the note check among them."
+        return ("`core.hooksPath` on the command line replaces every git hook for this call, "
+                "the note check among them.")
+    return None
+
+
+def refuse_hooks(command, cwd, reason):
+    print(
+        f"REFUSED — {command} in any checkout.\n"
+        f"  {cwd}\n"
+        f"{reason}\n\n"
+        "The careful lane's note check, duplicate migration number check and "
+        "migration-order check are git hooks in each graduated product, and a hook "
+        "that an agent can skip holds nothing. Fix what the hook refused instead; "
+        "its message names the note, the screen or the migration. To install or "
+        "repair a product's hooks, run its own script: `npm run prepare` or "
+        "`sh .githooks/prepare`. To read the value: `git config --get core.hooksPath`.\n\n"
+        "Ticket 33 of the workflow v2 map, \"Where the note check lives\", 2026-11-01.",
+        file=sys.stderr,
+    )
+    return 2
+
+
 # ------------------------------------------------------------------- driver
 
 
@@ -706,7 +775,7 @@ def decide(payload):
         index = 0
         while index < len(words) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", words[index]):
             index += 1
-        words = words[index:]
+        prefix, words = words[:index], words[index:]
         if not words:
             continue
         head = words[0]
@@ -719,6 +788,12 @@ def decide(payload):
             continue
         if os.path.basename(head) != "git":
             continue
+        skip = refuse_hook_skip(words) or (
+            "a `GIT_CONFIG_KEY` prefix naming `core.hooksPath` replaces every git hook for "
+            "this call, the note check among them."
+            if any(HOOKS_KEY in word.lower() for word in prefix) else None)
+        if skip:
+            return refuse_hooks("git " + " ".join(words[1:2]), cwd, skip)
         where, git_dir, argv = parse_git(words, cwd)
         main = is_main_checkout(where, git_dir)
         reason, subcommand = verdict(argv, where, main, git_dir)

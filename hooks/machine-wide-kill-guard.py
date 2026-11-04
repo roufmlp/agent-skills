@@ -1,49 +1,50 @@
 #!/usr/bin/env python3
 """Refuse a kill that selects processes by PATTERN rather than by pid.
 
-BLAST RADIUS, first, because a reader cannot consent to a control whose reach is
-unstated:
+PreToolUse hook on Bash, registered in ~/.claude/settings.json.
 
-- Registers on PreToolUse for Bash, and for nothing else. It reads the command
-  string; it opens no file, reads no tree and no ledger, and writes nothing.
-- Matches `pkill` and `killall` in any spelling, and `kill` whose targets come
-  from a substitution that SELECTS BY PATTERN -- `kill $(pgrep -f <name>)` and
-  its backtick form. Those three are the roads to killing a process you did not
-  start.
-- DELIBERATELY LETS PAST: `kill <pid>` and `kill -9 <pid>` with literal numbers,
-  a pid read back from a file the caller wrote, `pgrep` alone (a read), and every
-  other command on the machine. On a payload it cannot parse it exits 0.
-- It has no opinion about who typed the command. A machine-wide kill is wrong
-  from a gate, from an implementer and from the runner alike, because every one
-  of them shares the machine with the others.
+Ruled by Abdul on 2026-09-17, walking the decisions of run `batch-26c495`.
 
-WHAT HAPPENED. One run spawned its two gates concurrently, each in its own
-private copy, which is the design: the wall clock is the slower of the two rather
-than their sum. The verify gate of round 1 needed to prove a criterion that asks
-what a SIGKILL mid-run leaves behind. It reached for `pkill -9 -f vitest`.
+WHAT HAPPENED. That run spawned its two gates concurrently, each in its own
+private copy, which is the design: the wall clock is the slower of the two
+rather than their sum. The verify gate of round 1 needed to prove criterion 5,
+which asks what a SIGKILL mid-run leaves behind. It reached for
+`pkill -9 -f vitest`.
 
-That pattern does not match "my suite". It matches every `vitest` on the machine,
-and at that moment a second gate was running its own suite in its own tree, and a
-third tree could have been running one too. The gate disclosed the call itself,
-in its verdict, which is the only reason anybody knows. Nothing refused it and
-nothing recorded which processes died.
+That pattern does not match "my suite". It matches every `vitest` on the
+machine, and at that moment a second gate was running its own suite in its own
+tree, and a third tree could have been running one too. The gate disclosed the
+call itself, in its verdict, which is the only reason anybody knows. Nothing
+refused it and nothing recorded which processes died.
 
-WHY A HOOK AND NOT A LINE IN A BRIEF. The steering rule in this pack
-(`steering/CLAUDE.md`, "Refuse, or state a fact. Never ask an agent to remember")
-sorts every proposal into three classes, and the deciding question is whether the
-thing can refuse. This can. A brief that says "kill only what you started" is a
-reminder, and the rule it replaces was already implicit in every gate brief on
-the day it was broken.
+WHY A HOOK AND NOT A LINE IN A BRIEF. `~/.claude/CLAUDE.md` sorts every
+proposal into three classes, and the deciding question is whether the thing can
+refuse. This can. A brief that says "kill only what you started" is a reminder,
+and the rule it replaces was already implicit in every gate brief on the day it
+was broken.
 
-Ruled by the human on 2026-09-17.
+WHAT IS REFUSED
 
-The block mechanism -- read the payload from stdin, write the reason to stderr,
-exit 2 -- is the documented PreToolUse contract, and `coderules-gate.py` in this
-same directory is the shape copied.
+`pkill` and `killall` in any form, and `kill` fed from a command substitution
+that selects by pattern -- `kill $(pgrep -f vitest)` and its spellings. Those
+three are the roads to killing a process you did not start.
+
+WHAT IS DELIBERATELY LET PAST
+
+`kill <pid>` and `kill -9 <pid>` with literal numbers, because a pid is a
+process you looked up and chose. A run that starts a server keeps its pid: run
+`batch-26c495`'s own finale wrote `echo $! > /tmp/114-dev.pid` and later killed
+that one number, which is the shape this guard steers toward.
+
+Nothing else. This hook has no opinion about any other command, and it never
+reads a path, a tree or a ledger: a machine-wide kill is wrong from a gate, from
+an implementer and from the runner alike, because every one of them shares the
+machine with the others.
 """
 
 import json
 import re
+import shlex
 import sys
 
 # `pkill`/`killall` anywhere a command can start: line start, or after a pipe,
@@ -54,10 +55,10 @@ _PATTERN_KILLERS = re.compile(
 # `kill` whose targets come from a substitution that SELECTS BY PATTERN.
 #
 # The substitution alone is not the fault, and an early draft of this hook got
-# that wrong: it refused `kill "$(cat /tmp/dev.pid)"`, which is the exact road
-# the refusal text recommends. A guard that refuses its own advice teaches the
-# reader to work around it. What makes a target a pattern is the selector inside
-# the substitution -- `pgrep`, `pidof`, or a `ps` piped through a filter.
+# that wrong: it refused `kill "$(cat /tmp/114-dev.pid)"`, which is the exact
+# road the refusal text recommends. A guard that refuses its own advice teaches
+# the reader to work around it. What makes a target a pattern is the selector
+# inside the substitution -- `pgrep`, `pidof`, or a `ps` piped through a filter.
 _KILL_FROM_PATTERN = re.compile(
     r"(?:^|[|;&(]|\|\||&&)\s*(?:sudo\s+)?kill\b[^|;&\n]*"
     r"(?:\$\(|`)\s*(?:sudo\s+)?(pgrep|pidof|ps)\b")

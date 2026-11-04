@@ -1,10 +1,8 @@
 """Drill for machine-wide-kill-guard.py.
 
-The corpus is the shape an agent actually types. The refused case is the one a
-verify gate typed on 2026-09-17, walking a run's decisions; the passing cases are
-the ones that run's finale typed the same evening.
-
-Run: python3 test_machine_wide_kill_guard.py
+The corpus is the shape an agent actually types. The refused case is the one run
+`batch-26c495`'s verify gate typed on 2026-09-17; the passing cases are the ones
+its finale typed the same evening.
 """
 
 import importlib.util
@@ -73,7 +71,7 @@ def test_kill_fed_from_backticks_is_refused():
 # ── What must keep working ──────────────────────────────────────────────────
 
 def test_a_literal_pid_is_never_refused():
-    # A run's finale stopped its own dev server this way.
+    # The finale of run batch-26c495 stopped its own dev server this way.
     assert not refused("kill 55832")
 
 
@@ -84,7 +82,7 @@ def test_a_literal_pid_with_a_signal_is_never_refused():
 def test_a_pid_read_from_a_file_this_session_wrote_is_allowed():
     # The shape the refusal text steers toward. It is a substitution, but it
     # reads a pid the caller captured rather than selecting by pattern.
-    assert not refused('kill "$(cat /tmp/dev.pid)"')
+    assert not refused('kill "$(cat /tmp/114-dev.pid)"')
 
 
 def test_an_unrelated_command_is_untouched():
@@ -116,11 +114,11 @@ def test_only_bash_is_guarded():
 def _load_tests(loader=None, tests=None, pattern=None):
     """Wrap this file's plain `test_` functions as a unittest suite.
 
-    The suite runner reads an executed-count from a unittest or pytest summary
-    line, and refuses a file that prints neither -- an unread instrument and a
-    clean instrument look alike. These checks are plain functions rather than
-    `TestCase` methods, so this is what gives them a `Ran N tests` line to be
-    counted by.
+    The repo's suite runner reads an executed-count from a unittest or pytest
+    summary line, and refuses a file that prints neither -- an unread
+    instrument and a clean instrument look alike. These checks are plain
+    functions rather than `TestCase` methods, so this is what gives them a
+    `Ran N tests` line to be counted by.
     """
     import unittest
     suite = unittest.TestSuite()

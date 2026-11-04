@@ -1,0 +1,7 @@
+#!/bin/sh
+# The careful lane's note check and the duplicate migration number check, on
+# every commit, whoever makes it. The script lives in the workflow plugin at
+# the plugin's working copy, `~/.claude/skills/workflow`, or `$WORKFLOW_LIB`; the hook refuses every commit while it is missing.
+CHECK="${WORKFLOW_LIB:-$HOME/.claude/skills/workflow/lib}/note_check.py"
+[ -f "$CHECK" ] || { echo "REFUSED: $CHECK is missing, so no commit passes. Clone the workflow plugin there, or set WORKFLOW_LIB." >&2; exit 1; }
+exec python3 "$CHECK" commit

@@ -1,41 +1,36 @@
 #!/usr/bin/env python3
-"""Force the code rules to be read once per context, before the first code edit.
+"""Force the code rules to be loaded once per context, before the first code edit.
 
-Blast radius, before anything else. This is a `PreToolUse` hook on
-`Edit|Write|NotebookEdit`. It reads one field, `tool_input.file_path`, and
-refuses at most ONE call per context: the first edit whose path has a code
-suffix (see `CODE_SUFFIXES`) and does not sit under a skipped directory. Prose,
-Markdown, scratch state, `node_modules` and `.git` pass untouched, and so does
-every code edit after the first. It writes one empty marker file per context
-under a temporary directory and touches nothing in the reader's repository.
-Registering it is a separate step: see `hooks/README.md`.
+The rules are the body of the `coderules` skill: nothing is in context until the
+skill is invoked, and a skill only loads if the session remembers to invoke it,
+and "remember to" is not a control.
 
-Blocking does not cancel the work. The model reads the rules and reissues the
-same call, which is why one refusal is enough and a second would only cost the
-reader turns.
+So: on the first edit of a code file in a context, block once and name the skill.
+Blocking does not cancel the work — Claude invokes the skill and reissues the same
+call. It fires at most once per context, and never for prose. See the Code section
+of ~/.claude/CLAUDE.md.
 
-Why it is a script and not a line of prose. The rules used to be an `@import`
-in `CLAUDE.md`, so every session paid roughly 2.8k tokens for them whether or
-not it wrote a line of code. They now load on demand behind a skill — but a
-skill loads only if the session remembers to invoke it, and "remember to" is
-not a control. See the Code section of `steering/CLAUDE.md` in this pack.
-
-Point it at your own rules. `CODERULES_PATH` overrides the default,
-`~/.claude/coderules.md`; this pack publishes a copy of mine as
-`steering/coderules.md`, which is meant to be replaced rather than adopted. If
-you replace it, the two sentences in the refusal message below are about MY
-rules file and should be edited to name the two of yours that get skipped most.
-
-Fails open throughout: an unparseable payload, an unwritable temporary
-directory, or a path it cannot classify all return 0.
+The skill is looked up by name, never by a path to a rules file: a machine that
+installs the skill through the plugin has no `~/.claude/coderules.md`, and the
+message says when the skill cannot be found at all. The state directory can be
+moved with CODERULES_GATE_STATE, which is how the test keeps out of the real one.
 """
 
+import glob
 import json
 import os
 import sys
 
-STATE_DIR = "/tmp/claude-coderules-gate"
-RULES = os.environ.get("CODERULES_PATH") or os.path.expanduser("~/.claude/coderules.md")
+STATE_DIR = os.environ.get("CODERULES_GATE_STATE", "/tmp/claude-coderules-gate")
+SKILL = "coderules"
+# Where the skill's body can live: the private skills tree, or a plugin's skills folder.
+SKILL_HOMES = (
+    os.path.join(os.environ.get("CLAUDE_PLUGIN_ROOT", "/nonexistent"), "skills", SKILL, "SKILL.md"),
+    os.path.expanduser("~/.claude/skills/*/skills/coderules/SKILL.md"),
+    os.path.expanduser("~/.claude/skills/coderules/SKILL.md"),
+    os.path.expanduser("~/.claude/plugins/*/skills/coderules/SKILL.md"),
+    os.path.expanduser("~/.claude/plugins/*/*/skills/coderules/SKILL.md"),
+)
 
 CODE_SUFFIXES = {
     ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".rb", ".go", ".rs",
@@ -54,6 +49,16 @@ def is_code(path: str) -> bool:
     if parts & SKIP_PARTS:
         return False
     return os.path.splitext(path)[1].lower() in CODE_SUFFIXES
+
+
+def installed() -> str:
+    """One line saying where the skill was found, or that it was not."""
+    for pattern in SKILL_HOMES:
+        found = sorted(glob.glob(pattern))
+        if found:
+            return f"The skill is installed at {found[0]}."
+    return (f"The `{SKILL}` skill is not installed on this machine: none of "
+            + ", ".join(SKILL_HOMES) + " exists. Install the plugin that carries it.")
 
 
 def main() -> int:
@@ -93,11 +98,13 @@ def main() -> int:
     )
     print(
         f"CODE RULES: {who}\n"
-        f"Read {RULES} in full now, then reissue this call.\n"
+        f"Invoke the `{SKILL}` skill now (Skill tool); its body is the rules. Then "
+        "reissue this call.\n"
+        f"{installed()}\n"
         "The two that get skipped most: fix the policy instead of bypassing the "
         "control (never swap in an admin key), and RLS goes on the same day the "
         "table is created.\n"
-        "If you have already read that file in THIS context, say so in one line and "
+        "If the skill is already loaded in THIS context, say so in one line and "
         "reissue — this fires once per context only.",
         file=sys.stderr,
     )

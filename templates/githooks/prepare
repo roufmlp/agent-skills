@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs on every npm install through the package.json line
+#   "prepare": "sh .githooks/prepare"
+# so a fresh clone gets the hooks: git does not copy local config. Graduation
+# step 7 runs it once by hand. Outside a git checkout it does nothing.
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+chmod +x .githooks/pre-commit .githooks/pre-merge-commit .githooks/pre-push
+git config core.hooksPath .githooks
+git config branch.main.mergeoptions --no-ff
+echo "hooks: core.hooksPath=.githooks, branch.main.mergeoptions=--no-ff"

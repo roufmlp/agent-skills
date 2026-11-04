@@ -1,0 +1,56 @@
+name: check
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate the plugin and its marketplace
+        run: claude plugin validate .
+      - name: Budget
+        run: python3 lib/check_budget.py
+      - name: Private text
+        run: python3 .githooks/commit-msg --tree
+      - name: Hook and library drills
+        run: |
+          python3 lib/run_python_suites.py hooks
+          python3 lib/run_python_suites.py lib
+          python3 .githooks/test_commit_msg.py
+      - name: Agent files
+        run: python3 lib/check_build_agents.py
+      - name: Load check
+        run: claude -p --plugin-dir . --max-turns 1 --output-format text "Reply with the single word ok." 
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+  eval:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm install -g @anthropic-ai/claude-code
+      - name: Each hook still refuses what it is for
+        run: claude plugin eval . --cases .github/eval-cases.json
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

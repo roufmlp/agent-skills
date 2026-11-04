@@ -16,12 +16,11 @@ it.
 
 Two jobs. It makes the run resumable: a session handed this directory re-spawns the rows
 marked neither `returned` nor `failed`, each with the lens that row records — which is
-why the lens lives here and not only in a spawn prompt the dead session was holding.
-And it keeps the corpus frozen — a persona re-spawned tomorrow that derives its own
-cases walks different inputs, so two personas would then disagree because they
-imagined different scenarios, reported as a real conflict. The disagreement map is
-the synthesis engine, and it only carries signal when every persona walked the
-identical case.
+why the lens lives here and not only in a spawn prompt the dead session was holding. And it keeps the
+corpus frozen — a persona re-spawned tomorrow that derives its own cases walks different
+inputs, so two personas would then disagree because they imagined different scenarios,
+reported as a real conflict. The disagreement map is the synthesis engine, and it only
+carries signal when every persona walked the identical case.
 
 **A scenario carrying a number launders it.** Write "a long report" and each persona
 reasons from its own sense of long; write "a 400-line report" and all of them are
@@ -34,9 +33,9 @@ reads `panel.md` and nothing else in the directory: the other reports and the
 orchestrator's own notes sit there too, and one glance at either turns independent
 agreement into an echo.
 
-**Findings are addressable, and this session opens the verdict file.** Persona *n*
-numbers its issues `p<n>-1`, `p<n>-2`. Before the gate spawns, write `gate.md` with one
-row per finding id and one per invariant, every verdict cell reading `pending`:
+**Findings are addressable, and this session opens the verdict file.** Persona *n* numbers
+its issues `p<n>-1`, `p<n>-2`. Before the gate spawns, write `gate.md` with one row per
+finding id and one per invariant, every verdict cell reading `pending`:
 
 ```
 | id | verdict | why |
@@ -48,13 +47,13 @@ row per finding id and one per invariant, every verdict cell reading `pending`:
 A finding's verdict is `confirmed` or `retracted`; an invariant's is `HOLDS`, `GAP` or
 `UNTESTABLE BY READING`. The gate edits its own rows and creates nothing.
 
-The skeleton exists because a gate that dies writes nothing. Two did, at the weekly
-usage limit, in one day, and both times someone had to dig the mechanical citation
-checks out of a transcript by hand. Rows the gate never reached stay `pending`, so a
-dead gate now leaves a partial verdict and a list of what is owed.
+The skeleton exists because a gate that dies writes nothing. Two did, at the weekly usage
+limit, in one day of the 2026-08-15 workflow audit, and both times someone had to dig the
+mechanical citation checks out of a transcript by hand. Rows the gate never reached stay
+`pending`, so a dead gate now leaves a partial verdict and a list of what is owed.
 
-Nothing else in the directory is edited — a status written into a persona report
-destroys the on-disk state a resumed run reads.
+Nothing else in the directory is edited — a status written into a persona report destroys
+the on-disk state a resumed run reads.
 
 **`report.md`**, below.
 
@@ -68,11 +67,11 @@ ledger.
 Any of them may say "none". Seven that may be empty beat a longer list where each must
 say something, which is how a report template turns into filler.
 
-1. **Verdict.** Opens with one provenance line: tier, persona count, whether a gate
-   ran, how many findings it retracted, how many rows it left `pending`, and any
-   persona that `failed`. The report a reader sees most often is the ungated one, and
-   nothing else in it says so. A part-gated report is the same hazard wearing a gate's
-   clothes, so the pending count goes in the same line.
+1. **Verdict.** Opens with one provenance line: tier, persona count, whether a gate ran,
+   how many findings it retracted, how many rows it left `pending`, and any persona that
+   `failed`. The report a reader sees most often is the ungated one, and nothing else in
+   it says so. A part-gated report is the same hazard wearing a gate's clothes, so the
+   pending count goes in the same line.
 2. **Invariants.** Each one `HOLDS` with its citation, `GAP` with the nearest
    insufficient mechanism and why it falls short, or `UNTESTABLE BY READING`.
 3. **Agreed findings, ranked.** What three or more personas raised independently, each
@@ -90,10 +89,9 @@ say something, which is how a report template turns into filler.
    needed a number this pass refused to estimate.
 7. **Scenarios omitted.** What the cap dropped, so the gap is visible.
 
-Unresolved forks append to your own queue shard (`collect_shards.py --kind queue
---my-shard --prefix <your id>`, one id per item heading), so they reach the human in a
-single list via `daily-brief` rather than sitting in a report they have to remember
-to reopen.
+Unresolved forks append to your own queue shard (`collect_shards.py --kind queue --my-shard --prefix <your id>`, one id per item heading), so they reach the human in a
+single list via `daily-brief` rather than sitting in a report he has to remember to
+reopen.
 
 ## Cost
 

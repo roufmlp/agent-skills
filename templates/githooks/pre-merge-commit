@@ -1,0 +1,7 @@
+#!/bin/sh
+# The duplicate migration number check on every merge, and on a merge into
+# main the red check for the whole feature. A fast-forward skips this hook, so
+# the prepare script sets branch.main.mergeoptions to --no-ff.
+CHECK="${WORKFLOW_LIB:-$HOME/.claude/skills/workflow/lib}/note_check.py"
+[ -f "$CHECK" ] || { echo "REFUSED: $CHECK is missing, so no merge passes. Clone the workflow plugin there, or set WORKFLOW_LIB." >&2; exit 1; }
+exec python3 "$CHECK" merge

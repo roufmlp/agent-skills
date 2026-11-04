@@ -1,427 +1,97 @@
 # agent-skills
 
-Skills, steering rules and multi-agent workflows I use with Claude Code, published
-as I write them. The interesting part is orchestration: an autonomous issue runner
-and a parallel bug hunt that spawn fresh subagents for every job, gate their output
-adversarially, and resume themselves across rate limits. Everything here runs my
-real projects first; this repo is the record.
+I built an autonomous software pipeline for Claude Code, with 33 hooks and a second agent on every change whose only job was to find a reason to reject it. It built Orderflow, which now runs the orders of a real business, in six weeks and 2,528 commits. Then I measured where the time went and cut most of it.
 
-## The setting nothing read
+What survived fits on one page. A fast lane gives an idea four days to become a live MVP, and a careful lane takes over the day a real customer arrives. The target is a new product every two to four weeks.
 
-From the first version of these skills until the week I checked, they carried a
-table assigning a thinking-effort level to every role. Nothing in the harness ever
-read it — the `Agent` tool takes a model but has no effort parameter, so every
-worker had been inheriting one session-wide setting the entire time. [How the models and effort levels were actually
-chosen](docs/model-and-effort-choices.md) is the record of finding that, measuring
-the replacement instead of guessing at it, and reporting the result where it
-contradicted the documentation.
+| What I run | Version 1 | Version 2 |
+|:--|--:|--:|
+| Skills I use | 35 | 23 |
+| of them my own | 11 | 6 |
+| Hooks | 33 | 7 |
+| Agent definitions | 16 | 14 |
+| Minutes of build session per shipped change | 69 | measured after three products |
 
-## How the pieces fit
-
-Three layers. Steering documents set standing rules for every session. Skills
-encode workflows a session can invoke. The orchestration skills go further: they
-turn one session into a thin runner that spawns workers and gates as disposable
-subagents, with all state in files so any later session can resume the run.
-
-```mermaid
-%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart TD
-    ST["steering/<br/>CLAUDE.md · writingrules · coderules"]
-    SES["a Claude Code session"]
-    SK["skills/<br/>repeatable workflows"]
-
-    subgraph ORCH ["the orchestration skills"]
-        HI["harden-issues<br/>criteria attack pass"]
-        RI["run-issues<br/>autonomous issue runner"]
-        PH["parallel-hunt<br/>concurrent bug hunt"]
-    end
-
-    subgraph SPAWN ["what they spawn, and throw away"]
-        W1["fresh implementer per issue<br/>adversarial verify + review gates"]
-        W2["finder and fixer workers<br/>adversarial claim + fix gates"]
-    end
-
-    F[("state lives in files, not contexts<br/>any later session resumes the run")]
-    DB["daily-brief<br/>one list, once a day"]
-
-    ST --> SES
-    SES -->|invokes| SK
-    SK --> HI
-    SK --> RI
-    SK --> PH
-    HI -->|stamps issues for| RI
-    RI --> W1
-    PH --> W2
-    W1 --> F
-    W2 --> F
-    HI -.->|queued questions| DB
-    RI -.->|queued questions| DB
-
-    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
-    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
-    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
-    class ST,SES,SK,HI,RI,PH,W1,W2 step
-    class F keep
-    class DB human
-    style ORCH fill:#FBFCFD,stroke:#CBD5E1,color:#475569
-    style SPAWN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+```
+claude plugin install workflow --marketplace roufmlp/agent-skills
 ```
 
-## Where a reminder failed, a script refuses
+The plugin holds my six public skills, fourteen agents and four hooks. It installs Matt Pocock's plugin beside them, 38 skills, because 17 of the skills I use are his.
 
-An audit in August 2026 read the loop's transcripts against its own rules and kept
-score: rules written as reminders kept failing, rules built as checks did not. So the
-weakest reminders are now small scripts the skills invoke as they run.
-[`check_verdict.py`](skills/lib/check_verdict.py) refuses to accept an adversarial
-agent's return when its verdict file is missing or empty,
-[`check_attempt_cap.py`](skills/run-issues/check_attempt_cap.py) refuses a spawn past
-the attempt cap, [`find_live_ledger.py`](skills/run-issues/find_live_ledger.py) picks
-the one ledger a resume may read, and
-[`move_closed_sections.py`](skills/daily-brief/move_closed_sections.py) archives what
-the brief has closed instead of trusting a session to. The list has grown since:
-[`check_paste_file.py`](skills/run-issues/check_paste_file.py) refuses a migration
-paste file whose confirmation query is commented out, or that git does not track,
-[`check_permission_floor.py`](skills/run-issues/check_permission_floor.py) refuses to
-launch a run whose own commands are not in the allow list,
-[`check_run_picture.py`](skills/run-issues/check_run_picture.py) refuses an action
-board whose figures disagree with the briefing block they were copied from, and
-[`check_decision_ledger.py`](skills/lib/check_decision_ledger.py) refuses a decision
-walk that ends without a costed ledger. Beside them sit the measuring scripts the finale
-runs: what a run cost, where its hours went, how far each estimate missed. Tests sit
-beside every script, and some grade the skill text itself, so an edit that drops an
-invocation fails the suite.
+## How it works
 
-Four of those checks are not scripts a skill calls. They are hooks the harness runs, and
-they refuse a tool call outright, before it happens.
-[`run-issues-foreground-gate.py`](hooks/run-issues-foreground-gate.py) refuses a
-`run-issues-*` spawn that does not set `run_in_background: false`,
-[`run-issues-evidence-gate.py`](hooks/run-issues-evidence-gate.py) refuses a gate spawn
-over an issue nobody has implemented yet,
-[`coderules-gate.py`](hooks/coderules-gate.py) refuses the first code edit of a context
-until the code rules have been read, and
-[`retired-phrases-gate.py`](hooks/retired-phrases-gate.py) refuses a write that puts a
-superseded sentence back into a steering file. All four ship here.
-
-**None does anything until you register it**, and this pack cannot register them for
-you: a hook runs only when an entry in your `settings.json` points at it. The exact
-block to paste, the event each hook matches, and what you still lose if you skip one are
-in [hooks/README.md](hooks/README.md). Copying the four files and stopping there leaves
-you with the reminders the hooks replaced.
-
-## The orchestration skills
-
-### [run-issues](skills/run-issues/SKILL.md)
-
-One thin runner session implements a range of tracker issues end to end,
-unsupervised. The human is needed once: the merge read at the end.
-
-```mermaid
-%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart TD
-    N["next issue from the ledger"]
-
-    subgraph ATT ["one attempt"]
-        IMP["fresh implementer<br/>test-first · one issue · then dies"]
-        FM{"final message read<br/>before gates are bought"}
-    end
-
-    subgraph ADJ ["adjudication"]
-        G{"verify drives the app<br/>review refutes the diff<br/>spawned concurrently"}
-        CORR["correction round<br/>one only · scoped to the verdicts"]
-        STR["one strike<br/>both gates rejecting is still one"]
-        ANN["annulled<br/>runner's own brief was at fault"]
-        RC{"strike-2 criteria attack<br/>classes 1, 5, 9 · evidence or silence"}
-        ESC["escalated implementer<br/>stronger model · both verdicts<br/>none of the failed reasoning"]
-    end
-
-    RT["routings greped · lint · commit"]
-    NH["needs-harden"]
-    B["blocked"]
-    BC["blocked (criteria)"]
-    DEP["dependents marked<br/>blocked (depends on NN)"]
-    MORE{"issues left?"}
-
-    subgraph CLOSE ["the run closes"]
-        FIN["coherence finale<br/>reads the branch as one change"]
-        PROM["promotion<br/>every register row → issue file, refusal or fixed"]
-        H["human merge gate<br/>nothing merges without it"]
-    end
-
-    N --> IMP
-    IMP --> FM
-    FM -->|"unfinished work"| IMP
-    FM -->|"criteria are wrong"| NH
-    FM -->|"gate-ready"| G
-
-    G -->|"both pass"| RT
-    G -->|"pass, follow-ups listed"| CORR
-    CORR --> RT
-    G -->|"either rejects"| STR
-
-    STR -->|"runner error"| ANN
-    ANN --> IMP
-    STR -->|"strike 1"| IMP
-    STR -->|"strike 2"| RC
-    STR -->|"strike 3"| B
-
-    RC -->|"criteria fault · reset<br/>max two per issue"| IMP
-    RC -->|"criteria sound"| ESC
-    RC -->|"unsettleable fork"| BC
-    ESC --> G
-
-    B --> DEP
-    RT --> MORE
-    DEP --> MORE
-    BC --> MORE
-    NH --> MORE
-    MORE -->|yes| N
-    MORE -->|no| FIN
-    FIN --> PROM
-    PROM --> H
-
-    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
-    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
-    classDef gate fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#4C0519
-    classDef stop fill:#FFFFFF,stroke:#94A3B8,stroke-width:1px,stroke-dasharray:4 3,color:#334155
-    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
-    class N,IMP,ESC,CORR,ANN step
-    class FM,G,RC,MORE gate
-    class RT,STR,FIN,PROM keep
-    class NH,B,BC,DEP stop
-    class H human
-    style ATT fill:#FBFCFD,stroke:#CBD5E1,color:#475569
-    style ADJ fill:#FBFCFD,stroke:#CBD5E1,color:#475569
-    style CLOSE fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+```
+ideas repo ──▶ brainstorm (1st, 15th) ──▶ brief ──▶ prototype ──▶ MVP ──▶ graduation ──▶ change notes
+                                          └───────── fast lane ─────────┘   └──── careful lane ────┘
 ```
 
-The design choices that earn their keep:
+The fast lane is for a product with no customer yet. A brief of one page, a prototype to settle the screens, then one build session that ends when the done checks pass: for a site, the checks in `skills/site-checks`. Nothing in the lane asks me a question mid-run; each session takes a default, writes it down and reports at the end.
 
-- Every worker is a fresh subagent. An implementer gets one issue; verify and
-  review gates get one verdict each, then die. Context never accumulates, and a
-  codebase primer means exploration is paid once per run, not once per issue.
-- Gates are adversarial and must cite driven evidence. Both spawn in one message
-  and neither reads the other's verdict: verify drives the running app and rejects
-  with observed behaviour, review tries to refute the diff. "It looks right" is
-  not a verdict.
-- Two strikes buy a criteria re-check, not a third implementer. An attacker
-  re-reads the issue against both verdicts. If the criteria were wrong, the
-  attempts are annulled and a fresh implementer builds to the corrected issue. If
-  they were sound, an escalated implementer on a stronger model gets both verdicts
-  but none of the failed reasoning, and is told not to trust the previous
-  diagnosis.
-- The ledger is thin because every spawn reads it; the narrative lives in a
-  journal only a resuming runner and the finale read. Shared external quotas
-  (API caps, send limits) are run state owned by the runner, and one agent holds
-  the spend window at a time.
-- A halt writes its own resume state into the ledger — what is on disk, what is
-  owed, in what order — so a run picks up where it stopped whether a session cron
-  revives it or a human does. Nothing merges without a human.
+The careful lane starts on the day real users or real data arrive. `/build-feature` interviews me once, writes the feature as change notes of half a page each, with the tests that prove them, and I approve the plan. A workflow then builds each note in a fresh agent, test-first, and two more agents try to reject it: one runs the checks and walks the screens with hostile input, one reads the diff. A note that fails three times is cut, never patched around. The final check runs the whole suite on the merged feature before it reaches main, and nothing pushes.
 
-### [harden-issues](skills/harden-issues/SKILL.md)
+## Where a reminder failed, a hook refuses
 
-The fix for the failure mode gates cannot catch: an issue whose acceptance
-criteria were wrong when written passes every gate, because every gate grades
-against the issue. This pass attacks criteria at authoring time — one attacker
-subagent per issue plus a seam agent over the whole set, working a checklist of
-eleven blind-spot classes that each shipped a real defect through green gates
-(unstated invariants and their scope, vague words, guards that cannot fail,
-unverified premises, empty test data, deploy ordering, unobservable criteria,
-oversized slices, which database the rows land in, criteria that cannot all be
-true at once, plus a seam pass for what falls between issues). It may only write
-what it can cite evidence for; every open fork routes to the human. Hardened issues carry a dated
-stamp that `run-issues` checks at launch.
+Every rule that an agent forgot often enough became a script. These four ship:
 
-### [daily-brief](skills/daily-brief/SKILL.md)
+| Hook | Refuses | What put it there |
+|---|---|---|
+| `coderules-gate` | The first code edit of a session before the code rules are loaded | Sessions skipped the rules whenever the first edit looked small |
+| `git-shared-state-guard` | `git add -A`, `git stash`, `--no-verify`, a change to `core.hooksPath`, and any wide commit in a checkout other sessions share | Two sessions staged each other's work in one day |
+| `machine-wide-kill-guard` | A kill that selects processes by pattern, such as `pkill -f vitest` | A gate killed the test runner of every session on the machine |
+| `headless-chrome-guard` | A Chrome launch without the flags that keep it out of the keychain and away from Apple Music | Keychain dialogs and a music app opening in the middle of runs |
 
-The human loop, made single. Nothing in the chain stops mid-run to ask a
-question — every skill takes its recommended default, records it as a default
-rather than a decision, and queues it. This skill collates those queues, plus
-unmerged branches and anything else resting on a human, into one brief read once
-a day, then writes the answers back. Merge approvals carry the branch SHA they
-were read against: a branch that moved since is re-presented, never merged — a
-stale approval is not an approval.
+A refusal names what to do instead. None of them can be skipped from an agent's shell, because the guard refuses the skip too.
 
-### [parallel-hunt](skills/parallel-hunt/SKILL.md)
+## What the plugin holds
 
-A concurrent bug-hunt round: finder and fixer workers run as background subagents
-over a shared file register, with claim gates killing phantom bugs before they
-enter the pipeline and fix gates refusing fixes that mask symptoms.
+| Name | Job | Lane |
+|---|---|---|
+| `coderules` | The code rules and the pre-launch gate; its body is the rules | both |
+| `designrules` | The design rules for any screen, page or document | both |
+| `site-checks` | The done checks a site runs before it is called done | fast |
+| `build-feature` | The interview, the plan and the run | careful |
+| `panel-review` | A review of a document by several perspectives, with a gate on the findings | both |
+| `parallel-hunt` | A bug hunt: a finder and a fixer over a shared register, with gates on every claim and fix | careful |
+| 7 `build-feature-*` agents | Implementer, verifier, reviewer, note checker, merger, final verifier, final reviewer | careful |
+| 5 `parallel-hunt-*` agents | Finder, fixer, claim gate, fix gate and its critical form | careful |
+| 2 `panel-review-*` agents | Persona and gate | both |
+| `workflows/build-feature-run.js` | The script that drives the agents, three notes at a time | careful |
+| `templates/` | The brief, the product `CLAUDE.md`, a change note, a plan, a report and the git hooks a product installs | both |
 
-```mermaid
-%%{init: {"flowchart": {"curve": "basis"}, "themeVariables": {"fontSize": "14px"}}}%%
-flowchart TD
-    REG[("the register<br/>one file · the only handoff")]
+The other 17 skills I use come from [Matt Pocock's plugin](https://github.com/mattpocock/skills), which installs with this one and carries 38 in all. `budget.md` sets the counts above; a check in the Action fails when a push goes past them.
 
-    subgraph RUN ["the round, running — nobody waits on anybody"]
-        FIND["finder subagent<br/>one sweep group, then replaced<br/>may only add regression tests"]
-        CG{"claim gate<br/>one review · tries to refute the bug"}
-        FIX["fixer subagent<br/>one batch, then replaced<br/>owns shipped code · test-first"]
-        FG{"fix gate<br/>one batch · tries to refute the fix"}
-    end
+## When something stops
 
-    DEAD["retracted<br/>phantom killed before it costs a fix"]
-    DEFER["deferred<br/>reported at round end, never hidden"]
+A run that stops leaves its state in the feature's report. The cases, from the rehearsals:
 
-    subgraph ENDR ["round end"]
-        PROM["promotion<br/>every row → issue file, refusal or fixed"]
-        COMMIT["register · regression tests · fixes<br/>committed to the branch"]
-        HUM["a human reads the branch<br/>the orchestrator never merges to main"]
-    end
+| What you see | What to do |
+|---|---|
+| A note row reads `failed` after three strikes | `/build-feature <name>` opens on the row: change the note, or cut it |
+| A note row reads `stopped:` with a reason | The run needs an answer only you can give; it is under Decide in your pending file. Answer, then start again |
+| `stopped: API errors` | A usage limit or an outage. Wait for the reset, then start again; merged notes are kept |
+| The final check ends on `FINDINGS` | The one fix round did not clear it. Fix the feature branch in a session of its own, then start again |
+| `On main:` lines in the final check | Faults main already has. Nothing for this run |
 
-    FIND -->|"candidate"| CG
-    CG -->|"retracted"| DEAD
-    CG -->|"upheld → open"| REG
-    REG -->|"open → in-fix"| FIX
-    FIX -->|"fix-ready"| FG
-    FG -->|"sent back · masks a symptom"| FIX
-    FG -->|"verified"| REG
-    REG -->|"still open when the round ends"| DEFER
-    REG --> PROM
-    DEFER --> PROM
-    PROM --> COMMIT
-    COMMIT --> HUM
+The full table, with every case seen so far, is in [`skills/build-feature/when-a-run-stops.md`](skills/build-feature/when-a-run-stops.md).
 
-    classDef step fill:#F1F5F9,stroke:#94A3B8,stroke-width:1px,color:#0F172A
-    classDef keep fill:#E2E8F0,stroke:#475569,stroke-width:1px,color:#0F172A
-    classDef gate fill:#FEE2E2,stroke:#DC2626,stroke-width:1.5px,color:#4C0519
-    classDef stop fill:#FFFFFF,stroke:#94A3B8,stroke-width:1px,stroke-dasharray:4 3,color:#334155
-    classDef human fill:#0F172A,stroke:#0F172A,stroke-width:1px,color:#FFFFFF
-    class FIND,FIX step
-    class CG,FG gate
-    class REG,COMMIT,PROM keep
-    class DEAD,DEFER stop
-    class HUM human
-    style RUN fill:#FBFCFD,stroke:#CBD5E1,color:#475569
-    style ENDR fill:#FBFCFD,stroke:#CBD5E1,color:#475569
+## Install
+
+```
+claude plugin install workflow --marketplace roufmlp/agent-skills
 ```
 
-Nobody waits on anybody: the finder is hunting the next bug while the fixer is
-still on the last one. Strict code ownership is what keeps the merge tax at zero
-while they run concurrently — the finder may only add regression tests, the fixer
-owns shipped code. Workers are replaced after each work unit because long sessions
-degrade quietly, and because the register holds everything, succession needs no
-handover.
+Inside a session the same command reads `/plugin install workflow --marketplace roufmlp/agent-skills`. It needs Claude Code 2.1.292 or later, git, and Python 3 for the hooks. On Windows a hook error shows until Python is installed, and nothing is blocked. Plugins from outside Anthropic's marketplace do not update on their own: switch auto-update on once in `/plugin`, and each release reaches you a session or two later.
 
-## The other skills
+The GitHub Copilot app installs the same plugin from its marketplace page and gets the skills and agents; the hooks are not meant to run there. The steps from the first install at work are not written yet.
 
-### [designrules](skills/designrules/SKILL.md)
+To work on the plugin, clone it to `~/.claude/skills/workflow/` and run `sh .githooks/prepare`. Claude Code loads a plugin folder there at every session start, and the `commit-msg` hook then refuses a commit that carries a private name or your home path.
 
-Taste, made loadable. A distilled set of design rules (hierarchy, spacing,
-typography, colour, states, the premium-feel psychology) that agents must read
-before any visual work. It exists because "make it look good" is not an
-instruction; a checklist an agent can be held to is.
+## Version 1
 
-### [panel-review](skills/panel-review/SKILL.md)
+Version 1 is at the [`v1` tag](../../tree/v1): the issue runner, the parallel hunt, 33 hooks and the run records. Two records are worth reading on their own: [the five-issue case study](docs/case-study-five-issue-run.md) and [how the models and effort levels were chosen](docs/model-and-effort-choices.md), which found that a setting nothing read had been there from the start.
 
-The orchestration idea pointed at judgement — prose or a system design. One
-reviewer has blind spots, so this spawns three to eight personas as parallel
-subagents, each with its own lens and never another persona's output, then
-synthesises on agreement and maps the disagreements, deciding each with a stated
-reason. The mechanism is borrowed from Stanford's STORM (OVAL Lab, NAACL 2024),
-whose panel researches topics; here the panel is *derived*: enumerate the distinct
-ways the artefact can be wrong, name who pays for each, and one exposure buys one
-seat. At `deep` the same list also yields a frozen scenario corpus and a set of
-invariants, so every persona walks identical cases; personas left to derive their
-own walk different inputs, and the map then reports imagination as conflict. Tiers
-route on blast radius, not length, and the `deep` tier adds a refutation gate that
-attacks the panel's own findings and retracts on uncertainty. Two rules keep it
-honest: a claim without a citation is not a claim, and any lens satisfied by
-*adding* material may only propose
-material the artefact already supports.
+Most of it retired because the time went elsewhere than the build loop. A version 1 issue took 69 minutes of run time, but more than half the commits in Orderflow's window landed outside any run, in sessions that answered questions, carried decisions and kept the records. The map that decided what to keep is in [`docs/map`](docs/map/spec.md), one file per question.
 
-## Steering
+## Credits and licence
 
-[steering/](steering/) holds the standing rules every session loads: a lean
-global [CLAUDE.md](steering/CLAUDE.md) (context hygiene, when skills are
-mandatory, how to brief me on manual steps),
-[writingrules.md](steering/writingrules.md) (how to write like a person, distilled
-partly from Wikipedia's "Signs of AI writing" catalogue) and
-[coderules.md](steering/coderules.md) (security non-negotiables grounded in the
-OWASP Top 10 and the Supabase production checklist, plus a pre-launch gate that
-runs every time), and [designrules.md](steering/designrules.md), which loads on
-demand through the skill below rather than sitting in every session's context.
-These are the difference between an agent that works for me and an agent that
-works.
-
-## The agent definitions
-
-The orchestration skills don't paste briefs into their workers. Each role is a
-registered agent type in [`agents/`](agents/), and the runner spawns it by name.
-An agent file carries its own brief, model and effort level, and is loaded only
-when that role actually runs — so the skill stays a thin protocol and the detail
-lives with the role that needs it.
-
-Sixteen roles: six for `run-issues` (implementer, escalated implementer, verify
-gate, review gate, a critical review gate for diffs that change money or auth, and
-the coherence finale), five for `parallel-hunt` (finder, fixer, claim gate, fix
-gate, and a critical fix gate), two for `harden-issues` (the per-issue attacker
-and the cross-issue seam agent), two for `panel-review` (one persona seat and
-the refutation gate), and `promotion` — the one agent both loops share, the only
-role that turns a register finding into an issue file.
-
-This is also the only way to set effort per role — the `Agent` tool takes a model
-but no effort parameter, so without these files every worker silently inherits one
-session-wide setting.
-
-## Keeping the copies honest
-
-Every file here is a scrubbed copy of a live one, and a copy drifts. Two checks at the
-repo root run before each sync. [`check_manifest_coverage.py`](check_manifest_coverage.py)
-refuses a live file the manifest neither publishes nor names as withheld, and a manifest
-row whose source or publication has gone. [`check_skill_drift.py`](check_skill_drift.py)
-refuses the two hand-edited orchestration skills when one has dropped a rule the other
-still states. [MANIFEST.md](MANIFEST.md) maps every published file to its source and
-holds the scrub rules, including the stricter set a hook has to pass.
-
-## Case study
-
-[Five issues, one unsupervised day](docs/case-study-five-issue-run.md) — a real
-run of `run-issues` on a multi-tenant SaaS build: 139 tests added, zero
-regressions, two adversarial rejections that were both genuine money defects, a
-two-strike escalation that beat symptom-patching with a type-level redesign, and
-the post-run review that fed eight revisions back into the skill you see here.
-
-## Using these yourself
-
-Copy any skill folder into `~/.claude/skills/` and it becomes invocable in Claude
-Code. `panel-review` is the one exception to how skills get picked up: its
-frontmatter carries `disable-model-invocation: true`, so you invoke it by name and
-no model reaches for it on its own. The orchestration skills assume issues living
-as files (this pack's convention: `.scratch/<feature>/issues/`, a `Status:` line
-first) and a repo with tests worth gating on; the steering docs are mine — take
-the structure, replace the taste.
-
-**`run-issues`, `parallel-hunt`, `harden-issues` and `panel-review` also need the
-agent definitions.** Copy `agents/` into `~/.claude/agents/` — the runner spawns
-roles by name, so without them a run stops at the first spawn with "agent type not
-found". Two things to know: newly
-copied types can take a moment to appear, so restart Claude Code only if a spawn
-still reports the type missing; and an invalid `effort:` value is accepted
-silently and falls back to the default, so a typo costs you the setting with no
-warning.
-
-The files use `model: inherit`, meaning every worker runs whatever model the
-session runs. Start the session on the model you want the run to use.
-
-**Nothing here needs editing before it runs.** The skills and agent files depend
-on each other and on nothing outside this repo — no personal memory files, no
-named model, and no skill they cannot do without: `coderules`, `tdd` and
-`code-review` are each used if your setup registers one and worked around if not.
-Where a run wants something else a project may or
-may not have (a preview deploy, a canonical env file, a skill that drives the
-running app), it is written as a conditional and the run works either way. The
-steering docs are the exception, and deliberately so: they are my taste, published
-to be replaced rather than adopted.
-
-## Credits
-
-My daily process skills (`tdd`, `grilling`, `to-issues`, `handoff`, `triage` and
-friends) are [Matt Pocock's skills](https://github.com/mattpocock/skills),
-referenced here rather than republished — used unmodified except `to-prd` and
-`to-issues`, which my local copies point at issue files as the canonical record
-and extend with a `harden-issues` step and a rubric-shaped criteria template.
-`run-issues` builds on the issue conventions his pack establishes.
-
-## Licence
-
-[MIT](LICENSE). Take what's useful.
+Matt Pocock's skills, MIT. This repository, MIT.

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Points git at .githooks so the commit-msg hook runs on every commit. A fresh
+# clone needs it once: git does not copy local config. Outside a git checkout it
+# does nothing.
+git rev-parse --git-dir >/dev/null 2>&1 || exit 0
+chmod +x .githooks/commit-msg
+git config core.hooksPath .githooks
+echo "hooks: core.hooksPath=.githooks"

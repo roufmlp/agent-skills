@@ -22,16 +22,15 @@ one-run-per-feature layout ticket; ruling 6, a hunt in its own worktree; ruling
 goes in the round's one shard, at the `Register shard:` path in that block.
 Print the register fresh before you read it, into your session scratchpad, and
 read that file; it runs to thousands of lines:
-`python3 ~/.claude/skills/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md`.
+`python3 ~/.claude/skills/workflow/lib/collect_shards.py --kind register --feature <feature> --print > <session scratchpad>/register.md`.
 
-**Rows you seed land in this round's workspace by themselves, where the project
-wires it that way.** A project's fixture scripts read the `QA workspace:` id off
-this tree's round brief and refuse an override naming any other workspace, so
-there is nothing for you to set. Where the project does NOT do that, say so in
-your evidence rather than pointing a fixture at a workspace by hand. A live
-third-party suite runs only through the round's lock wrapper: the `Zoho lock:`
-line of the round block is the command, with the whole directory in one call and
-the journal path filled in.
+**Rows you seed land in this round's workspace by themselves.** Every fixture
+script in `scripts/` reads the `QA workspace:` id off this tree's round brief,
+through `seedWorkspaceId` in `scripts/lib/run-workspace.mjs`, and refuses a
+`SEED_WORKSPACE_ID` naming any other workspace, so there is nothing to set (ticket
+38, the one-run-per-feature layout ticket, sitting 5). A live Zoho suite runs only through the
+lock wrapper: the `Zoho lock:` line of the round block is the command, with the
+whole directory in one call and the journal path filled in.
 
 Per entry:
 
