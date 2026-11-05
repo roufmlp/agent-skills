@@ -60,6 +60,14 @@ that cannot load counts as failed. A title starting with `keeps:` is skipped
 and listed for the reviewer. A new title the report never names is refused
 too, because a check that cannot place its input must not pass it.
 
+A title that left a test file deleted or renamed since `--base` is not new,
+whatever file holds it now: it passed on the old code before the note. Measured
+2026-11-05 on Orderflow note 13, four moved files carried 63 kept titles, each
+refused as passing on the old code. A new file the `Suite:` command does not
+run (Orderflow's `npm test` excludes `tests/harness/**`) runs once more under
+the `Harness suite:` command when the block names one, in the same throwaway
+tree; a file neither command runs stays refused.
+
 Migrations revert with the code, because the worktree holds the base's
 `supabase/migrations/`. Orderflow's harness fingerprints the files on disk and
 rebuilds its template database from empty when they change (`tests/harness/
@@ -381,13 +389,26 @@ def changed_test_side(tree: pathlib.Path, base: str) -> list[str]:
     return found
 
 
+def gone_titles(tree: pathlib.Path, base: str) -> set[str]:
+    """The titles of every vitest test file deleted or renamed away since
+    `base`, read at the base. A title that moved with its file, or into a new
+    file, passed on the old code before the note and is not new."""
+    gone: set[str] = set()
+    for line in git(tree, "diff", "--name-status", "--diff-filter=DR", "-M", base).splitlines():
+        path = line.split("\t")[1]
+        if VITEST_TEST.search(path):
+            gone.update(titles(git(tree, "show", f"{base}:{path}", check=False)))
+    return gone
+
+
 def new_titles(tree: pathlib.Path, base: str, paths: list[str]) -> tuple[dict, list]:
     """Per vitest test file, the titles the note added; and the `keeps:` ones."""
     added, kept = {}, []
+    gone = gone_titles(tree, base)
     for path in paths:
         if not VITEST_TEST.search(path):
             continue
-        before = titles(git(tree, "show", f"{base}:{path}", check=False))
+        before = set(titles(git(tree, "show", f"{base}:{path}", check=False))) | gone
         fresh = [t for t in titles((tree / path).read_text(encoding="utf-8", errors="replace"))
                  if t not in before]
         for title in fresh:
@@ -480,6 +501,21 @@ def red_check(tree: pathlib.Path, block: dict, base: str) -> int:
               f"on the code at {base} ({dest})")
         code, _ = run_logged(command, dest, logs / f"{stem}.log")
         seen = read_report(report, dest)
+        not_run = [path for path in added if path not in seen]
+        harness_exit = None
+        if not_run and block["harness"]:
+            # The `Suite:` command excludes some test files (Orderflow's `npm
+            # test` leaves out `tests/harness/**`); those run under the
+            # `Harness suite:` command, in the same old tree.
+            harness_report = logs / f"{stem}-harness.json"
+            command = place_args(block["harness"], ["--reporter=json",
+                                                    f"--outputFile={harness_report}",
+                                                    *SMALL_RUN, *not_run])
+            print(f"red check: {len(not_run)} file(s) not run by the suite command; running "
+                  f"them under the harness suite command")
+            harness_exit, _ = run_logged(command, dest, logs / f"{stem}-harness.log")
+            harness_seen = read_report(harness_report, dest)
+            seen.update({path: harness_seen[path] for path in not_run if path in harness_seen})
     finally:
         drop_tree(tree, dest)
     wrong = []
@@ -499,7 +535,9 @@ def red_check(tree: pathlib.Path, block: dict, base: str) -> int:
                   f"{title}: {verdict} on the old code")
             if verdict not in ("failed", "failed to load"):
                 wrong.append(f"{path} > {title}: {verdict}")
-    print(f"whole output: {logs / f'{stem}.log'}; report: {report}; vitest exit {code}")
+    print(f"whole output: {logs / f'{stem}.log'}; report: {report}; vitest exit {code}"
+          + (f"; harness run: {logs / f'{stem}-harness.log'}, exit {harness_exit}"
+             if harness_exit is not None else ""))
     if wrong:
         raise Refusal("these new tests did not fail on the code from before the note, so "
                       "they prove nothing about it:\n  " + "\n  ".join(wrong) +

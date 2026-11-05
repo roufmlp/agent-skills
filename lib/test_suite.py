@@ -28,7 +28,9 @@ SCRIPT = os.path.join(HERE, "suite.py")
 # that names no file and pass when named alone. With `--reporter=json` it
 # writes a report: every title found in the files it was named, with the
 # status FAKE_STATUS gives it (`title=status,...`), `failed` by default; a file
-# named in FAKE_NO_LOAD is reported failed with no cases. It records the text
+# named in FAKE_NO_LOAD is reported failed with no cases; a file named in
+# FAKE_NOT_RUN is left out of the report unless `--config` is among the args,
+# as a vitest config that excludes the file would leave it. It records the text
 # of `src/a.ts` beside it, so a case can see which code it ran on.
 FAKE_VITEST = textwrap.dedent("""\
     import json, os, pathlib, re, sys
@@ -47,8 +49,11 @@ FAKE_VITEST = textwrap.dedent("""\
     if out:
         statuses = dict(p.split("=") for p in os.environ.get("FAKE_STATUS", "").split(",") if p)
         no_load = os.environ.get("FAKE_NO_LOAD", "").split(",")
+        not_run = os.environ.get("FAKE_NOT_RUN", "").split(",") if "--config" not in args else []
         results = []
         for name in named:
+            if name in not_run:
+                continue
             if name in no_load:
                 results.append({"name": str(cwd / name), "status": "failed", "assertionResults": []})
                 continue
@@ -106,7 +111,7 @@ class Product(unittest.TestCase):
         self.lock = root / "lock"
         self.env = {**os.environ, mod.LOCK_ENV: str(self.lock), "FAKE_ARGV": str(self.argv)}
         for key in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_EXIT", "FAKE_RAN", "FAKE_STATUS",
-                    "FAKE_NO_LOAD", "FAKE_HOLD"):
+                    "FAKE_NO_LOAD", "FAKE_NOT_RUN", "FAKE_HOLD"):
             self.env.pop(key, None)
         (self.tree / "CLAUDE.md").write_text(BLOCK.format(vitest=self.vitest))
         (self.tree / "src").mkdir()
@@ -413,6 +418,59 @@ class TheRedCheck(Product):
         git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "note")
         done = self.run_suite("red", "--base", self.base)
         self.assertEqual(done.returncode, 0, done.stdout)
+
+    # A title that moved with its file, or into a new file, is not new. Measured
+    # 2026-11-05 on Orderflow note 13: 63 kept titles in four moved files, each
+    # refused as passing on the old code.
+
+    def test_a_title_kept_through_a_git_mv_is_not_new(self):
+        (self.tree / "tests" / "moved").mkdir()
+        git(self.tree, "mv", "tests/a.test.ts", "tests/moved/a.test.ts")
+        (self.tree / "tests" / "moved" / "a.test.ts").write_text(
+            'it("adds", () => {});\nit("adds twice", () => {});\n')
+        done = self.run_suite("red", "--base", self.base, env={"FAKE_STATUS": "adds=passed"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("1 new test(s) in 1 file(s)", done.stdout)
+        self.assertNotIn("> adds:", done.stdout)
+
+    def test_a_title_moved_from_a_deleted_file_into_a_new_one_is_not_new(self):
+        git(self.tree, "rm", "-q", "tests/a.test.ts")
+        (self.tree / "tests").mkdir(exist_ok=True)
+        (self.tree / "tests" / "c.test.ts").write_text(
+            'it("adds", () => {});\nit("adds twice", () => {});\n')
+        done = self.run_suite("red", "--base", self.base, env={"FAKE_STATUS": "adds=passed"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("1 new test(s) in 1 file(s)", done.stdout)
+        self.assertNotIn("> adds:", done.stdout)
+
+    # A file the `Suite:` command does not run (Orderflow's `npm test` excludes
+    # `tests/harness/**`) runs again under `Harness suite:` when the block names
+    # one. Measured 2026-11-05 on tests/scaffold/vitest-config.test.ts.
+
+    def test_a_file_the_suite_does_not_run_runs_under_the_harness_command(self):
+        (self.tree / "tests" / "harness").mkdir()
+        (self.tree / "tests" / "harness" / "reset.test.ts").write_text('it("resets", () => {});\n')
+        done = self.run_suite("red", "--base", self.base,
+                              env={"FAKE_NOT_RUN": "tests/harness/reset.test.ts"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("tests/harness/reset.test.ts > resets: failed", done.stdout)
+        first, second = self.calls()
+        self.assertNotIn("--config", first["args"])
+        self.assertIn("--config", second["args"])
+        self.assertIn("tests/harness/reset.test.ts", second["args"])
+        self.assertEqual(first["cwd"], second["cwd"], "the same throwaway tree")
+
+    def test_a_file_the_suite_does_not_run_is_refused_without_a_harness_line(self):
+        text = (self.tree / "CLAUDE.md").read_text()
+        (self.tree / "CLAUDE.md").write_text(
+            "\n".join(l for l in text.splitlines() if not l.startswith("Harness suite:")) + "\n")
+        (self.tree / "tests" / "harness").mkdir()
+        (self.tree / "tests" / "harness" / "reset.test.ts").write_text('it("resets", () => {});\n')
+        done = self.run_suite("red", "--base", self.base,
+                              env={"FAKE_NOT_RUN": "tests/harness/reset.test.ts"})
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("tests/harness/reset.test.ts > resets: not run", done.stdout)
+        self.assertEqual(len(self.calls()), 1)
 
 
 if __name__ == "__main__":
