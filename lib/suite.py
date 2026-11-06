@@ -112,6 +112,13 @@ VITEST_TEST = re.compile(r"\.test\.[cm]?[jt]sx?$")
 # Test-side: a test file, or anything under a test or end-to-end directory.
 # These keep the note's version in the red check; everything else reverts.
 TEST_SIDE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__|e2e)/")
+# One exception, Abdul's default of 2026-11-06: a file under a harness folder
+# that is no test file and exists at the base is the code a harness note
+# changes, so the red check runs the base's version. Copied, the fix travels
+# with its test and the test passes on the "old" code (suite-green's note 01,
+# `tests/harness/database.ts`). A new helper has no old version and is copied.
+HARNESS_FOLDER = re.compile(r"(^|/)tests?/harness/")
+TEST_FILE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$")
 TITLE = re.compile(
     r"\b(?:it|test)(?:\.(?:only|skip|todo|concurrent|sequential|fails))*\s*\(\s*"
     r"(?:\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)")
@@ -389,6 +396,13 @@ def changed_test_side(tree: pathlib.Path, base: str) -> list[str]:
     return found
 
 
+def old_harness_helpers(tree: pathlib.Path, base: str, paths: list[str]) -> list[str]:
+    """The changed paths the red check leaves at the base: see HARNESS_FOLDER."""
+    return [path for path in paths
+            if HARNESS_FOLDER.search(path) and not TEST_FILE.search(path)
+            and git(tree, "ls-tree", "--name-only", base, "--", path).strip()]
+
+
 def gone_titles(tree: pathlib.Path, base: str) -> set[str]:
     """The titles of every vitest test file deleted or renamed away since
     `base`, read at the base. A title that moved with its file, or into a new
@@ -493,7 +507,11 @@ def red_check(tree: pathlib.Path, block: dict, base: str) -> int:
     logs = common_dir(tree) / "suite" / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     report = logs / f"{stem}.json"
-    dest = old_tree(tree, base, paths)
+    helpers = old_harness_helpers(tree, base, paths)
+    for path in helpers:
+        print(f"helper: {path} runs at the base here, as code. This is a default of 2026-11-06 "
+              f"that Abdul may change: raise it with him if this red or pass looks wrong.")
+    dest = old_tree(tree, base, [path for path in paths if path not in helpers])
     try:
         command = place_args(block["suite"], ["--reporter=json", f"--outputFile={report}",
                                               *SMALL_RUN, *added])

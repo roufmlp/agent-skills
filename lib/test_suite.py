@@ -41,7 +41,8 @@ FAKE_VITEST = textwrap.dedent("""\
                                  "src": (cwd / "src" / "a.ts").read_text() if (cwd / "src" / "a.ts").exists() else None,
                                  "modules": os.path.islink(cwd / "node_modules"),
                                  "migration": (cwd / "supabase/migrations/0002_b.sql").exists(),
-                                 "helper": (cwd / "tests/helper.ts").exists()}) + "\\n")
+                                 "helper": (cwd / "tests/helper.ts").exists(),
+                                 "reset": (cwd / "tests/harness/reset.ts").read_text() if (cwd / "tests/harness/reset.ts").exists() else None}) + "\\n")
     if os.environ.get("FAKE_HOLD"):
         import time; time.sleep(float(os.environ["FAKE_HOLD"]))
     named = [a for a in args if a.endswith((".ts", ".tsx"))]
@@ -367,6 +368,45 @@ class TheRedCheck(Product):
         call = self.calls()[0]
         self.assertFalse(call["migration"], "the note's migration reverted with the code")
         self.assertTrue(call["helper"], "a helper under tests/ is test-side and stays")
+
+    def commit_reset_helper(self):
+        (self.tree / "tests" / "harness").mkdir()
+        (self.tree / "tests" / "harness" / "reset.ts").write_text("export const old = 1;\n")
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "the helper")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+
+    def test_a_changed_harness_helper_runs_at_the_base_and_says_so(self):
+        self.commit_reset_helper()
+        self.note()
+        (self.tree / "tests" / "harness" / "reset.ts").write_text("export const fixed = 2;\n")
+        done = self.run_suite("red", "--base", self.base)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertEqual(self.calls()[0]["reset"], "export const old = 1;\n")
+        self.assertIn("helper: tests/harness/reset.ts runs at the base here", done.stdout)
+        self.assertIn("Abdul may change", done.stdout)
+
+    def test_a_new_harness_helper_is_copied_because_it_has_no_old_version(self):
+        self.note()
+        (self.tree / "tests" / "harness").mkdir()
+        (self.tree / "tests" / "harness" / "reset.ts").write_text("export const fresh = 3;\n")
+        done = self.run_suite("red", "--base", self.base)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertEqual(self.calls()[0]["reset"], "export const fresh = 3;\n")
+        self.assertNotIn("helper:", done.stdout)
+
+    def test_a_test_file_under_the_harness_folder_keeps_the_notes_version(self):
+        self.commit_reset_helper()
+        (self.tree / "tests" / "harness" / "reset.test.ts").write_text('it("resets", () => {});\n')
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "the test")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+        (self.tree / "tests" / "harness" / "reset.test.ts").write_text(
+            'it("resets", () => {});\nit("waits", () => {});\n')
+        done = self.run_suite("red", "--base", self.base)
+        self.assertEqual(done.returncode, 0, done.stdout)
+        self.assertIn("tests/harness/reset.test.ts", self.calls()[0]["args"])
+        self.assertNotIn("helper:", done.stdout)
 
     def test_a_new_test_that_passes_on_the_old_code_is_refused_by_name(self):
         self.note()

@@ -116,6 +116,26 @@ class Trees(unittest.TestCase):
         self.assertEqual(code, 1, lines)
         self.assertTrue(lines[0].startswith("feature: "))
 
+    def test_base_commit_compares_at_that_commit_in_a_throwaway_tree(self):
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        self.fails(self.tree, "vitest:tests/sibling.test.ts")
+        subprocess.run(["git", "add", ".fails"], cwd=self.tree, check=True)
+        subprocess.run(["git", "commit", "-qm", "the sibling's test"], cwd=self.tree, env=env, check=True)
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.tree, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        self.fails(self.tree, "vitest:tests/sibling.test.ts", "vitest:tests/mine.test.ts")
+        done = subprocess.run([sys.executable, SCRIPT, "--tree", str(self.tree), "--base-commit", sha,
+                               "--label", "scoped", "--", sys.executable, str(self.fake)],
+                              capture_output=True, text=True)
+        lines = done.stdout.strip().splitlines()
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(lines, [f"on main: tests/sibling.test.ts fails here and at {sha[:9]}",
+                                 f"feature: tests/mine.test.ts fails here and passes at {sha[:9]}"])
+        worktrees = subprocess.run(["git", "worktree", "list"], cwd=self.tree, check=True,
+                                   capture_output=True, text=True).stdout.strip().splitlines()
+        self.assertEqual(len(worktrees), 1, "the throwaway tree was removed")
+
     def test_a_missing_base_is_refused(self):
         done = subprocess.run([sys.executable, SCRIPT, "--tree", str(self.tree), "--base", str(self.base / "nowhere"),
                                "--", "true"], capture_output=True, text=True)

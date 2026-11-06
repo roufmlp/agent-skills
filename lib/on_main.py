@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Does a failure hold at the base too? The script answers; no verifier decides.
 
-    python3 ~/.claude/skills/workflow/lib/on_main.py --tree <tree> --base <base tree> \\
-        [--label <step>] [--twice] -- <command...>
+    python3 ~/.claude/skills/workflow/lib/on_main.py --tree <tree> \\
+        (--base <base tree> | --base-commit <sha>) [--label <step>] [--twice] -- <command...>
 
 The build-feature verifiers run every step and go on after a failure, and a
 failure is a finding only when it is the feature's (final verifier) or the
@@ -109,23 +109,36 @@ def compare(tree: pathlib.Path, base: pathlib.Path, command: list[str], label: s
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--tree", required=True, help="the worktree under test")
-    parser.add_argument("--base", required=True, help="the checkout of the base: main, or the feature worktree")
+    where = parser.add_mutually_exclusive_group(required=True)
+    where.add_argument("--base", help="the checkout of the base: main, or the feature worktree")
+    # The verifier's scoped step needs the note's own base and not the feature
+    # worktree: once a sibling note merges, its fix is at the feature's HEAD,
+    # and the sibling's red in this tree would read as this note's fault.
+    where.add_argument("--base-commit", help="a commit to compare at, in a throwaway worktree")
     parser.add_argument("--label", default="step", help="the step's name, for the lines and the logs")
     parser.add_argument("--twice", action="store_true", help="rerun in the tree first; a one-time failure is a flake")
     parser.add_argument("command", nargs=argparse.REMAINDER, help="the step's command, after --")
     args = parser.parse_args(argv)
     command = [c for c in args.command if c != "--"] if args.command[:1] == ["--"] else args.command
     try:
-        tree, base = pathlib.Path(args.tree).resolve(), pathlib.Path(args.base).resolve()
-        for name, path in (("tree", tree), ("base", base)):
-            if not path.is_dir():
-                raise Refusal(f"--{name} {path} is not a folder")
+        tree = pathlib.Path(args.tree).resolve()
+        if not tree.is_dir():
+            raise Refusal(f"--tree {tree} is not a folder")
+        if args.base and not pathlib.Path(args.base).resolve().is_dir():
+            raise Refusal(f"--base {pathlib.Path(args.base).resolve()} is not a folder")
         if not command:
             raise Refusal("no command after --")
         label = re.sub(r"[^A-Za-z0-9._-]+", "-", args.label).strip("-") or "step"
         logs = suite.common_dir(tree) / "suite" / "logs"
         stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        lines, code = compare(tree, base, command, label, args.twice, logs, stamp)
+        if args.base:
+            lines, code = compare(tree, pathlib.Path(args.base).resolve(), command, label, args.twice, logs, stamp)
+        else:
+            base = suite.old_tree(tree, args.base_commit, [])
+            try:
+                lines, code = compare(tree, base, command, label, args.twice, logs, stamp)
+            finally:
+                suite.drop_tree(tree, base)
     except Refusal as refusal:
         print(f"REFUSED: {refusal}")
         return REFUSED
