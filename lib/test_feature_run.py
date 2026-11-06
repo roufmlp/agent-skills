@@ -268,8 +268,10 @@ class Feature(unittest.TestCase):
         agent("a1", "build-feature-implementer", [("m1", "claude-sonnet-5-5", usage),
                                                   ("m1", "claude-sonnet-5-5", usage),  # a repeated row
                                                   ("m2", "claude-sonnet-5-5", usage)])
-        agent("a2", "build-feature-reviewer", [("m3", "claude-opus-5-5", usage)])
+        # The workflow names its agents with the plugin's prefix; older transcripts have none.
+        agent("a2", "workflow:build-feature-reviewer", [("m3", "claude-opus-5-5", usage)])
         agent("a3", "Explore", [("m4", "claude-haiku-5-5", usage)])
+        agent("a4", "workflow:parallel-hunt-fixer", [("m5", "claude-haiku-5-5", usage)])
         report = pathlib.Path(self.tmp.name) / "report.md"
         report.write_text(textwrap.dedent("""\
             # R

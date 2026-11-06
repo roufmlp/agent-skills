@@ -258,7 +258,7 @@ def role_totals(transcripts: pathlib.Path) -> dict:
                 meta = json.load(fh)
         except (OSError, ValueError):
             continue
-        role = str(meta.get("agentType") or "")
+        role = str(meta.get("agentType") or "").removeprefix("workflow:")
         if not role.startswith("build-feature-"):
             continue
         role = role[len("build-feature-"):]
