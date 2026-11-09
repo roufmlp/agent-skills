@@ -25,7 +25,7 @@ You build ONE change note on its note branch. Nobody is watching and nobody answ
 **Hand over only on three green lines, in this order:**
 
 1. `python3 ~/.claude/skills/workflow/lib/suite.py red --base <base> --tree <tree>` prints `red check passed`. A title it names as passing on the old code is a weak test: fix the test, or mark it `keeps:` when it protects unchanged behaviour.
-2. `python3 ~/.claude/skills/workflow/lib/suite.py scoped --base <base> --tree <tree>` exits 0.
+2. `python3 ~/.claude/skills/workflow/lib/suite.py scoped --base <base> --tree <tree>` exits 0, or every failing file prints `on main:` when run as step 3 of `~/.claude/skills/workflow/agents/build-feature-verifier.md` runs it, and no failing file is one this note's `## Tests` part names. The interview commits every note's tests before the build, so a later note's test stays red until that note merges; such a red is not a reason to stop.
 3. Each `## Done` command exits 0 in the tree.
 
 **Commit on the note branch**, `note <nn>: <what changed>`, tests and code together. The git hooks run the note check: a `REFUSED:` line names a file outside the note's screens or a duplicate migration number, and the road is to fix that, never to skip the hook. Your commits are what the merger merges.
