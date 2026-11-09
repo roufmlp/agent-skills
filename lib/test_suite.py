@@ -452,6 +452,17 @@ class TheRedCheck(Product):
         text = 'it("a", f); test(\'b\', f); it.skip(`c`, f); it("a", g); it.each([1])("d %s", f)'
         self.assertEqual(mod.titles(text), ["a", "b", "c"])
 
+    def test_titles_skips_a_comment_line_that_reads_like_a_call(self):
+        # Orderflow's tests/in-house/tick-sign-in.test.ts:15 reads "a savepoint inside
+        # it (`forgetOtherBrowsers`)"; the check took it for a title and refused it,
+        # because no report names it. A commented-out test is no test either.
+        text = ('// with a savepoint inside it (`forgetOtherBrowsers`). The road\n'
+                '/* it("old", f) */\n'
+                ' * test(\'gone\', f)\n'
+                '  // it.skip("off", f)\n'
+                'it("real", f);\n')
+        self.assertEqual(mod.titles(text), ["real"])
+
     def test_a_committed_note_is_read_the_same_as_an_uncommitted_one(self):
         self.note()
         git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "add", ".")

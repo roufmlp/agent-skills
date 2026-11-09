@@ -128,6 +128,7 @@ TEST_SIDE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__|e2e
 HARNESS_FOLDER = re.compile(r"(^|/)tests?/harness/")
 TEST_FILE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$")
 NOTE_BRANCH = re.compile(r"^note/([a-z0-9-]+)/(\d{2})$")
+COMMENT_LINE = re.compile(r"^\s*(//|/\*|\*)")
 TITLE = re.compile(
     r"\b(?:it|test)(?:\.(?:only|skip|todo|concurrent|sequential|fails))*\s*\(\s*"
     r"(?:\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)")
@@ -384,9 +385,12 @@ def last_full_run(tree: pathlib.Path) -> dict | None:
 
 def titles(text: str) -> list[str]:
     """Each `it(` or `test(` title in `text`, once, in order. A template title
-    keeps its `${}` as written, and the report then never names it: refused."""
+    keeps its `${}` as written, and the report then never names it: refused.
+    A line that opens as a comment is skipped: Orderflow's comment "inside it
+    (`forgetOtherBrowsers`)" read as a title no report names (2026-11-09)."""
+    code = "\n".join(line for line in text.splitlines() if not COMMENT_LINE.match(line))
     found = []
-    for match in TITLE.finditer(text):
+    for match in TITLE.finditer(code):
         title = next(group for group in match.groups() if group is not None)
         if title not in found:
             found.append(title)
