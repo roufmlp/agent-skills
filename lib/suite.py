@@ -60,6 +60,14 @@ that cannot load counts as failed. A title starting with `keeps:` is skipped
 and listed for the reviewer. A new title the report never names is refused
 too, because a check that cannot place its input must not pass it.
 
+On a note's branch, `note/<feature>/<nn>`, every title in a vitest file the
+note's `## Tests` part names counts as the note's own, even where it exists at
+`--base`: the /build-feature interview commits each note with its tests before
+the run, and the run's base is the feature branch. Measured 2026-11-09 on
+Orderflow in-house note 01, whose first attempt the old rule refused with "no
+new test title". A branch that names a note with no file under `changes/` is
+refused.
+
 A title that left a test file deleted or renamed since `--base` is not new,
 whatever file holds it now: it passed on the old code before the note. Measured
 2026-11-05 on Orderflow note 13, four moved files carried 63 kept titles, each
@@ -119,6 +127,7 @@ TEST_SIDE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$|(^|/)(tests?|__tests__|e2e
 # `tests/harness/database.ts`). A new helper has no old version and is copied.
 HARNESS_FOLDER = re.compile(r"(^|/)tests?/harness/")
 TEST_FILE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$")
+NOTE_BRANCH = re.compile(r"^note/([a-z0-9-]+)/(\d{2})$")
 TITLE = re.compile(
     r"\b(?:it|test)(?:\.(?:only|skip|todo|concurrent|sequential|fails))*\s*\(\s*"
     r"(?:\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)")
@@ -415,14 +424,44 @@ def gone_titles(tree: pathlib.Path, base: str) -> set[str]:
     return gone
 
 
-def new_titles(tree: pathlib.Path, base: str, paths: list[str]) -> tuple[dict, list]:
-    """Per vitest test file, the titles the note added; and the `keeps:` ones."""
+def note_test_files(tree: pathlib.Path) -> list[str]:
+    """On a note's branch, `note/<feature>/<nn>`, the vitest files its note's
+    `## Tests` part names. The /build-feature interview commits a note with its
+    tests before the run, so they exist at the run's base, and every title in
+    them is the note's own test all the same. Measured 2026-11-09 on Orderflow
+    in-house note 01: without this the check refused with "no new test title".
+    Any other branch names none, and the rule of new titles alone holds."""
+    branch = git(tree, "branch", "--show-current", check=False).strip()
+    match = NOTE_BRANCH.match(branch)
+    if not match:
+        return []
+    feature, number = match.groups()
+    found = sorted((tree / "changes" / feature).glob(f"{number}-*.md"))
+    if len(found) != 1:
+        raise Refusal(f"the branch {branch} is a note's branch, and changes/{feature}/{number}-*.md "
+                      f"matches {len(found)} file(s), not one.")
+    named, inside = [], False
+    for line in found[0].read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            inside = line.strip() == "## Tests"
+        elif inside:
+            for path in re.findall(r"`([^`\s]+)`", line):
+                if VITEST_TEST.search(path) and (tree / path).is_file() and path not in named:
+                    named.append(path)
+    return named
+
+
+def new_titles(tree: pathlib.Path, base: str, paths: list[str],
+               named: list[str] = ()) -> tuple[dict, list]:
+    """Per vitest test file, the titles the note added, every title of a file
+    in `named` counting as added; and the `keeps:` ones."""
     added, kept = {}, []
     gone = gone_titles(tree, base)
     for path in paths:
         if not VITEST_TEST.search(path):
             continue
-        before = set(titles(git(tree, "show", f"{base}:{path}", check=False))) | gone
+        before = gone if path in named else \
+            set(titles(git(tree, "show", f"{base}:{path}", check=False))) | gone
         fresh = [t for t in titles((tree / path).read_text(encoding="utf-8", errors="replace"))
                  if t not in before]
         for title in fresh:
@@ -496,8 +535,10 @@ def read_report(path: pathlib.Path, dest: pathlib.Path) -> dict:
 def red_check(tree: pathlib.Path, block: dict, base: str) -> int:
     """Run the note's new tests on the code from before it. Exit 0 when every
     one fails there, 3 otherwise."""
+    named = note_test_files(tree)
     paths = changed_test_side(tree, base)
-    added, kept = new_titles(tree, base, paths)
+    paths += [path for path in named if path not in paths]
+    added, kept = new_titles(tree, base, paths, named)
     for path, title in kept:
         print(f"keeps: {path} > {title} (skipped; the reviewer reads it)")
     if not added:

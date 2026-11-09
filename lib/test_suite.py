@@ -513,5 +513,76 @@ class TheRedCheck(Product):
         self.assertEqual(len(self.calls()), 1)
 
 
+class TheInterviewsTests(Product):
+    """The /build-feature interview commits each note with its tests before the
+    run, and the run's base is the feature branch, so those titles exist at the
+    base. On the note's branch, `note/<feature>/<nn>`, every title in a vitest
+    file the note's `## Tests` part names is the note's own test and must fail
+    at the base. Measured 2026-11-09 on Orderflow in-house note 01: the old rule
+    refused with "no new test title" and cost the note a strike."""
+
+    NOTE = textwrap.dedent("""\
+        # 01 The thing
+
+        Screens: none
+
+        ## Done
+
+        - `npm test -- tests/a.test.ts`: still adds.
+
+        ## Tests
+
+        - `tests/n.test.ts`
+        - `tests/seed.ts`, the story; a helper, not a test.
+    """)
+
+    def interview(self, branch="note/feat/01"):
+        (self.tree / "changes" / "feat").mkdir(parents=True)
+        (self.tree / "changes" / "feat" / "01-the-thing.md").write_text(self.NOTE)
+        (self.tree / "tests" / "n.test.ts").write_text(
+            'it("reads n", () => {});\nit("writes n", () => {});\nit("keeps: n stays", () => {});\n')
+        (self.tree / "tests" / "seed.ts").write_text("export const seed = 1;\n")
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "note 01: the thing")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+        git(self.tree, "checkout", "-qb", branch)
+        (self.tree / "src" / "a.ts").write_text("export const a = 2;\n")
+
+    def test_on_its_note_branch_an_interview_test_counts_and_must_fail_at_the_base(self):
+        self.interview()
+        done = self.run_suite("red", "--base", self.base, env={"FAKE_STATUS": "adds=passed"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("red check passed", done.stdout)
+        self.assertIn("2 new test(s) in 1 file(s)", done.stdout)
+        self.assertIn("tests/n.test.ts > writes n: failed", done.stdout)
+        self.assertIn("keeps: tests/n.test.ts > keeps: n stays (skipped", done.stdout)
+        call = self.calls()[0]
+        self.assertEqual(call["src"], "export const a = 1;\n")
+        self.assertIn("tests/n.test.ts", call["args"])
+        # A file the note names only under `## Done` is not the note's test.
+        self.assertNotIn("tests/a.test.ts", call["args"])
+
+    def test_an_interview_test_that_passes_at_the_base_is_refused_by_name(self):
+        self.interview()
+        done = self.run_suite("red", "--base", self.base, env={"FAKE_STATUS": "writes n=passed"})
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("tests/n.test.ts > writes n: passed", done.stdout)
+
+    def test_off_a_note_branch_an_interview_test_is_not_new(self):
+        self.interview(branch="feature/feat")
+        done = self.run_suite("red", "--base", self.base)
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("no new test title", done.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_note_branch_whose_note_is_missing_is_refused(self):
+        self.interview(branch="note/feat/02")
+        done = self.run_suite("red", "--base", self.base)
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("note/feat/02", done.stdout)
+        self.assertIn("changes/feat/02-*.md", done.stdout)
+        self.assertEqual(self.calls(), [])
+
+
 if __name__ == "__main__":
     unittest.main()
