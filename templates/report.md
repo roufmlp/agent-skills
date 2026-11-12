@@ -59,4 +59,4 @@ Blast radius: <who or what breaks if this is wrong: one word, then a clause>
 
 ## Ruled while you were away
 
-<One line per ruling Abdul did not make and has not confirmed, a correction by the note checker included: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>
+<One line per ruling Abdul did not make and has not confirmed, a correction by the note checker and every `[follows <nn>]` entry included: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>

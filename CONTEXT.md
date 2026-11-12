@@ -70,7 +70,7 @@ A change note taken out of a feature by Abdul's ruling after it stopped or faile
 _Avoid_: Carve, drop, descope
 
 **Ruling**:
-The answer that settles a change note a run stopped on: Abdul's words, or the agent's written default once the wait for him is over. It is written on the feature plan with who gave it, the notes it touches and what reversing it costs, and the run starts again from it with no new approval. A ruling in his name quotes words he typed, and it covers the one commit that applies it.
+The answer that settles a change note a run stopped on: Abdul's words, or the agent's written default once the wait for him is over. It is written on the feature plan with who gave it, the notes it touches and what reversing it costs, and the run starts again from it with no new approval. A ruling in his name quotes a whole message or a whole sentence he typed after he was shown the note, one sentence for one question, and it covers the one commit that applies it.
 _Avoid_: Short interview, decision, override
 
 **Re-arm**:
@@ -78,7 +78,7 @@ The one ruling by default a note gets after three strikes: the change its last r
 _Avoid_: Retry, second chance
 
 **Waiting**:
-The state of a note only Abdul can move: a question in a risk class or with no typed class, a second failure, a third question after two defaults, or a tooling stop with no listed repair. The final check waits the same way when its fix rounds are spent. It has no timeout, and the notes that do not wait for it run on.
+The state of a note only Abdul can move: a question in a risk class or with no typed class, a second failure, a third question after two defaults, or a tooling stop with no listed repair. The final check waits the same way when its three fix rounds, counted per feature, are spent, or when no run finishes it in three starts. It has no timeout, and the notes that do not wait for it run on.
 _Avoid_: Blocked, paused
 
 **Tooling stop**:
