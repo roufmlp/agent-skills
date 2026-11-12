@@ -4,7 +4,7 @@ Feature: <name>
 Branch: feature/<name>
 Written: <date>
 
-One page. Abdul reads this and nothing else before the run: a line per note, the order, which notes wait for which, and the questions of four kinds. The plan check reads the `Questions` part and the `Approved:` line and nothing else of this file.
+One page. Abdul reads this and nothing else before the run: a line per note, the order, which notes wait for which, and the questions of four kinds. The plan check reads the `Questions` part, the `Rulings` part and the `Approved:` line and nothing else of this file.
 
 ## Notes
 
@@ -34,6 +34,26 @@ One line per question, then its answer on the next line, written as Abdul gives 
 
 ## Cut
 
-<Leave this part out until the short interview after a failed note cuts one. Then one line per cut note: "<nn> <title>, cut <date>: <why, and where it goes next>". The note file moves to `cut/` in this folder.>
+<Leave this part out until Abdul cuts a note. Then one line per cut note: "<nn> <title>, cut <date>: <why, and where it goes next>". The note file moves to `cut/` in this folder.>
+
+## Rulings
+
+<Leave this part out until a run stops on a note. `rulings.py record` writes each entry, and nobody edits one by hand. One entry per note a ruling changes. The kind in brackets is `none`, a risk class (`money`, `access`, `migration`, `data leaving`), `re-arm` for a note that failed three strikes, or `follows <nn>` for a note another note's ruling touched. Who is Abdul's name, `default` or `panel`. After the approval, only this part of the page may change, and a note or a test may change only when an entry written since names it.>
+
+- [none] <nn>: <the question, in plain words>
+  Ruled: <date>, <who>, "<Abdul's words, or the agent's written default>"
+  Touches: <none, or the numbers of the other notes the ruling reader named>
+  Undo: <what reversing the ruling costs>
+  Confirmed: <date; Abdul's answer at the gate, with his words for a risk class. A ruling he made himself carries no such line.>
+- [follows <nn>] <nn>: <what the first ruling changed in this note>
+  Ruled: <date>, <who>, "<the edit>"
+  Touches: none
+  Undo: <cost>
+- [money] <nn>: <a question a default answered and Abdul reversed>
+  Ruled: <date>, default, "<the default>"
+  Touches: none
+  Undo: <cost>
+  Overturned: <date>, "<Abdul's words>"
+  Fix: <the number of the fix note that undoes it>
 
 Approved: <date>

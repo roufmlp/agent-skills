@@ -66,8 +66,32 @@ The one page Abdul approves before a feature runs: a line per note, the order, w
 _Avoid_: Approval page, one-pager
 
 **Cut**:
-A change note taken out of a feature in the interview that follows a failed note, merged or not. It returns later as a one-note change or in another feature.
+A change note taken out of a feature by Abdul's ruling after it stopped or failed, merged or not. It returns later as a one-note change or in another feature. No default cuts a note.
 _Avoid_: Carve, drop, descope
+
+**Ruling**:
+The answer that settles a change note a run stopped on: Abdul's words, or the agent's written default once the wait for him is over. It is written on the feature plan with who gave it, the notes it touches and what reversing it costs, and the run starts again from it with no new approval.
+_Avoid_: Short interview, decision, override
+
+**Re-arm**:
+The one ruling by default a note gets after three strikes: the change its last reject report asks for, and three new strikes. A note that fails again waits for Abdul.
+_Avoid_: Retry, second chance
+
+**Waiting**:
+The state of a note only Abdul can move: a question in a risk class nobody answered, a second failure, or a tooling stop with no listed repair. It has no timeout, and the notes that do not wait for it run on.
+_Avoid_: Blocked, paused
+
+**Tooling stop**:
+A stop caused by a tool that refused a step, a hook, a check script or the desktop app, and not by a question. The session applies the repair listed for it and starts again; a refusal with no listed repair waits for Abdul, and no gate is loosened to pass it.
+_Avoid_: Infrastructure failure, flake (a flake is a test)
+
+**Fix note**:
+A change note written while a feature runs, to change what a merged note built or to undo a ruling Abdul overturned. A merged note is never edited.
+_Avoid_: Patch, follow-up, hotfix
+
+**Held**:
+A feature whose final check passed and which stays off local main until Abdul has confirmed or overturned each ruling made without him. A ruling he gave himself needs no confirmation.
+_Avoid_: Pending merge, frozen
 
 **Done check**:
 A command or test that passes only when the change works. It fails on the code as it stands before the change, and the build agent runs it.
@@ -113,6 +137,7 @@ _Avoid_: Design system, style guide, architecture doc
 **Risk class**:
 One of five kinds of change that get stricter checks in the careful lane: money, authentication, secrets, migrations and writes to rows.
 Authentication covers who may sign in and who may read or write which data, so rights rows and row policies count.
+A question a stopped note asks has four risk classes of its own: money, access, a migration's direction and data leaving the product. No default rules a question in one of them.
 
 **Pending file**:
 The one private list of what waits on Abdul, under two headings: actions to do and decisions to make. A decision lands there only when its default is hard to undo or the choice is his.
