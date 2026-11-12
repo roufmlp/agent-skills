@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks for check_build_agents.py: a fixture set of seven files that passes, and one edit per refusal.
+"""Checks for check_build_agents.py: a fixture set of eight files that passes, and one edit per refusal.
 
     python3 test_check_build_agents.py
 """
@@ -16,17 +16,19 @@ sys.path.insert(0, HERE)
 import check_build_agents as mod  # noqa: E402
 
 BODIES = {
-    "implementer": "Invoke /tdd. Do not wait for a seam. A test starts with `keeps:`.",
-    "verifier": "The hostile walk: a reload, a second road, two fast clicks, the 390-pixel width, the empty state and the error state. on_main.py decides a difference at the base.",
-    "reviewer": "Invoke the code-review skill. Each keeps: test protects unchanged behaviour.",
-    "note-checker": "Write `Corrected:`, `Sound:` or `Stopped:`; a stopped note goes under Decide.",
-    "merger": "Renumber first. The header begins `| Note | State |`. On a refusal `git merge --abort`. A note merges with --no-ff. The merge into main is fast-forward only.",
+    "implementer": "Invoke /tdd. Do not wait for a seam. A test starts with `keeps:`. Each rule has a test that fails when the rule is removed. A finding that needs a test goes in `needs_note`. Fill `stop`.",
+    "verifier": "The hostile walk: a reload, a second road, two fast clicks, the 390-pixel width, the empty state and the error state. on_main.py decides a difference at the base. A refused step is a tooling stop.",
+    "reviewer": "Invoke the code-review skill. Each keeps: test protects unchanged behaviour. A refused step is a tooling stop.",
+    "note-checker": "Write `Corrected:`, `Sound:` or `Stopped:`; a stopped note carries its class and its default.",
+    "merger": "Renumber first. The header begins `| Note | State |`. On a refusal `git merge --abort`. A note merges with --no-ff. The merge into main is fast-forward only. A state may be `waiting: <why>`; the State line may be `held`.",
     "final-verifier": (
         "The pre-launch gate; the baseline retake; on_main.py decides what holds on main.\n"
+        "The final check gets three fix rounds. A refused step is a tooling stop.\n"
         "   1. RLS on every table.\n   2. grep for service_role.\n   3. user A and B.\n   4. webhooks.\n"
         "   5. npm audit.\n   6. error pages.\n   7. the last call answers 429.\n"
     ),
-    "final-reviewer": "Invoke the code-review skill. Money. Access. Secrets.",
+    "final-reviewer": "Invoke the code-review skill. Money. Access. Secrets. A `Ruled:` line by `default` is legitimate; read it and its `Touches:` line against the diff. A refused step is a tooling stop.",
+    "ruling-reader": "Per note: `no change`, or the exact edit. A merged note takes a fix note. End on `Touches:`.",
 }
 
 
@@ -49,7 +51,7 @@ class Lint(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.dir)
-        for role in mod.ROLES:
+        for role in mod.ALL_ROLES:
             write(self.dir, role)
 
     def refusals(self):
@@ -119,12 +121,17 @@ class Lint(unittest.TestCase):
 
     def test_a_prose_final_message_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
-            for role in mod.ROLES:
+            for role in mod.ALL_ROLES:
                 write(d, role)
             write(d, "verifier", body=BODIES["verifier"] + "\nFinal message, 10 lines at most: the verdict word.")
             lines = mod.check_dir(d)
             self.assertEqual(len(lines), 1, lines)
             self.assertIn("final message", lines[0])
+
+    def test_the_ruling_reader_is_linted_and_is_not_a_workflow_role(self):
+        self.assertNotIn("ruling-reader", mod.ROLES)
+        os.remove(os.path.join(self.dir, "build-feature-ruling-reader.md"))
+        self.assertEqual(self.refusals(), ["build-feature-ruling-reader.md: missing"])
 
     def test_gate_steps_counted(self):
         body = BODIES["final-verifier"].replace("   7. the last call answers 429.\n", "   the last call answers 429.\n")
@@ -132,9 +139,9 @@ class Lint(unittest.TestCase):
         self.assertIn("build-feature-final-verifier.md: body lacks gate step 7", self.refusals())
 
     def test_real_files(self):
-        """The seven files on this machine pass, where they exist."""
+        """The eight files on this machine pass, where they exist."""
         real = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")
-        if not all(os.path.isfile(os.path.join(real, f"build-feature-{r}.md")) for r in mod.ROLES):
+        if not all(os.path.isfile(os.path.join(real, f"build-feature-{r}.md")) for r in mod.ALL_ROLES):
             self.skipTest("the real agent files are not all present")
         self.assertEqual(mod.check_dir(real), [])
 

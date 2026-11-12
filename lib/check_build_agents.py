@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""The lint over the seven build-feature agent files.
+"""The lint over the eight build-feature agent files.
 
     python3 check_build_agents.py [--dir ~/.claude/agents]
 
 The `build-feature-run` workflow spawns seven roles, one agent file each in
 `~/.claude/skills/workflow/agents/`: implementer, verifier, reviewer, note-checker, merger,
-final-verifier and final-reviewer. Each file's frontmatter sets the role's
+final-verifier and final-reviewer. The session spawns an eighth itself, the
+ruling-reader, after each ruling. Each file's frontmatter sets the role's
 model and effort, so Abdul changes a role in one line; this lint refuses a
 file that lost the line, spelled a value the docs do not list, or dropped a
 rule the design hangs on.
@@ -42,6 +43,9 @@ import re
 import sys
 
 ROLES = ("implementer", "verifier", "reviewer", "note-checker", "merger", "final-verifier", "final-reviewer")
+# The session spawns this one itself, after each ruling; the workflow never does.
+SESSION_ROLES = ("ruling-reader",)
+ALL_ROLES = ROLES + SESSION_ROLES
 MODELS = {"sonnet", "opus", "haiku", "fable", "inherit"}
 MODEL_ID = re.compile(r"^claude-[a-z0-9-]+$")
 EFFORTS = {"low", "medium", "high", "xhigh", "max"}
@@ -51,13 +55,14 @@ MAX_TOOLS = 8
 
 # The phrases each role's body must carry. Lower-cased before the search.
 PHRASES = {
-    "implementer": ["/tdd", "do not wait for a seam", "keeps:"],
-    "verifier": ["hostile walk", "reload", "second road", "two fast clicks", "390", "empty state", "error state", "on_main.py"],
-    "reviewer": ["code-review", "keeps:"],
-    "note-checker": ["corrected:", "sound:", "stopped:", "decide"],
-    "merger": ["renumber", "| note | state |", "merge --abort", "fast-forward", "--no-ff"],
-    "final-verifier": ["retake", "pre-launch gate", "rls", "service_role", "npm audit", "429", "on_main.py"],
-    "final-reviewer": ["money", "access", "secrets", "code-review"],
+    "implementer": ["/tdd", "do not wait for a seam", "keeps:", "fails when the rule is removed", "needs_note", "`stop`"],
+    "verifier": ["hostile walk", "reload", "second road", "two fast clicks", "390", "empty state", "error state", "on_main.py", "tooling"],
+    "reviewer": ["code-review", "keeps:", "tooling"],
+    "note-checker": ["corrected:", "sound:", "stopped:", "class", "default"],
+    "merger": ["renumber", "| note | state |", "merge --abort", "fast-forward", "--no-ff", "waiting:", "held"],
+    "final-verifier": ["retake", "pre-launch gate", "rls", "service_role", "npm audit", "429", "on_main.py", "three fix rounds", "tooling"],
+    "final-reviewer": ["money", "access", "secrets", "code-review", "`ruled:`", "`touches:`", "tooling"],
+    "ruling-reader": ["no change", "exact edit", "merged", "touches:"],
 }
 GATE_STEPS = 7
 # Every role answers the workflow in a typed form (the script's schemas), never
@@ -141,7 +146,7 @@ def check_file(path, role):
 def check_dir(directory):
     """Every refusal across the seven files, as `<file>: <what>` lines."""
     lines = []
-    for role in ROLES:
+    for role in ALL_ROLES:
         name = f"build-feature-{role}.md"
         for what in check_file(os.path.join(directory, name), role):
             lines.append(f"{name}: {what}")
@@ -157,7 +162,7 @@ def main(argv=None):
         print(line)
     if lines:
         return 1
-    print(f"build agents: {len(ROLES)} files pass")
+    print(f"build agents: {len(ALL_ROLES)} files pass")
     return 0
 
 
