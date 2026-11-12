@@ -1,0 +1,14 @@
+#!/bin/sh
+# Every road that moves a main branch: a merge commit, a fast-forward, a reset
+# and update-ref. A feature whose plan holds a ruling its owner did not make
+# and has not confirmed stays off main, whatever command moves the branch.
+# pre-merge-commit does not run on a fast-forward; this hook does.
+[ "$1" = prepared ] || exit 0
+lines=$(cat)
+case "$lines" in
+  *refs/heads/main*|*refs/heads/master*) ;;
+  *) exit 0 ;;
+esac
+CHECK="${WORKFLOW_LIB:-$HOME/.claude/skills/workflow/lib}/note_check.py"
+[ -f "$CHECK" ] || { echo "REFUSED: $CHECK is missing, so the main branch does not move. Clone the workflow plugin there, or set WORKFLOW_LIB." >&2; exit 1; }
+printf '%s\n' "$lines" | python3 "$CHECK" ref

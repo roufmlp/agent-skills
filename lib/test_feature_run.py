@@ -230,7 +230,7 @@ class Feature(unittest.TestCase):
 
     def test_args_earlier_is_empty_with_no_report(self):
         self.assertEqual(self.args()["earlier"],
-                         {"defaults": [], "edits": [], "final": [], "tooling": [], "strikes": {}})
+                         {"defaults": [], "edits": [], "final": [], "tooling": [], "decide": [], "strikes": {}})
 
     def test_starting_state_rules(self):
         self.assertEqual(mod.starting_state("merged abc1234"), ("merged abc1234", False))
@@ -344,6 +344,141 @@ class Feature(unittest.TestCase):
         self.write(self.tree, "src/a.ts", "export const a = 2;\n")
         self.commit("fix")
         self.assertFalse(self.args()["held"], "code changed since the final check passed")
+
+    def test_held_is_false_when_a_note_is_to_be_built(self):
+        # Review finding 3: a row back at `not started` kept the old final check standing.
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="held", s01="merged abc1234", s02="merged def5678"))
+        self.commit("report: bubble held")
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="held", s01="merged abc1234", s02="not started"))
+        self.commit("report: note 02 again")
+        self.assertFalse(self.args()["held"], "a note to build is new code, and new code takes a final check")
+
+    def test_args_refuses_rulings_that_do_not_hold(self):
+        # Review finding 5: the gate was computed with no fault check.
+        self.rule(self.RULINGS.replace(", default, ", ", Default, "))
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("`Default` is not `default`, `panel` or `Sam`", out)
+
+    def test_args_refuses_a_product_whose_hooks_miss_the_one_that_holds_a_fast_forward(self):
+        hooks = self.repo / ".githooks"
+        hooks.mkdir()
+        (hooks / "pre-merge-commit").write_text("#!/bin/sh\n")
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("has no `reference-transaction` hook", out)
+        (hooks / "reference-transaction").write_text("#!/bin/sh\n")
+        self.assertEqual(self.run_main("args", "bubble", "--tree", str(self.tree))[0], 0)
+
+    def test_args_refuses_a_correction_the_plan_does_not_record(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="held", s01="merged abc1234", s02="merged def5678")
+                   + "\n## Decide\n\n01: [correction] Corrected: the rights test\n")
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("note 01: the note checker corrected it", out)
+
+    def test_args_keeps_the_decide_lines_and_the_final_row(self):
+        # Review finding 11: a waiting note lost its typed line at the next start.
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="waiting: money: may a manager refund")
+                   .replace("\n## Tooling stops", "| final | waiting: money: may the fix round the price | | | |\n\n## Tooling stops")
+                   + "\n## Decide\n\n02: [money] may a manager refund Default: yes, up to 50\n")
+        got = self.args()
+        self.assertEqual(got["earlier"]["decide"], ["02: [money] may a manager refund Default: yes, up to 50"])
+        self.assertEqual(got["final"], "waiting: money: may the fix round the price")
+        self.assertEqual([n["number"] for n in got["notes"]], ["01", "02"])
+        self.assertEqual(got["notes"][1]["state"], "waiting: money: may a manager refund")
+
+    def test_a_final_row_that_restarts_by_itself_is_not_passed_on(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="merged def5678")
+                   .replace("\n## Tooling stops", "| final | stopped: tooling: hook: REFUSED | | | |\n\n## Tooling stops"))
+        self.assertEqual(self.args()["final"], "")
+
+    # ── the bound on automatic restarts ──
+
+    def start(self, clock, **states):
+        rows = {number.lstrip("n"): {"State": state} for number, state in states.items()}
+        mod.count_start(pathlib.Path(self.tmp.name) / "records", rows, clock)
+
+    def test_three_automatic_restarts_with_no_new_merge_then_no_more(self):
+        # Review finding 12: nothing bounded the restarts after a tool fault.
+        self.assertEqual(mod.MAX_STARTS_WITHOUT_MERGE, 3)
+        self.start(0, n01="not started", n02="not started")
+        for _ in range(3):
+            self.start(10, n01="stopped: tooling: hook: REFUSED", n02="not started")
+        with self.assertRaises(mod.Refusal) as refused:
+            self.start(20, n01="stopped: tooling: hook: REFUSED", n02="not started")
+        self.assertIn("3 automatic restarts in a row merged no new note", str(refused.exception))
+        with self.assertRaises(mod.Refusal):
+            self.start(30, n01="running", n02="not started")
+        self.start(40, n01="waiting: tooling: hook: REFUSED", n02="not started")  # it waits for him: the streak ends
+        self.start(50, n01="waiting: tooling: hook: REFUSED", n02="stopped: worktree: classifier denied")
+
+    def test_a_newly_merged_note_starts_the_count_again(self):
+        for _ in range(3):
+            self.start(0, n01="stopped: tooling: hook: REFUSED", n02="not started")
+        self.start(0, n01="stopped: tooling: hook: REFUSED", n02="merged abc1234")
+        self.start(0, n01="stopped: tooling: hook: REFUSED", n02="merged abc1234")
+
+    def test_an_outage_is_bounded_by_days_not_by_three_starts(self):
+        for hour in range(10):
+            self.start(hour * 3600, n01="stopped: API errors", n02="not started")
+        self.start(mod.MAX_OUTAGE_SECONDS, n01="stopped: implementer returned no result", n02="not started")
+        with self.assertRaises(mod.Refusal) as refused:
+            self.start(mod.MAX_OUTAGE_SECONDS + 1, n01="stopped: API errors", n02="not started")
+        self.assertIn("3 days", str(refused.exception))
+
+    def test_the_args_command_counts_its_starts(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="stopped: tooling: hook: REFUSED"))
+        codes = [self.run_main("args", "bubble", "--tree", str(self.tree))[0] for _ in range(4)]
+        self.assertEqual(codes, [0, 0, 0, 3])
+
+    # ── the typed stops, from the agents' transcripts ──
+
+    def transcript(self, run, name, role, label, answer):
+        (run / f"agent-{name}.meta.json").write_text(json.dumps({"agentType": f"workflow:build-feature-{role}",
+                                                                 "description": label}))
+        call = {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "done"}, {"type": "tool_use", "name": "StructuredOutput", "input": answer}]}}
+        (run / f"agent-{name}.jsonl").write_text(json.dumps({"type": "user", "message": {"content": "x"}}) + "\n"
+                                                + json.dumps(call) + "\n")
+
+    def test_roles_records_each_typed_stop_with_the_class_the_agent_typed(self):
+        # Review finding 4: the class of a stop was the session's to choose.
+        run = pathlib.Path(self.tmp.name) / "wf" / "wf_1"
+        run.mkdir(parents=True)
+        stop = {"kind": "question", "class": "money", "question": "may a manager\nrefund | without the owner", "default": "yes"}
+        self.transcript(run, "a1", "implementer", "note 02: implementer 1", {"outcome": "stopped", "stop": stop})
+        self.transcript(run, "a2", "implementer", "note 01: implementer 1", {"outcome": "built", "stop": {"kind": "none"}})
+        self.transcript(run, "a3", "implementer", "fix round 1: implementer", {"stop": {**stop, "class": ""}})
+        self.transcript(run, "a4", "implementer", "note 01: implementer 2", {"stop": {**stop, "class": "payments"}})
+        self.transcript(run, "a5", "note-checker", "note 01: note checker", {"outcome": "stopped", "line": "the note is wrong", "stop": {"kind": "none"}})
+        self.transcript(run, "a6", "verifier", "note 01: verifier 1", {"verdict": "REJECT", "stop": {"kind": "tooling", "tool": "hook", "question": "REFUSED"}})
+        got = {s["agent"]: (s["note"], s["class"], s["question"]) for s in mod.typed_stops(run.parent)}
+        self.assertEqual(got, {
+            "agent-a1": ("02", "money", "may a manager refund without the owner"),
+            "agent-a3": ("final", "unclassified", "may a manager refund without the owner"),
+            "agent-a4": ("01", "unclassified", "may a manager refund without the owner"),
+            "agent-a5": ("01", "unclassified", "the note is wrong"),
+        })
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="stopped: may a manager refund without the owner"))
+        report = str(self.tree / "changes" / "bubble" / "report.md")
+        code, out = self.run_main("roles", str(run.parent), "--report", report)
+        self.assertEqual(code, 0, out)
+        self.assertIn("stops: 4 typed stop(s) added to", out)
+        self.assertIn("stops: 0 typed stop(s) added to", self.run_main("roles", str(run.parent), "--report", report)[1])
+        import rulings
+        feature = rulings.Feature(str(self.tree), "bubble")
+        self.assertTrue(str(feature.records()).endswith("/product/.git/build-feature/bubble"))
+        self.assertEqual(feature.stop_class("02", "may a manager refund  without the owner"), "money")
+        self.assertEqual(feature.stop_class("02", "another question"), "unclassified")
+        self.assertEqual(feature.stop_class("final", "may a manager refund without the owner"), "unclassified")
 
     def test_held_is_false_for_any_other_state(self):
         self.write(self.tree, "changes/bubble/report.md",

@@ -509,7 +509,7 @@ class Rulings(Product):
         self.held()
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 2, out)
-        self.assertIn("GATE: 1 ruling(s) by default or panel wait for Sam", out)
+        self.assertIn("GATE: 1 ruling(s) Sam did not make wait for him", out)
         self.assertIn("02: the count shows zero or hides at zero", out)
 
     def test_a_confirmed_ruling_clears_the_gate(self):
@@ -527,42 +527,232 @@ class Rulings(Product):
         self.assertEqual(code, 0, out)
         self.assertIn("1 to confirm before the merge", out)
 
-    def test_the_whole_road_through_the_commands_the_skill_names(self):
-        """A failed note, its ruling by default, the restart, the held run, the
-        answer and the open merge, each through the command a session types."""
+    # ── the commands, with a session he typed in ──
+
+    def rule(self, *args):
         import rulings
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = rulings.main([args[0], "bubble", "--tree", str(self.tree), *args[1:]])
+        return code, out.getvalue()
 
-        def command(*args):
-            out = io.StringIO()
-            with contextlib.redirect_stdout(out):
-                code = rulings.main([args[0], "bubble", "--tree", str(self.tree), *args[1:]])
-            return code, out.getvalue()
+    def says(self, text):
+        """One message he types in this session, a second from now."""
+        import datetime
+        import rulings
+        if not hasattr(self, "transcript"):
+            kept = (rulings.PROJECTS, os.environ.get(rulings.SESSION))
+            rulings.PROJECTS = pathlib.Path(self.tmp.name) / "projects"
+            os.environ[rulings.SESSION] = "feedbeef-1111-4000-8000-000000000000"
 
-        self.write("changes/bubble/report.md", report(state="stopped", s02="failed"))
-        self.commit_all("report: note 02 failed")
+            def restore():
+                rulings.PROJECTS = kept[0]
+                os.environ.pop(rulings.SESSION, None) if kept[1] is None else os.environ.update({rulings.SESSION: kept[1]})
+            self.addCleanup(restore)
+            self.transcript = rulings.PROJECTS / "-product" / f"{os.environ[rulings.SESSION]}.jsonl"
+            self.transcript.parent.mkdir(parents=True)
+        stamp = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=1)).isoformat()
+        with open(self.transcript, "a") as fh:
+            fh.write(json.dumps({"type": "user", "timestamp": stamp, "origin": {"kind": "human"},
+                                 "message": {"role": "user", "content": text}}) + "\n")
+
+    def test_the_whole_road_through_the_commands_the_skill_names(self):
+        """A failed note and its re-arm with a touched note, a risk question he
+        answers, the restart, the held run, and at the gate one confirmed line
+        and one overturned line with its fix note: each step through the
+        command a session types, and the plan check after each."""
+        question = "may the bubble show a price"
+        self.write("changes/bubble/report.md", report(state="stopped", s01=f"stopped: {question}", s02="failed"))
+        self.commit_all("report: stopped")
         self.assertEqual(self.run_check("plan", "bubble")[0], 2)
+        # Note 01 stopped on a question no agent typed a class for: it waits for him, and he rules it.
+        self.assertEqual(self.rule("wait", "--note", "01")[0], 0)
+        self.assertEqual(self.rule("record", "--note", "01", "--kind", "none", "--who", "default", "--question",
+                                   question, "--words", "no", "--touches", "none", "--undo", "x")[0], 3)
+        self.says("no price on the bubble, ever")
+        code, out = self.rule("record", "--note", "01", "--kind", "money", "--who", "Sam", "--question", question,
+                              "--words", "no price on the bubble", "--touches", "none", "--undo", "a migration")
+        self.assertEqual(code, 0, out)
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble with no price"))
+        self.commit_all("ruling: note 01")
+        # Note 02 failed: its one re-arm by default.
         self.change_02()
-        code, out = command("record", "--note", "02", "--kind", "re-arm", "--who", "default",
-                            "--question", "note 02 failed three strikes", "--words", "hide the count at zero",
-                            "--touches", "Touches: none", "--undo", "one line in the order page")
+        code, out = self.rule("record", "--note", "02", "--kind", "re-arm", "--who", "default",
+                              "--question", "note 02 failed three strikes", "--words", "hide the count at zero",
+                              "--touches", "Touches: none", "--undo", "one line in the order page")
         self.assertEqual(code, 0, out)
         self.commit_all("ruling: note 02")
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 0, out)
-        self.assertIn("1 to confirm before the merge", out)
+        self.assertIn("2 ruling(s), 1 to confirm before the merge", out)
+        # The run builds both notes and holds.
         merge = self.git("rev-parse", "HEAD")[:9]
-        self.write("changes/bubble/report.md", report(state="held", s02=f"merged {merge}"))
+        self.write("changes/bubble/report.md", report(state="held", s01=f"merged {merge}", s02=f"merged {merge}"))
         self.commit_all("report: bubble held")
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 2, out)
         self.assertIn("GATE: 1 ruling(s)", out)
-        self.assertIn("02: note 02 failed three strikes", command("list")[1])
-        code, out = command("answer", "--all")
+        self.assertNotIn("01: may the bubble", out, "his own ruling needs no answer")
+        self.assertIn("02: note 02 failed three strikes", self.rule("list")[1])
+        # He overturns it. The line closes only on a new fix note, which is then his to confirm.
+        self.says("no, show the zero")
+        overturn = ("answer", "--note", "02", "--overturned", "--words", "no, show the zero")
+        self.assertEqual(self.rule(*overturn, "--fix", "01")[0], 3)
+        fix = NOTE_02.replace("# 02 Order page", "# 03 The zero shows").replace(
+            "Waits for: 01", "Waits for: 02").replace("e2e/order", "e2e/zero")
+        self.write("changes/bubble/03-zero.md", fix)
+        self.write("e2e/zero.spec.ts", "// spec\n")
+        self.write("e2e/zero.sh", "exit 1\n")
+        code, out = self.rule("record", "--note", "03", "--kind", "follows 02", "--who", "default", "--question",
+                              "the fix note for the overturned ruling on 02", "--words", "show the zero",
+                              "--touches", "none", "--undo", "one line")
         self.assertEqual(code, 0, out)
+        code, out = self.rule(*overturn, "--fix", "03")
+        self.assertEqual(code, 0, out)
+        self.commit_all("rulings: answered")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("03: the fix note for the overturned ruling", out)
+        self.says("confirm all")
+        self.assertEqual(self.rule("answer", "--all", "--words", "confirm all")[0], 0)
         self.commit_all("rulings: answered")
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 0, out)
         self.assertNotIn("to confirm", out)
+
+    def test_a_cut_under_his_ruling_passes_and_stays_cut(self):
+        # Review finding 9: the cut's `## Cut` line refused the plan, and `record` undid the row.
+        self.write("changes/bubble/report.md", report(s01="not started", s02="failed"))
+        self.commit_all("report")
+        os.makedirs(self.tree / "changes/bubble/cut")
+        self.git("mv", "changes/bubble/02-order.md", "changes/bubble/cut/02-order.md")
+        self.git("rm", "-q", "e2e/order.spec.ts")
+        cut = PLAN.replace("Approved: 2026-11-03", "## Cut\n\n02 Order page, cut 2026-11-12: Sam cut it\n\nApproved: 2026-11-03")
+        self.write("changes/bubble/plan.md", cut)
+        self.write("changes/bubble/report.md", report(s01="not started", s02="cut 2026-11-12"))
+        self.commit_all("cut")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, "a cut with no ruling of his refuses")
+        self.says("cut it, it goes to the next feature")
+        code, out = self.rule("record", "--note", "02", "--kind", "none", "--who", "Sam", "--question",
+                              "note 02 failed three strikes", "--words", "cut it", "--touches", "none", "--undo", "x")
+        self.assertEqual(code, 0, out)
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("| 02 | cut 2026-11-12 |", (self.tree / "changes/bubble/report.md").read_text())
+
+    def test_a_cut_line_for_a_note_he_did_not_rule_on_refuses(self):
+        self.write("changes/bubble/plan.md", ruled(RULING_02).replace(
+            "Approved: 2026-11-03", "## Cut\n\n02 Order page, cut 2026-11-12: nobody asked\n\nApproved: 2026-11-03"))
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("  changes/bubble/plan.md", out)
+
+    # ── what a ruling covers ──
+
+    OWNER_02 = RULING_02.replace("default", "Sam")
+
+    def test_a_later_edit_of_a_ruled_note_is_refused(self):
+        # Review finding 6: a ruling covered its note and tests for ever.
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(self.OWNER_02))
+        self.commit_all("ruling: note 02")
+        self.assertEqual(self.run_check("plan", "bubble")[0], 0)
+        self.write("e2e/order.spec.ts", "// every assertion removed, days later, no new ruling\n")
+        self.commit_all("a later edit")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("e2e/order.spec.ts (changed after the commit that applied the ruling on note 02", out)
+
+    def test_an_edit_nobody_committed_is_not_covered(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(self.OWNER_02))
+        self.commit_all("ruling: note 02")
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "something else"))
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+
+    def test_a_test_two_notes_name_needs_a_ruling_for_each(self):
+        # Review finding 6: note 01's test, weakened under a ruling on note 02.
+        self.write("changes/bubble/report.md", report(s01="not started", s02="not started"))
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("`e2e/order.spec.ts`", "`e2e/order.spec.ts` and `tests/bubble.test.ts`"))
+        self.write("tests/bubble.test.ts", "// note 01's test, weakened\n")
+        self.write("changes/bubble/plan.md", ruled(self.OWNER_02))
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("tests/bubble.test.ts (also named by note 01, which no ruling covers)", out)
+
+    # ── a follow-on ──
+
+    def follow_on(self, who, touches, weaken=False):
+        """His ruling on 02, and an edit to note 01 that rides on `[follows 02] 01`."""
+        self.write("changes/bubble/report.md", report(s01="not started", s02="not started"))
+        part = self.OWNER_02.replace("Touches: none", f"Touches: {touches}").rstrip("\n") + textwrap.dedent(f"""
+            - [follows 02] 01: anything at all
+              Ruled: 2026-11-12, {who}, "a new rule nobody asked for"
+              Touches: none
+              Undo: unknown
+
+            """)
+        self.write("changes/bubble/plan.md", ruled(part))
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero").replace(
+            "Waits for: 01", "Waits for: none"))
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble that also emails every user").replace(
+            "Waits for: none", "Waits for: 02"))
+        if weaken:
+            self.write("tests/bubble.test.ts", "// weakened\n")
+        self.commit_all("ruling: note 02 and what follows")
+        return self.run_check("plan", "bubble")
+
+    def test_a_follow_on_by_default_under_his_ruling_refuses(self):
+        # Review finding 2, as the reviewer wrote it.
+        code, out = self.follow_on("default", "none", weaken=True)
+        self.assertEqual(code, 3, out)
+        self.assertIn("a follow-on carries the who of the ruling it follows", out)
+
+    def test_a_follow_on_his_touches_line_does_not_name_waits_for_him(self):
+        code, out = self.follow_on("Sam", "none")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+
+    def test_a_follow_on_his_ruling_names_is_free_until_it_changes_a_test(self):
+        code, out = self.follow_on("Sam", "01")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("to confirm", out)
+
+    def test_a_follow_on_that_weakens_a_test_is_never_free(self):
+        code, out = self.follow_on("Sam", "01", weaken=True)
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+
+    # ── an overturned line, a correction ──
+
+    def test_an_overturned_line_with_an_old_fix_note_does_not_hold(self):
+        # Review finding 7, on the page: `Fix: 01` names a merged note that follows nothing.
+        self.held(RULING_02.replace("  Undo:", '  Overturned: 2026-11-13, "no, show the zero"\n  Fix: 01\n  Undo:'))
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("never on an old note", out)
+
+    def test_a_correction_nobody_recorded_is_the_ruling_road(self):
+        # Review finding 1: a correction by the note checker reached main with no line at the gate.
+        decide = "\n## Decide\n\n01: [correction] Corrected: the rights test grants the defaults back\n"
+        self.write("changes/bubble/report.md", report(state="held") + decide)
+        self.commit_all("report: bubble held")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("RULING: notes 01 (corrected by the note checker", out)
+        code, out = self.rule("record", "--note", "01", "--kind", "correction", "--who", "default", "--question",
+                              "the note checker corrected note 01", "--words", "the rights test grants the defaults back",
+                              "--touches", "none", "--undo", "one test")
+        self.assertEqual(code, 0, out)
+        self.commit_all("ruling: note 01")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("GATE: 1 ruling(s)", out)
 
     # ── the session's folder ──
 

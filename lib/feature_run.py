@@ -83,7 +83,18 @@ AGENTS_DIR = os.environ.get("BUILD_FEATURE_AGENTS", os.path.join(os.path.dirname
 NAME = re.compile(r"^[a-z0-9-]+$")
 RESTART_STATES = plan_check.RESTART_STATES
 EARLIER = {"defaults": "Defaults taken", "edits": "Done-check edits", "final": "Final check",
-           "tooling": "Tooling stops"}
+           "tooling": "Tooling stops", "decide": "Decide"}
+# The automatic restarts in a row that merge no new note: after a tool fault, a
+# worktree the merger could not remove, or a run that hung. The next start is
+# refused, and each such row waits for Abdul. A start whose only restart rows
+# are API errors is an outage or a usage limit: it does not count toward the
+# three, and only MAX_OUTAGE_SECONDS ends it.
+MAX_STARTS_WITHOUT_MERGE = 3
+MAX_OUTAGE_SECONDS = 3 * 24 * 3600
+STARTS = "starts.json"
+REF_HOOK = "reference-transaction"  # the hook that holds the gate on a fast-forward, a reset and update-ref
+OUTAGE = re.compile(r"^stopped: (API errors|[a-z-]+ returned no result)")
+NOTE_LABEL = re.compile(r"^note (\d+):")
 ROLES_TABLE = "Roles"
 MERGER_OWNED = ("Door:", "Blast radius:")
 PLACEHOLDER = ("not run", "not assessed", "not yet")  # the script's and the merger's own filler
@@ -172,7 +183,42 @@ def held(tree: pathlib.Path, folder: str) -> bool:
     if not first:
         return False
     changed = plan_check.git(tree, "diff", "--name-only", first).splitlines()
-    return all(path in (report, plan) for path in changed)
+    states = [row.get("State", "") for row in report_rows(tree, folder).values()]
+    return all(path in (report, plan) for path in changed) and all(s.startswith(("merged", "cut")) for s in states)
+
+
+def count_start(reports: pathlib.Path, rows: dict, clock: float) -> None:
+    """Count this start, and refuse it past the bound on automatic restarts.
+
+    A start is automatic when a row reads `running` or a state the run starts
+    again by itself. The streak ends when a new note merged or no such row is
+    left. Nothing else bounds these restarts: the plan check passes each one."""
+    states = [row.get("State", "") for row in rows.values()]
+    merged = sum(1 for s in states if s.startswith("merged"))
+    again = [s for s in states if s == "running" or RESTART_STATES.match(s)]
+    path = reports / STARTS
+    try:
+        past = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        past = {}
+    if not again or not isinstance(past, dict) or merged > past.get("merged", -1):
+        past = {"merged": merged, "starts": 0, "since": clock}
+    refusal = None
+    if again:
+        if any(not OUTAGE.match(s) for s in again):
+            past["starts"] += 1
+        if past["starts"] > MAX_STARTS_WITHOUT_MERGE:
+            refusal = (f"{MAX_STARTS_WITHOUT_MERGE} automatic restarts in a row merged no new note, and the rows "
+                       f"still read: {'; '.join(sorted(set(again)))}. No further restart: set each such note to "
+                       f"wait for Abdul (`rulings.py wait <feature> --tree <tree> --note <nn> --why \"tooling: "
+                       f"<its line>\"`), and the other notes run on.")
+        elif clock - float(past["since"] if isinstance(past.get("since"), (int, float)) else clock) > MAX_OUTAGE_SECONDS:
+            refusal = (f"the run has started again for {MAX_OUTAGE_SECONDS // 86400} days with no newly merged "
+                       f"note. No further restart: tell Abdul.")
+    reports.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(past) + "\n", encoding="utf-8")
+    if refusal:
+        raise Refusal(refusal)
 
 
 def report_rows(tree: pathlib.Path, folder: str) -> dict:
@@ -248,12 +294,37 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
     main = plan_check.main_branch(tree)
     if not main:
         raise Refusal(f"{tree} has no main or master branch.")
+    # A product that installed its hooks before the gate has no hook on a
+    # fast-forward, so a ruling nobody answered could reach its main branch.
+    hooks = repo / ".githooks"
+    if hooks.is_dir() and not (hooks / REF_HOOK).is_file():
+        raise Refusal(f"{hooks} has no `{REF_HOOK}` hook, so a fast-forward into {main} skips the gate before "
+                      f"local main. On {main}: copy `{REF_HOOK}` and `prepare` from "
+                      f"~/.claude/skills/workflow/templates/githooks/ into .githooks/, run `sh .githooks/prepare`, "
+                      f"and commit the two files by name.")
     reports = common / "build-feature" / feature
     reports.mkdir(parents=True, exist_ok=True)
     rows = report_rows(tree, folder)
     plan = tree / folder / plan_check.PLAN
-    entries = rulings.read(plan.read_text(encoding="utf-8"))[0] if plan.is_file() else []
+    report = tree / folder / plan_check.REPORT
+    report_text = report.read_text(encoding="utf-8") if report.is_file() else ""
+    # The same strict reading as the plan check: a ruling that does not hold,
+    # or a correction nobody recorded, starts no run.
+    entries, found = plan_check.ruling_faults(
+        tree, folder, plan.read_text(encoding="utf-8"),
+        {n for n, row in rows.items() if row.get("State", "").startswith("merged")}) if plan.is_file() else ([], [])
+    found += [f"note {n}: the note checker corrected it and the plan has no `[correction]` entry"
+              for n in rulings.uncorrected(entries, report_text)]
+    if found:
+        raise Refusal(f"the rulings in {folder}/{plan_check.PLAN} do not hold:\n  " + "\n  ".join(found))
+    person = rulings.person(tree)
+    forced = plan_check.weakened_follow_ons(tree, folder, entries)
     rearmed = rulings.rearmed(entries)
+    # A question of the final check lives in the row `final`. While it is not
+    # ruled, no final check runs.
+    final = rows.get(rulings.FINAL, {}).get("State", "").strip()
+    if not (final.startswith(plan_check.WAITING) or (final.startswith("stopped:") and not RESTART_STATES.match(final))):
+        final = ""
     notes, risk = [], False
     for number, path in files:
         text = (tree / path).read_text(encoding="utf-8")
@@ -278,7 +349,8 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
         })
     for number, row in sorted(rows.items()):
         # A cut note's file moved to cut/, and its row stays in the report.
-        if number in {n["number"] for n in notes} or not row.get("State", "").startswith("cut"):
+        if number in {n["number"] for n in notes} or not row.get("State", "").startswith("cut") \
+                or not number.isdigit():
             continue
         notes.append({
             "number": number, "path": f"{folder}/cut/{number}", "waits_for": [], "screens": "none",
@@ -299,9 +371,74 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
         "started": started, "staging": staging, "risk": risk, "notes": notes,
         "roles": read_roles(overrides), "earlier": earlier_lines(tree, folder),
         "ruling_wait_seconds": rulings.RULING_WAIT_SECONDS,
-        "gate_open": [e["number"] for e in rulings.open_entries(entries)],
-        "away": rulings.away_lines(entries), "held": held(tree, folder),
+        "gate_open": [e["number"] for e in rulings.open_entries(entries, person, forced)],
+        "away": rulings.away_lines(entries, person, forced), "held": held(tree, folder), "final": final,
     }
+
+
+# ── stops ────────────────────────────────────────────────────────────────────
+
+def typed_stops(transcripts: pathlib.Path) -> list[dict]:
+    """Each question a role stopped on, as the role typed it: the `stop` of
+    its last StructuredOutput call. The label of the spawn names the note; a
+    fix round's question belongs to `final`. A class outside the form's own
+    is `unclassified`, so nobody reads it as outside the risk classes."""
+    found = []
+    for meta_path in sorted(glob.glob(str(transcripts / "**" / "agent-*.meta.json"), recursive=True)):
+        try:
+            with open(meta_path, encoding="utf-8") as fh:
+                meta = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        role = str(meta.get("agentType") or "").removeprefix("workflow:")
+        label = str(meta.get("description") or "")
+        note = NOTE_LABEL.match(label)
+        number = note.group(1) if note else rulings.FINAL if label.startswith("fix round") else None
+        if not role.startswith("build-feature-") or number is None:
+            continue
+        answer = None
+        for rec in audit_transcripts._iter_records(meta_path[:-len(".meta.json")] + ".jsonl"):
+            content = (rec.get("message") or {}).get("content") if rec.get("type") == "assistant" else None
+            for block in content if isinstance(content, list) else []:
+                if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "StructuredOutput":
+                    answer = block.get("input")
+        if not isinstance(answer, dict):
+            continue
+        stop = answer.get("stop") if isinstance(answer.get("stop"), dict) else {}
+        if stop.get("kind") == "question":
+            cls, question, default = stop.get("class"), stop.get("question"), stop.get("default")
+        elif answer.get("outcome") == "stopped" and stop.get("kind") != "tooling":
+            cls, question, default = None, answer.get("line"), ""
+        else:
+            continue
+        found.append({"note": number, "role": role[len("build-feature-"):], "kind": "question",
+                      "class": cls if cls in ("none", *rulings.RISK_CLASSES) else "unclassified",
+                      "question": rulings.plain(question), "default": rulings.plain(default),
+                      "agent": os.path.basename(meta_path)[:-len(".meta.json")]})
+    return found
+
+
+def record_stops(report: pathlib.Path, stops: list[dict]) -> tuple[pathlib.Path | None, int]:
+    """Append the stops the run's record lacks; `rulings.py` reads the class
+    there. A report outside `<tree>/changes/<feature>/` has no record."""
+    if report.parent.parent.name != plan_check.CHANGES:
+        return None, 0
+    try:
+        path = rulings.records_dir(report.parents[2], report.parent.name) / rulings.STOPS
+    except rulings.Refusal:
+        return None, 0
+    have = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    seen = set()
+    for raw in have:
+        try:
+            seen.add(json.loads(raw).get("agent"))
+        except (ValueError, AttributeError):
+            continue
+    new = [json.dumps(stop) for stop in stops if stop["agent"] not in seen]
+    if new:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(have + new) + "\n", encoding="utf-8")
+    return path, len(new)
 
 
 # ── roles ────────────────────────────────────────────────────────────────────
@@ -398,8 +535,10 @@ def main(argv=None) -> int:
     try:
         if opts.kind == "args":
             started = opts.started or datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-            print(json.dumps(build_args(opts.feature, pathlib.Path(opts.tree).resolve(), opts.role,
-                                        opts.batch, started), indent=1))
+            built = build_args(opts.feature, pathlib.Path(opts.tree).resolve(), opts.role, opts.batch, started)
+            count_start(pathlib.Path(built["reports"]), report_rows(pathlib.Path(built["tree"]),
+                        f"{plan_check.CHANGES}/{opts.feature}"), datetime.datetime.now().timestamp())
+            print(json.dumps(built, indent=1))
             return 0
         transcripts, report = pathlib.Path(opts.transcripts), pathlib.Path(opts.report)
         if not transcripts.is_dir():
@@ -411,6 +550,9 @@ def main(argv=None) -> int:
         for role in sorted(totals):
             print(f"{role}: {totals[role]['tokens']:,} tokens, ${totals[role]['cost']:.2f}")
         print(f"roles: {changed} row(s) filled in {report}")
+        path, added = record_stops(report.resolve(), typed_stops(transcripts))
+        print(f"stops: {added} typed stop(s) added to {path}" if path else
+              "stops: none recorded, the report is not in a feature tree")
         return 0
     except Refusal as err:
         print(f"REFUSED: {err}")

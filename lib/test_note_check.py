@@ -99,6 +99,7 @@ class Product(unittest.TestCase):
             self.write(path, text)
         self.write("CLAUDE.md", BLOCK.format(vitest=self.vitest))
         self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Sam Doe")
         self.git("add", ".")
         self.git("commit", "-qm", "base")
         shutil.copytree(HOOKS, self.tree / ".githooks")
@@ -619,7 +620,7 @@ class Merges(Product):
         done = self.git("merge", "feature/bubble", check=False)
         text = done.stdout + done.stderr
         self.assertNotEqual(done.returncode, 0, text)
-        self.assertIn("REFUSED: changes/bubble/plan.md: 1 ruling(s) by default or panel have no "
+        self.assertIn("REFUSED: changes/bubble/plan.md: 1 ruling(s) Sam did not make have no "
                       "`Confirmed:` or `Overturned:` line", text)
         self.assertIn("02: the count shows zero or hides at zero", text)
         self.assertNotIn("running the red check", text)
@@ -645,6 +646,134 @@ class Merges(Product):
         done = self.git("merge", "feature/bubble", check=False)
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotEqual(self.head(), main)
+
+    def refused(self, plan, *merge_args, says):
+        main = self.feature_with_plan(plan)
+        done = self.git("merge", *merge_args, "feature/bubble", check=False)
+        text = done.stdout + done.stderr
+        self.assertNotEqual(done.returncode, 0, text)
+        self.assertEqual(self.head(), main, text)
+        self.assertIn("REFUSED: changes/bubble/plan.md", text)
+        self.assertIn(says, text)
+        return text
+
+    def test_a_name_that_is_not_the_persons_is_nobody(self):
+        # Review findings 5 and 13: the hook took any name but `default` and `panel` for the person.
+        self.refused(self.PLAN.replace(", default, ", ", Default, "), says="`Default` is not `default`, `panel` or `Sam`")
+
+    def test_a_ruling_in_a_name_merges_nowhere_when_git_names_nobody(self):
+        self.git("config", "--unset", "user.name")
+        self.refused(self.PLAN.replace(", default, ", ", Sam, "), says="`Sam` is not `default`, `panel` or `None`")
+
+    def test_a_kind_nobody_knows_is_refused_with_a_bare_confirmed_line(self):
+        self.refused(self.PLAN.replace("[none]", "[data-leaving]").replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"),
+                     says="[data-leaving] is not a kind")
+
+    def test_an_entry_with_no_ruled_line_is_refused(self):
+        self.refused(self.PLAN.replace('  Ruled: 2026-11-12, default, "hide it at zero"\n', ""), says="has no `Ruled:` line")
+
+    def fast_forward_refused(self, form):
+        # Review finding 5: `pre-merge-commit` does not run on a fast-forward.
+        text = self.refused(self.PLAN, form, says="ruling(s) Sam did not make")
+        self.assertIn("The branch did not move", text)
+        self.git("read-tree", "-u", "--reset", "HEAD")
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no").stdout, "",
+                         "the line the refusal prints puts the checkout back")
+
+    def test_a_fast_forward_only_merge_into_main_is_refused(self):
+        self.fast_forward_refused("--ff-only")
+
+    def test_a_merge_told_to_fast_forward_is_refused(self):
+        self.fast_forward_refused("--ff")
+
+    FOLLOWED = """\
+- [none] 02: the count shows zero or hides at zero
+  Ruled: 2026-11-12, Sam, "hide it at zero"
+  Touches: 03
+  Undo: one line in the order page
+- [follows 02] 03: the money test reads the hidden count
+  Ruled: 2026-11-12, Sam, "as the reader wrote it"
+  Touches: none
+  Undo: none
+"""
+
+    def follow_on(self, weakened):
+        """The feature with a ruling of his own and a note it touched; main checked out."""
+        entry = self.PLAN[self.PLAN.index("- [none] 02"):self.PLAN.index("Approved:")]
+        main = self.feature_with_plan(self.PLAN.replace(entry, "\n"))
+        self.git("checkout", "-q", "feature/bubble")
+        self.write("changes/bubble/plan.md", self.PLAN.replace(entry, self.FOLLOWED + "\n"))
+        if weakened:
+            self.write("tests/money.test.ts", "// every assertion removed\n")
+        code, out = self.commit("ruling: note 02", "changes", "tests")
+        self.assertEqual(code, 0, out)
+        self.git("checkout", "-q", "main")
+        return main
+
+    def test_a_note_his_ruling_touched_merges_with_no_further_answer(self):
+        main = self.follow_on(weakened=False)
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
+    def test_a_touched_note_whose_approved_test_changed_is_never_free_at_the_hook(self):
+        # Review finding 2: an entry that weakens a test he approved needs his answer on every road.
+        for form in ((), ("--ff-only",)):
+            with self.subTest(form=form):
+                main = self.follow_on(weakened=True) if not form else self.head()
+                done = self.git("merge", *form, "feature/bubble", check=False)
+                text = done.stdout + done.stderr
+                self.assertNotEqual(done.returncode, 0, text)
+                self.assertEqual(self.head(), main)
+                self.assertIn("1 ruling(s) Sam did not make", text)
+                self.assertIn("03: the money test reads the hidden count", text)
+                self.git("merge", "--abort", check=False)
+
+    def test_a_merge_told_to_skip_the_hooks_is_refused(self):
+        # `--no-verify` skips `pre-merge-commit`; git has no flag that skips `reference-transaction`.
+        self.refused(self.PLAN, "--no-verify", says="ruling(s) Sam did not make")
+
+    def test_a_commit_on_main_that_brings_the_plan_is_refused(self):
+        self.git("checkout", "-q", "main")
+        self.write("changes/bubble/plan.md", self.PLAN)
+        code, out = self.commit("the plan, straight on main", "changes")
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("REFUSED: changes/bubble/plan.md", out)
+
+    def test_no_other_command_moves_main_past_the_gate(self):
+        main = self.feature_with_plan(self.PLAN)
+        done = self.git("update-ref", "refs/heads/main", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("REFUSED: changes/bubble/plan.md", done.stderr)
+        done = self.git("reset", "-q", "--hard", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(self.git("rev-parse", "refs/heads/main").stdout.strip(), main)
+
+    def test_a_confirmed_feature_fast_forwards(self):
+        main = self.feature_with_plan(self.PLAN.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        done = self.git("merge", "--ff-only", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
+    def test_a_product_whose_main_branch_is_master_is_held_the_same(self):
+        # Review finding 5: `prepare` set `--no-ff` for `main` alone, so a plain merge fast-forwarded.
+        main = self.feature_with_plan(self.PLAN)
+        self.git("branch", "-m", "main", "master")
+        self.git("config", "--unset-all", "branch.master.mergeoptions")
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0, "with no option the merge fast-forwards, and the ref hook refuses it")
+        self.assertEqual(self.head(), main)
+        self.assertIn("REFUSED: changes/bubble/plan.md", done.stdout + done.stderr)
+        self.git("read-tree", "-u", "--reset", "HEAD")
+        self.git("clean", "-qfd")
+        subprocess.run(["sh", ".githooks/prepare"], cwd=self.tree, env=self.env, capture_output=True, check=True)
+        self.assertEqual(self.git("config", "branch.master.mergeoptions").stdout.strip(), "--no-ff")
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("ruling(s) Sam did not make", done.stdout + done.stderr)
+        self.assertEqual(self.head(), main)
+        self.assertTrue(self.git("rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).stdout.strip(),
+                        "a merge commit was on its way, so pre-merge-commit ran")
 
 
 # ── pre-push ─────────────────────────────────────────────────────────────────

@@ -44,11 +44,19 @@ The plan is `changes/<feature>/plan.md`, from `templates/plan.md`; the report is
   covers it: refused. The approval commit is the one that wrote the plan's
   `Approved:` lines as they are now, the oldest of the newest run of commits
   whose lines equal them; the diff runs from it to the working tree, untracked
-  notes included. A ruling covers the note its entry names, when the page at
-  the approval commit lacks that entry, and the plan may change in its rulings
-  part alone. A merged note that changed since its merge commit is refused
-  whatever the rulings say: what touches it becomes a fix note. Approving
-  again appends a new `Approved:` line, which starts a new run.
+  notes included. A ruling covers the change it names, once: the note and its
+  tests as they stood at the commit that added the entry to the page. A later
+  change to either is refused, and a test file two notes name needs an entry
+  for each. The plan may change in its rulings part, and its `## Cut` part may
+  gain the line of a note Abdul's own ruling cut. A merged note's file that
+  changed since its merge commit is refused whatever the rulings say: what
+  touches it becomes a fix note. The test files of a merged note are not
+  watched: its implementer and the final fix rounds edit them, the reviewers
+  read those edits, and any change after a held final check runs the final
+  check again. Approving again appends a new `Approved:` line, which starts a
+  new run.
+- The report's `## Decide` part shows a correction by the note checker and
+  the plan has no `[correction]` entry for it: `RULING:`, exit 2.
 - The report on the feature branch shows a note `failed`, or `stopped:` on a
   question (a `stopped:` the run starts again by itself, such as `API errors`,
   `worktree:` or `tooling:`, is not one): `RULING: notes 03 (failed)`, exit 2.
@@ -277,12 +285,12 @@ def approved_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.startswith("Approved:")]
 
 
-def approval_commit(tree: pathlib.Path, plan: str, current: list[str]) -> str | None:
+def approval_commit(tree: pathlib.Path, plan: str, current: list[str], rev: str = "HEAD") -> str | None:
     """The commit that wrote the plan's `Approved:` lines as they are now: the
     oldest of the newest run of commits whose lines equal them. None when the
     newest commit differs, so the approval is not committed."""
     found = None
-    for commit in git(tree, "log", "--format=%H", "--", plan).splitlines():
+    for commit in git(tree, "log", "--format=%H", rev, "--", plan).splitlines():
         if approved_lines(git(tree, "show", f"{commit}:{plan}", check=False)) != current:
             break
         found = commit
@@ -360,14 +368,91 @@ def ruling_faults(tree: pathlib.Path, folder: str, text: str, merged: set[str]) 
     return entries, found
 
 
+def entry_commits(tree: pathlib.Path, plan: str, commit: str) -> dict[str, str]:
+    """For each note, the newest commit since the approval that added a ruling
+    entry for it to the plan. An entry nobody committed covers nothing."""
+    found = {}
+    before = rulings.read(git(tree, "show", f"{commit}:{plan}", check=False))[0]
+    for sha in git(tree, "log", "--reverse", "--format=%H", f"{commit}..HEAD", "--", plan).splitlines():
+        now = rulings.read(git(tree, "show", f"{sha}:{plan}", check=False))[0]
+        for number in rulings.new_since(now, before):
+            found[number] = sha
+        before = now
+    return found
+
+
+def cut_part(text: str) -> tuple[list[str], list[str]]:
+    """What Abdul approved outside the rulings, and the lines of `## Cut`."""
+    rest, cut, inside = [], [], False
+    for line in rulings.outside(text).splitlines():
+        if line.startswith("## ") or line.startswith("Approved:"):
+            inside = line.strip() == "## Cut"
+            if inside:
+                continue
+        (cut if inside else rest).append(line.strip())
+    return rest, cut
+
+
+def plan_changed(text: str, then: str, entries: list[dict], who: str | None) -> bool:
+    """Whether the plan changed outside its rulings. The `## Cut` part may
+    gain the line of a note that a ruling of his own names; nothing else moves."""
+    rest, cut = cut_part(text)
+    rest_then, cut_then = cut_part(then)
+    if rest != rest_then or any(line not in cut for line in cut_then):
+        return True
+    his = {e["number"] for e in entries if not e["follows"] and rulings.by_person(e, who)}
+    for line in cut:
+        number = re.match(r"^(\d+)\b", line)
+        if line not in cut_then and (not number or number.group(1) not in his):
+            return True
+    return False
+
+
+def weakened_follow_ons(tree: pathlib.Path, folder: str, entries: list[dict], rev: str | None = None) -> set[str]:
+    """The follow-on entries whose note had a test it named at the approval
+    changed or deleted since. Such an entry is never free of his answer.
+    The feature is read from the working tree, or from the commit `rev` when
+    a hook asks about a branch on its way to main."""
+    plan = f"{folder}/{PLAN}"
+
+    def text_of(path: str) -> str:
+        if rev:
+            return git(tree, "show", f"{rev}:{path}", check=False)
+        return (tree / path).read_text(encoding="utf-8") if (tree / path).is_file() else ""
+
+    if not any(e["follows"] for e in entries) or not text_of(plan):
+        return set()
+    try:
+        commit = approval_commit(tree, plan, approved_lines(text_of(plan)), rev or "HEAD")
+    except subprocess.CalledProcessError:
+        commit = None  # no commit yet
+    if not commit:
+        return {e["number"] for e in entries if e["follows"]}
+    notes = note_files(tree, folder) if not rev else sorted(notes_in(
+        folder, git(tree, "ls-tree", "--name-only", rev, f"{folder}/", check=False).splitlines()))
+    found = set()
+    for number, path in notes:
+        if not any(e["follows"] and e["number"] == number for e in entries):
+            continue
+        tests = set(read_note(text_of(path))["tests"])
+        then = git(tree, "show", f"{commit}:{path}", check=False)
+        tests |= set(read_note(then)["tests"]) if then else set()
+        span = [commit, rev] if rev else [commit]
+        if tests and git(tree, "diff", "--name-only", "--diff-filter=MD", *span, "--", *sorted(tests), check=False):
+            found.add(number)
+    return found
+
+
 def uncovered(tree: pathlib.Path, folder: str, plan: str, commit: str, text: str, entries: list[dict],
               changed: list[str], report: dict) -> list[str]:
-    """The changes since the approval that no ruling written since covers. The
-    plan may change in its rulings part alone. A note, or a test it names, may
-    change when the note has a ruling the approved page lacks. A merged note
-    is never edited: what touches it becomes a fix note."""
+    """The changes since the approval that no ruling covers. A ruling covers
+    exactly the change it names, once: each owner of a changed path needs an
+    entry a commit since the approval added, and the path must read today as
+    it read at that commit. The plan may change in its rulings part, and in
+    `## Cut` under his own ruling. A merged note is never edited: what touches
+    it becomes a fix note."""
     then = git(tree, "show", f"{commit}:{plan}", check=False)
-    covered = rulings.new_since(entries, rulings.read(then)[0])
+    covers = entry_commits(tree, plan, commit)
     owners: dict[str, set[str]] = {}
     for number, path in note_files(tree, folder):
         owners.setdefault(path, set()).add(number)
@@ -376,10 +461,14 @@ def uncovered(tree: pathlib.Path, folder: str, plan: str, commit: str, text: str
     left = []
     for path in changed:
         if path == plan:
-            if rulings.outside(text) != rulings.outside(then):
+            if plan_changed(text, then, entries, rulings.person(tree)):
                 left.append(path)
             continue
-        numbers = owners.get(path, set())
+        numbers = set(owners.get(path, set()))
+        head, _, name = path.rpartition("/")
+        gone = NOTE_FILE.match(name) if head == folder and not numbers else None
+        if gone:
+            numbers = {gone.group(1)}  # a note that left the folder: a cut
         state = next((report["states"].get(n, "") for n in numbers if path.startswith(folder + "/")), "")
         if state.startswith("merged"):
             merge = state.split()[1] if len(state.split()) > 1 else ""
@@ -388,8 +477,17 @@ def uncovered(tree: pathlib.Path, folder: str, plan: str, commit: str, text: str
             if since.returncode:
                 left.append(f"{path} (a merged note is never edited: write a fix note)")
                 continue
-        if not numbers & covered:
-            left.append(path)
+        lacking = sorted(n for n in numbers if n not in covers)
+        if not numbers or lacking:
+            left.append(path + (f" (also named by note {', '.join(lacking)}, which no ruling covers)"
+                                if lacking and len(numbers) > 1 else ""))
+            continue
+        later = [n for n in sorted(numbers) if subprocess.run(
+            ["git", "-C", str(tree), "diff", "--quiet", covers[n], "--", path], capture_output=True).returncode
+            or git(tree, "status", "--porcelain", "--", path, check=False).startswith("??")]
+        if later:
+            left.append(f"{path} (changed after the commit that applied the ruling on note {later[0]}: "
+                        f"one commit applies a ruling, and it covers that change alone)")
     return left
 
 
@@ -447,9 +545,12 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                       f"ruling written since covers it:\n  " + "\n  ".join(changed) +
                       "\nA ruling covers a note it names (`rulings.py record`), or Abdul approves "
                       "the plan again, which writes a new `Approved:` line.")
-    who = rulings.person(tree) or "the human"
+    person = rulings.person(tree)
+    who = person or "the human"
     to_rule = [f"{n} ({state})" for n, state in report["states"].items() if state.startswith("failed")
                or (state.startswith("stopped:") and not RESTART_STATES.match(state))]
+    to_rule += [f"{n} (corrected by the note checker; record it with `--kind correction`)"
+                for n in rulings.uncorrected(entries, here.read_text(encoding="utf-8") if here.is_file() else "")]
     if to_rule:
         again = sorted(n for n, state in report["states"].items()
                        if state.startswith("failed") and n in rulings.rearmed(entries))
@@ -457,10 +558,11 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                      f"{who}'s answer, or the written default once the wait is over; then the run "
                      f"starts again." + (f" Note {', '.join(again)} failed again after its one "
                                          f"re-arm: it waits for {who} (`rulings.py wait`)." if again else ""))
-    waiting = rulings.open_entries(entries)
+    forced = weakened_follow_ons(tree, folder, entries)
+    waiting = rulings.open_entries(entries, person, forced)
     if report["state"] == HELD and waiting:
-        raise Gate(f"{len(waiting)} ruling(s) by default or panel wait for {who} before the merge "
-                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(waiting)) +
+        raise Gate(f"{len(waiting)} ruling(s) {who} did not make wait for him before the merge "
+                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(entries, person, forced, open_only=True)) +
                    "\nHe confirms or overturns each one (`rulings.py answer`).")
     count = len(note_files(tree, folder))
     waits = sorted(n for n, state in report["states"].items() if state.startswith(WAITING))

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The note check: the one script behind a graduated product's three git hooks.
+"""The note check: the one script behind a graduated product's four git hooks.
 
     python3 ~/.claude/skills/workflow/lib/note_check.py commit                 # pre-commit
     python3 ~/.claude/skills/workflow/lib/note_check.py merge                  # pre-merge-commit
     python3 ~/.claude/skills/workflow/lib/note_check.py push <remote> <url>    # pre-push, refs on stdin
+    python3 ~/.claude/skills/workflow/lib/note_check.py ref                    # reference-transaction, refs on stdin
     python3 ~/.claude/skills/workflow/lib/note_check.py migrations             # the duplicate-number check alone
 
 "Where the note check lives, and baselines for changed screens" (workflow v2
@@ -70,10 +71,13 @@ A commit that concludes a merge by hand, with `MERGE_HEAD` present, runs the
 ## What `merge` does
 
 The duplicate-number check on the merged index. On a merge into main, first
-the gate: a `changes/<feature>/plan.md` the merge brings, whose `## Rulings`
-part holds a ruling by `default` or `panel` with no `Confirmed:` or
-`Overturned:` line, refuses the merge (`rulings.open_entries`). Abdul confirms
-what was ruled while he was away once, before local main. Then the red check
+the gate: a `changes/<feature>/plan.md` the merge brings refuses the merge
+when its `## Rulings` part does not hold (`rulings.faults`, as the plan check
+reads it) or holds a ruling Abdul did not make with no `Confirmed:` or
+`Overturned:` line (`rulings.open_entries`). Abdul confirms what was ruled
+while he was away once, before local main. `ref` runs the same gate from the
+`reference-transaction` hook for every other command that moves `main` or
+`master`: a fast-forward, a reset, `git update-ref`. Then the red check
 for the whole feature: `suite.py red --base HEAD`, main's code from before the
 merge ("Whether the build agents work test-first", ticket 22).
 
@@ -457,25 +461,80 @@ def check_commit(tree) -> int:
     return 0
 
 
-def gate_refusals(tree) -> list[str]:
-    """Each plan page the merge brings whose rulings still wait for Abdul: a
-    ruling by `default` or `panel` with no `Confirmed:` or `Overturned:` line,
-    or a line in the rulings part that cannot be placed."""
+def plan_refusals(tree, path: str, text: str | None, paths: list[str], report: str | None,
+                  rev: str | None = None) -> list[str]:
+    """One plan page on its way to the main branch: every fault of its
+    rulings, read as strictly as the plan check reads them, and every ruling
+    that still waits for Abdul's answer. `rev` is the commit that brings it."""
+    import plan_check  # it imports this module, so not at the top
+    entries, found = rulings.read(text or "")
+    folder = path.rsplit("/", 1)[0]
+    person = rulings.person(tree)
+    found += rulings.faults(entries, {number for number, _ in notes_in(folder, paths)}, person,
+                            rulings.merged_notes(report or ""))
+    forced = plan_check.weakened_follow_ons(pathlib.Path(tree), folder, entries, rev)
+    waiting = rulings.open_entries(entries, person, forced)
     reasons = []
-    for _, path in staged_changes(tree):
-        parts = path.split("/")
-        if len(parts) != 3 or parts[0] != CHANGES or parts[2] != PLAN:
-            continue
-        entries, faults = rulings.read(index_text(tree, path) or "")
-        waiting = rulings.open_entries(entries)
-        if faults:
-            reasons.append(f"{path}: " + " ".join(faults))
-        if waiting:
-            reasons.append(f"{path}: {len(waiting)} ruling(s) by default or panel have no "
-                           f"`Confirmed:` or `Overturned:` line, so the feature stays off "
-                           f"{branch_name(tree)}:\n  " + "\n  ".join(rulings.away_lines(waiting)) +
-                           "\n  The next `/build-feature` shows him the list.")
+    if found:
+        reasons.append(f"{path}: the rulings do not hold: " + " ".join(found))
+    if waiting:
+        reasons.append(f"{path}: {len(waiting)} ruling(s) {person or 'the owner'} did not make have no "
+                       f"`Confirmed:` or `Overturned:` line, so the feature stays off the main branch:\n  "
+                       + "\n  ".join(rulings.away_lines(entries, person, forced, open_only=True)) +
+                       "\n  The next `/build-feature` shows him the list.")
     return reasons
+
+
+def is_plan(path: str) -> bool:
+    parts = path.split("/")
+    return len(parts) == 3 and parts[0] == CHANGES and parts[2] == PLAN
+
+
+def gate_refusals(tree) -> list[str]:
+    """Each plan page the merge brings, read from the index."""
+    reasons, paths = [], index_paths(tree)
+    # git names the commit a merge brings in `GITHEAD_<sha>`; MERGE_HEAD is not
+    # written yet when this hook runs. With no such name, or two, every
+    # follow-on is read from main's own history and so waits for his answer.
+    heads = [key[len("GITHEAD_"):] for key in os.environ if key.startswith("GITHEAD_")]
+    coming = heads[0] if len(heads) == 1 else None
+    for _, path in staged_changes(tree):
+        if is_plan(path):
+            reasons += plan_refusals(tree, path, index_text(tree, path), paths,
+                                     index_text(tree, path.rsplit("/", 1)[0] + "/report.md"), coming)
+    return reasons
+
+
+def check_ref(tree, lines: list[str]) -> int:
+    """The `reference-transaction` hook: every road that moves a main branch,
+    a fast-forward, a reset and `update-ref` included. `pre-merge-commit` does
+    not run on a fast-forward, and on 2026-11-12 `git merge --ff-only` put a
+    feature with an open ruling on main."""
+    reasons = []
+    for line in lines:
+        parts = line.split()
+        if len(parts) != 3 or parts[2] not in {f"refs/heads/{name}" for name in MAIN_BRANCHES}:
+            continue
+        old, new, ref = parts
+        if set(new) <= {"0"}:
+            continue  # the branch is deleted: nothing merges into it
+        if set(old) <= {"0"}:
+            # `git update-ref <ref> <new>` names no old value, and git passes zeros for it.
+            old = git(tree, "rev-parse", "-q", "--verify", ref, check=False).strip()
+            if not old:
+                continue  # the branch is made: nothing merges into it
+        changed = git(tree, "diff", "--name-only", old, new, "--", CHANGES, check=False).splitlines()
+        paths = git(tree, "ls-tree", "-r", "--name-only", new, "--", CHANGES, check=False).splitlines()
+        for path in changed:
+            if is_plan(path) and path in paths:
+                folder = path.rsplit("/", 1)[0]
+                report = git(tree, "show", f"{new}:{folder}/report.md", check=False) if f"{folder}/report.md" in paths else None
+                reasons += plan_refusals(tree, path, git(tree, "show", f"{new}:{path}", check=False), paths, report, new)
+    if reasons:
+        raise Refusal("\n".join(reasons) + "\nThe branch did not move. When `git status` now shows the "
+                      "feature's files staged, the merge was a fast-forward: `git read-tree -u --reset HEAD` "
+                      "puts the checkout back.")
+    return 0
 
 
 def check_merge(tree) -> int:
@@ -546,7 +605,7 @@ def check_push(tree, lines: list[str]) -> int:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("kind", choices=("commit", "merge", "push", "migrations"))
+    parser.add_argument("kind", choices=("commit", "merge", "push", "migrations", "ref"))
     parser.add_argument("--tree", default=os.getcwd())
     parser.add_argument("rest", nargs="*", help="push: the remote name and url git passes")
     args = parser.parse_args(argv)
@@ -561,6 +620,8 @@ def main(argv=None) -> int:
             return check_merge(tree)
         if args.kind == "push":
             return check_push(tree, sys.stdin.read().splitlines())
+        if args.kind == "ref":
+            return check_ref(tree, sys.stdin.read().splitlines())
         reasons = migrations_refusal(index_paths(tree))
         if reasons:
             raise Refusal("\n".join(reasons))
