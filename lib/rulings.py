@@ -425,7 +425,10 @@ class Feature:
 
 def record(opts) -> int:
     feature = Feature(opts.tree, opts.feature)
-    touches = [] if opts.touches.strip().lower() == "none" else [t.strip() for t in opts.touches.split(",") if t.strip()]
+    named = opts.touches.strip()
+    if named.startswith("Touches:"):  # the reader's last line, as it wrote it
+        named = named[len("Touches:"):].strip()
+    touches = [] if named.lower() == "none" else [t.strip() for t in named.split(",") if t.strip()]
     for value in (opts.question, opts.words, opts.undo):
         if "\n" in value or not value.strip():
             raise Refusal("a question, the words and the undo cost are one line each, and none is empty.")

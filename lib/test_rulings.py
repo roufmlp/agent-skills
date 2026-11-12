@@ -349,6 +349,13 @@ class Commands(unittest.TestCase):
         self.assertEqual(text.count("## Rulings"), 1)
         self.assertEqual([e["number"] for e in entries_of(text)[0]], ["01", "03"])
 
+    def test_record_takes_the_readers_whole_touches_line(self):
+        code, out = self.record("--note", "01", "--kind", "none", "--who", "default", "--question", "q1",
+                                "--words", "w1", "--touches", "Touches: 02, 03", "--undo", "u")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(entries_of(self.plan.read_text())[0][0]["touches"], ["02", "03"])
+        self.assertIn("touched: 02, 03", out)
+
     def test_record_refuses_a_default_on_a_risk_class_and_writes_nothing(self):
         before = self.plan.read_text()
         code, out = self.record("--note", "03", "--kind", "money", "--who", "default", "--question", "q",
