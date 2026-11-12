@@ -4,7 +4,9 @@
 Counts `skills/*/SKILL.md`, `agents/*.md`, `hooks/*.py` that are not tests, and
 `workflows/*.js`; measures each `SKILL.md` against the line limit; and refuses a
 `SKILL.md` or agent file that carries a date, the word "ruled" or "changed by",
-unless the budget exempts it. Prints one line per failure and exits 1.
+unless the budget exempts it. Two names are not history and pass: the plan
+page's `Ruled:` line, written in backticks, and the report part "Ruled while
+you were away". Prints one line per failure and exits 1.
 
     python3 lib/check_budget.py [--root <plugin root>]
 """
@@ -16,6 +18,9 @@ import re
 import sys
 
 DATED = re.compile(r"\b\d{4}-\d{2}-\d{2}\b|\bruled\b|\bchanged by\b", re.IGNORECASE)
+# Names the build-feature files must be able to say: a line of the plan page
+# and a part of the report.
+NAMES = ("`Ruled:", "Ruled while you were away")
 
 
 def read_budget(path: str) -> dict[str, str]:
@@ -55,6 +60,8 @@ def check(root: str) -> list[str]:
         if exempt(rel(path), budget.get("exempt-from-dates", "")):
             continue
         for number, line in enumerate(open(path, encoding="utf-8"), 1):
+            for name in NAMES:
+                line = line.replace(name, "")
             hit = DATED.search(line)
             if hit:
                 failures.append(f"{rel(path)}:{number}: carries `{hit.group(0)}`; history belongs in the map or a change note")

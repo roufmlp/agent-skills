@@ -66,8 +66,48 @@ The one page Abdul approves before a feature runs: a line per note, the order, w
 _Avoid_: Approval page, one-pager
 
 **Cut**:
-A change note taken out of a feature in the interview that follows a failed note, merged or not. It returns later as a one-note change or in another feature.
+A change note taken out of a feature by Abdul's ruling after it stopped or failed, merged or not. It returns later as a one-note change or in another feature. No default cuts a note.
 _Avoid_: Carve, drop, descope
+
+**Ruling**:
+The answer that settles a change note a run stopped on: Abdul's words, or once the wait for him is over the agent's written default, or for a question in a risk class the road a panel's count gives. It is written on the feature plan with who gave it, the notes it touches and what reversing it costs, and the run starts again from it with no new approval. A ruling in his name quotes a whole message or a whole sentence he typed after he was shown the note, one sentence for one question, and it covers the one commit that applies it.
+_Avoid_: Short interview, decision, override
+
+**Re-arm**:
+The one ruling by default a note gets after three strikes: the change its last reject report asks for, and three new strikes. A note that fails again waits for Abdul.
+_Avoid_: Retry, second chance
+
+**Waiting**:
+The state of a note only Abdul can move: a question with no typed class, a risk-class question a panel held or could not take, a second failure, a third question after two rulings without him, or a tooling stop with no listed repair. The final check waits the same way when its three fix rounds, counted per feature, are spent, or when no run finishes it in three starts. It has no timeout, and the notes that do not wait for it run on.
+_Avoid_: Blocked, paused
+
+**Panel**:
+What rules a question in a risk class (money, access, a migration's direction, data leaving the product) when Abdul has not answered inside the wait: one road finder, then three readers who judge every road at the same time and never see each other's answers, then the count. No agent on it is the judge. A panel that is not sound runs once more, all three readers from no answer, and after a second fault the note waits for Abdul.
+_Avoid_: Committee, jury, vote of agents
+
+**Road finder**:
+The one agent that runs before a panel's readers. Its only job is to find a road the question does not offer that beats every road it offers. It returns two roads at most, each with `file:line` evidence, where it fails and what it costs to undo, or none. A found road that depends on a fact only Abdul can get is a candidate: no reader rules it, and he sees it at the gate.
+_Avoid_: Explorer, third-option agent
+
+**Reader seat**:
+The party a panel reader judges for, fixed in `lib/rulings.py` and never derived at run time. There are three: the exposed party, whom the rule or the data protects; the operator at release and rollback, who is Abdul on release day; and the next builder, who is also the stranger. Each seat pays for a different way a road can be wrong.
+_Avoid_: Persona, lens, role (a role is a build agent)
+
+**The count**:
+The rule in code that decides a panel from the three readers' first lines. Two or three on one road, and that road rules, a found road like any other. A vote for a road that needs a fact only Abdul can get is a `Hold` on that fact. With no two on one road and fewer than two `Hold`, the written default rules, with the entry marked, and only when a reader chose it. Every other count rules nothing, and the note waits for Abdul. A first line outside the form is never counted: the readers run again. The conditions of the readers who chose the road become done checks of the note.
+_Avoid_: Verdict, consensus, the gate agent
+
+**Tooling stop**:
+A stop caused by a tool that refused a step, a hook, a check script or the desktop app, and not by a question. The session applies the repair listed for it and starts again; a refusal with no listed repair waits for Abdul, and no gate is loosened to pass it.
+_Avoid_: Infrastructure failure, flake (a flake is a test)
+
+**Fix note**:
+A change note written while a feature runs, to change what a merged note built or to undo a ruling Abdul overturned. A merged note is never edited.
+_Avoid_: Patch, follow-up, hotfix
+
+**Held**:
+A feature whose final check passed and which stays off local main until Abdul has confirmed or overturned each ruling made without him, a correction by the note checker included. A ruling he gave himself needs no confirmation.
+_Avoid_: Pending merge, frozen
 
 **Done check**:
 A command or test that passes only when the change works. It fails on the code as it stands before the change, and the build agent runs it.
@@ -113,6 +153,7 @@ _Avoid_: Design system, style guide, architecture doc
 **Risk class**:
 One of five kinds of change that get stricter checks in the careful lane: money, authentication, secrets, migrations and writes to rows.
 Authentication covers who may sign in and who may read or write which data, so rights rows and row policies count.
+A question a stopped note asks has four risk classes of its own: money, access, a migration's direction and data leaving the product. No default rules a question in one of them by itself: when Abdul has not answered, a panel does.
 
 **Pending file**:
 The one private list of what waits on Abdul, under two headings: actions to do and decisions to make. A decision lands there only when its default is hard to undo or the choice is his.

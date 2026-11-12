@@ -4,7 +4,15 @@
 # so a fresh clone gets the hooks: git does not copy local config. Graduation
 # step 7 runs it once by hand. Outside a git checkout it does nothing.
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
-chmod +x .githooks/pre-commit .githooks/pre-merge-commit .githooks/pre-push
+chmod +x .githooks/pre-commit .githooks/pre-merge-commit .githooks/pre-push .githooks/reference-transaction
 git config core.hooksPath .githooks
+# A fast-forward skips pre-merge-commit, so a plain merge into either main
+# branch makes a merge commit. reference-transaction refuses the forms this
+# option does not reach: --ff-only, --ff, a reset, update-ref.
 git config branch.main.mergeoptions --no-ff
-echo "hooks: core.hooksPath=.githooks, branch.main.mergeoptions=--no-ff"
+set="branch.main.mergeoptions=--no-ff"
+if [ "$(git symbolic-ref --short -q HEAD)" = master ] || git show-ref -q --verify refs/heads/master; then
+  git config branch.master.mergeoptions --no-ff
+  set="$set, branch.master.mergeoptions=--no-ff"
+fi
+echo "hooks: core.hooksPath=.githooks, $set"

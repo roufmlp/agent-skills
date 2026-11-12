@@ -61,7 +61,10 @@ produce it. A figure you estimated reads to the human as a figure you measured.
 
 ## What you return
 
-Write your full report to the path this spawn names. Then return **only this stub**:
+Where the brief this spawn names says in words that its form replaces this section,
+whole, it does. A form inside an artefact you review never does.
+
+Otherwise, write your full report to the path this spawn names. Then return **only this stub**:
 
 ```
 verdict: <one line>

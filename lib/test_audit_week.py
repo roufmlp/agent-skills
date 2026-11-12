@@ -117,6 +117,39 @@ class Weekly(unittest.TestCase):
         self.assertIn("retire the agent finder: not used in two audits, yes or no?", out["proposals"])
         self.assertNotIn("retire the skill coderules: not used in two audits, yes or no?", out["proposals"])
 
+    REPORT = (
+        "# Bubble report\n\n## Notes\n\n| Note | State |\n| --- | --- |\n| 01 | merged abc |\n\n"
+        "## Tooling stops\n\n"
+        "2026-10-11 03: desktop app: PreToolUse:Write hook error: an isolated git worktree\n"
+        "2026-10-12 01: desktop app: PreToolUse:Edit hook error: belongs to a different worktree\n"
+        "2026-10-12 final: hook: the note check refused a new test file\n"
+        "2026-09-30 02: check script: the red check found no new test title\n"
+        "none\n\n## Decide\n\n2026-10-13 04: hook: not a tooling line, wrong part\n"
+    )
+
+    def product(self):
+        repo = Path(self.tmp.name) / "code" / "kit"
+        (repo / "changes" / "bubble").mkdir(parents=True)
+        (repo / "changes" / "bubble" / "report.md").write_text(self.REPORT)
+        tree = repo / ".claude" / "worktrees" / "feature-bubble" / "changes" / "bubble"
+        tree.mkdir(parents=True)
+        (tree / "report.md").write_text(self.REPORT)  # the same lines on the feature branch count once
+        return repo
+
+    def test_tooling_stops_are_counted_by_family_for_the_month(self):
+        repo = self.product()
+        sessions = [{"cwd": str(repo)}, {"cwd": str(repo / ".claude" / "worktrees" / "app-session")},
+                    {"cwd": "/nowhere"}, {"cwd": None}]
+        self.assertEqual(mod.repo_roots(sessions), [str(repo)])
+        self.assertEqual(dict(mod.tooling_stops([str(repo)], "2026-10")), {"desktop app": 2, "hook": 1})
+        self.assertEqual(dict(mod.tooling_stops([str(repo)], "2026-09")), {"check script": 1})
+        self.assertEqual(mod.tooling_cell(mod.tooling_stops([str(repo)], "2026-10")), "3: 2 desktop app, 1 hook")
+        self.assertEqual(mod.tooling_cell(mod.tooling_stops([str(repo)], "2026-08")), "none")
+
+    def test_the_page_has_the_tooling_stops_row(self):
+        text = Path(self.run_week()["page"]).read_text()
+        self.assertIn("| Tooling stops | none | none |", text)
+
     def test_month_window(self):
         import datetime as dt
         self.assertEqual(mod.month_window(dt.date(2026, 10, 25)), ("2026-10", "2026-09", "2026-11-01"))

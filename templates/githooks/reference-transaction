@@ -1,0 +1,28 @@
+#!/bin/sh
+# Every ordinary road that moves a main branch: a merge commit, a fast-forward,
+# a reset, a commit and a plain update-ref. A feature whose plan holds a ruling
+# its owner did not make and has not confirmed stays off main, whatever command
+# moves the branch. pre-merge-commit does not run on a fast-forward; this hook
+# does. The roads it does not see are listed in the workflow plugin, in
+# skills/build-feature/when-a-run-stops.md; pre-push is the backstop for those.
+[ "$1" = prepared ] || exit 0
+moves=no
+lines=
+while read -r old new ref; do
+  case "$ref" in
+    refs/heads/main|refs/heads/master) moves=yes ;;
+  esac
+  lines="$lines$old $new $ref
+"
+done
+[ "$moves" = yes ] || exit 0
+CHECK="${WORKFLOW_LIB:-$HOME/.claude/skills/workflow/lib}/note_check.py"
+missing=
+[ -f "$CHECK" ] || missing="$CHECK is missing (clone the workflow plugin there, or set WORKFLOW_LIB)"
+command -v python3 >/dev/null 2>&1 || missing="python3 is not on PATH"
+if [ -n "$missing" ]; then
+  echo "REFUSED: the main branch did not move, because the check of a feature's rulings cannot run: $missing." >&2
+  echo "On a checkout that merges no feature, the same command passes without the hooks: git -c core.hooksPath=/dev/null <the same arguments>" >&2
+  exit 1
+fi
+printf '%s' "$lines" | python3 "$CHECK" ref

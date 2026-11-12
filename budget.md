@@ -7,7 +7,7 @@ and an agent changes this file only with the owner's approval.
 
 ```
 skills: 6
-agents: 14
+agents: 16
 hooks: 4
 workflows: 1
 skill-file-lines: 250

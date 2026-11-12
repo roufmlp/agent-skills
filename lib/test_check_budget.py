@@ -64,6 +64,13 @@ class TheBudgetCheck(unittest.TestCase):
         self.write("skills/a/SKILL.md", "Ruled on Monday\nChanged by X\n")
         self.assertEqual(len(check_budget.check(str(self.root))), 2)
 
+    def test_the_plan_pages_ruled_line_and_the_reports_part_are_names_not_history(self):
+        self.write("agents/a.md", "A `Ruled:` line by `default` is read against the diff.\n"
+                                  "It writes `Ruled: <date>, <who>` and the part Ruled while you were away.\n")
+        self.assertEqual(check_budget.check(str(self.root)), [])
+        self.write("agents/a.md", "Ruled: on Monday\n")
+        self.assertEqual(len(check_budget.check(str(self.root))), 1)
+
     def test_an_exempt_file_passes_both_rules(self):
         (self.root / "budget.md").write_text(BUDGET.replace("skills: 1", "skills: 2").replace("agents: 1", "agents: 2"))
         self.write("skills/old/SKILL.md", "1\n2\n3\n4\nruled 2026-01-01\n")

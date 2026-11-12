@@ -4,7 +4,7 @@ Feature: <name>
 Branch: feature/<name>
 Written: <date>
 
-One page. Abdul reads this and nothing else before the run: a line per note, the order, which notes wait for which, and the questions of four kinds. The plan check reads the `Questions` part and the `Approved:` line and nothing else of this file.
+One page. Abdul reads this and nothing else before the run: a line per note, the order, which notes wait for which, and the questions of four kinds. The plan check reads the `Questions` part, the `Rulings` part and the `Approved:` line and nothing else of this file.
 
 ## Notes
 
@@ -34,6 +34,26 @@ One line per question, then its answer on the next line, written as Abdul gives 
 
 ## Cut
 
-<Leave this part out until the short interview after a failed note cuts one. Then one line per cut note: "<nn> <title>, cut <date>: <why, and where it goes next>". The note file moves to `cut/` in this folder.>
+<Leave this part out until Abdul cuts a note. Then one line per cut note: "<nn> <title>, cut <date>: <why, and where it goes next>". The note file moves to `cut/` in this folder.>
+
+## Rulings
+
+<Leave this part out until a run stops on a note. `rulings.py record` writes each entry, and nobody edits one by hand. One entry per note a ruling changes; the number is `final` for a question of the final check. The kind in brackets is the class the agent typed, `none` or a risk class (`money`, `access`, `migration`, `data leaving`); `re-arm` for a note that failed three strikes; `correction` for a note the note checker corrected; or `follows <nn>` for a note another ruling touched and for a fix note, with the who of the ruling it follows. Who is Abdul's name, `default` or `panel`. An entry by `panel` settles a risk-class question he did not answer: it also carries a `Panel:` line, the count of the three readers and the name of their files, and one `Condition:` line per test the readers who chose the road named, which the note takes as a done check. An entry in his name carries a whole message or a whole sentence he typed after he was shown the note, and a `follows` entry in his name carries the words of the ruling it follows. After the approval, only this part of the page and a `## Cut` line under his own ruling may change. A note or a test may change only in the one commit that adds its entry.>
+
+- [none] <nn>: <the question, in plain words>
+  Ruled: <date>, <who>, "<Abdul's words, the agent's written default, or the road a panel's count gives>"
+  Touches: <none, or the numbers of the other notes the ruling reader named>
+  Undo: <what reversing the ruling costs>
+  Confirmed: <date; Abdul's answer at the gate, with his words for a risk class. A ruling he made himself carries no such line; a `follows` entry always takes one.>
+- [follows <nn>] <nn>: <what the first ruling changed in this note>
+  Ruled: <date>, <who>, "<the edit>"
+  Touches: none
+  Undo: <cost>
+- [money] <nn>: <a question a default answered and Abdul reversed>
+  Ruled: <date>, default, "<the default>"
+  Touches: none
+  Undo: <cost>
+  Overturned: <date>, "<Abdul's words>"
+  Fix: <the number of the fix note that undoes it>
 
 Approved: <date>
