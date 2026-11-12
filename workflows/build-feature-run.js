@@ -3,8 +3,8 @@ export const meta = {
   description: 'Build an approved feature plan: each change note through its own implementer, verifier and reviewer, three notes at once, one merger between them, then the final check and the merge into local main',
   phases: [
     { title: 'Notes', detail: 'one implementer, verifier and reviewer per note, three notes at once' },
-    { title: 'Final check', detail: 'the whole feature: final verifier and final reviewer, one fix round' },
-    { title: 'Merge', detail: 'fast-forward only, as a --no-ff merge commit, through the hooks' },
+    { title: 'Final check', detail: 'the whole feature: final verifier and final reviewer, three fix rounds' },
+    { title: 'Merge', detail: 'fast-forward only, as a --no-ff merge commit, through the hooks; held while a ruling waits for the human' },
   ],
 }
 
@@ -16,22 +16,34 @@ export const meta = {
 // model and effort, and `args.roles[role].override` replaces them for a trial.
 // `changes/<feature>/report.md` on the feature branch is the ledger: the merger
 // writes it, and a later start reads it through feature_run.py.
+//
+// Nobody answers a question mid-run, and the script rules on nothing. A note
+// that needs an answer stops with its class, its question and its default in
+// the role's typed answer; the result carries them as `stops`, and the session
+// rules between runs (`lib/rulings.py`). A ruling the human did not make
+// himself holds the merge into local main until he confirms it: `args.gate_open`.
 
 const SKILLS = '~/.claude/skills/workflow'
 const AT_ONCE = 3
 const MAX_STRIKES = 3
+const FIX_ROUNDS = 3 // the fix rounds one final check gets before the run stops
 
 const feature = args.feature
-const notes = args.notes.map(n => ({ ...n, requeued: false, checked: false, reports: [], decide: [], defaults: [], edits: [] }))
+const notes = args.notes.map(n => ({ ...n, requeued: false, checked: false, stop: null, reports: [], decide: [], defaults: [], edits: [] }))
 const byNumber = Object.fromEntries(notes.map(n => [n.number, n]))
 const strikesByRole = { implementer: 0, verifier: 0, reviewer: 0, 'note-checker': 0, merger: 0, 'final-verifier': 0, 'final-reviewer': 0, ...((args.earlier || {}).strikes || {}) }
 let halted = null // the reason no further note starts
 let finalState = 'stopped'
 // An earlier run's lines in the three report parts a restart keeps; the
 // session's feature_run.py read them from the report.
-const earlier = { defaults: [], edits: [], final: [], ...(args.earlier || {}) }
+const earlier = { defaults: [], edits: [], final: [], tooling: [], ...(args.earlier || {}) }
 let finalLines = [...earlier.final] // the `## Final check` lines, one per final role run
 let mergeCommit = null
+const gateOpen = args.gate_open || [] // notes whose ruling by default or panel has no answer yet
+const away = args.away || [] // the report's "Ruled while you were away" lines, from the plan
+const toolingStops = [...earlier.tooling] // one line per tool fault, kept across restarts
+const stops = [] // every stop of this run, typed, for the session
+const fixNotes = [] // final-check findings that need a new test, so a fix note
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -42,21 +54,41 @@ let mergeCommit = null
 // line ("All 4 tests pass now"), and merged a rejected note. The long report
 // still goes to the file the prompt names; the form carries the decision.
 const LINES = { type: 'array', items: { type: 'string' } }
+// A stop is typed too, so no script and no session reads a class, a question
+// or a default out of prose. `question`: the work needs an answer of the
+// human's kind. `tooling`: a hook, a check script or the desktop app refused a
+// step and the role had no other road; that is a fault of the tools, never a
+// question about the feature, and never a strike.
+const RISK_CLASSES = ['money', 'access', 'migration', 'data leaving']
+const STOP = {
+  type: 'object',
+  description: 'kind none unless you stop; the other fields are then empty strings and class none',
+  properties: {
+    kind: { enum: ['none', 'question', 'tooling'], description: 'question: the work needs an answer of the human\'s kind. tooling: a hook, a check script or the app refused a step you could not do another way' },
+    class: { enum: ['none', ...RISK_CLASSES], description: 'question only: money; access (authentication, a right, a role, a row policy); migration (a migration\'s direction); data leaving (data leaving the product, or a public contract); none for any other question' },
+    question: { type: 'string', description: 'question: the question in plain words, one line, no file path in it. tooling: the refusal line exactly as the tool printed it' },
+    default: { type: 'string', description: 'question only: the road you would take, one line, written so the note can be changed from it without you' },
+    tool: { enum: ['', 'hook', 'check script', 'desktop app', 'other'], description: 'tooling only: the family of the tool that refused' },
+  },
+  required: ['kind', 'class', 'question', 'default', 'tool'],
+}
 const VERDICT = {
   type: 'object',
   properties: {
     verdict: { enum: ['PASS', 'REJECT'], description: 'REJECT when any step or ground failed' },
     line: { type: 'string', description: 'one line: the verdict and the first ground, or "all steps passed"' },
+    stop: { ...STOP, description: 'kind none, or kind tooling when a tool refused a step of yours; a verdict role asks no question' },
   },
-  required: ['verdict', 'line'],
+  required: ['verdict', 'line', 'stop'],
 }
 const FINAL_VERDICT = {
   type: 'object',
   properties: {
     verdict: { enum: ['PASS', 'FINDINGS'] },
     line: { type: 'string', description: 'one line: the verdict and the steps or findings that failed, or "all steps passed"' },
+    stop: { ...STOP, description: 'kind none, or kind tooling when a tool refused a step of yours; a verdict role asks no question' },
   },
-  required: ['verdict', 'line'],
+  required: ['verdict', 'line', 'stop'],
 }
 const BUILT = {
   type: 'object',
@@ -65,17 +97,19 @@ const BUILT = {
     edits: { ...LINES, description: 'Done-check edits: one line per done-check file edited, with what changed; empty when none' },
     defaults: { ...LINES, description: 'Defaults taken: one line each; empty when none' },
     keeps: { ...LINES, description: 'the keeps: test titles; empty when none' },
-    stopped: { type: 'string', description: 'empty unless the note stops on a question for Abdul: then "stopped: <why>"' },
+    needs_note: { ...LINES, description: 'final fix round only: one line per finding that needs a new test file, so a fix note; empty otherwise' },
+    stop: STOP,
   },
-  required: ['line', 'edits', 'defaults', 'keeps', 'stopped'],
+  required: ['line', 'edits', 'defaults', 'keeps', 'needs_note', 'stop'],
 }
 const CHECKED = {
   type: 'object',
   properties: {
     outcome: { enum: ['corrected', 'sound', 'stopped'] },
     line: { type: 'string', description: 'the first line of the report: "Corrected: ...", "Sound: ..." or "Stopped: ..."' },
+    stop: { ...STOP, description: 'kind question with its class, question and default when outcome is stopped; kind tooling when a tool refused your edit or your report; else kind none' },
   },
-  required: ['outcome', 'line'],
+  required: ['outcome', 'line', 'stop'],
 }
 const MERGED = {
   type: 'object',
@@ -88,14 +122,50 @@ const MERGED = {
 }
 const SHA = /^[0-9a-f]{7,40}$/i
 
+// A verdict role's tooling stop, or null. It asks no question.
+function toolingOf(out) {
+  const stop = stopOf(out)
+  return stop !== null && stop.kind === 'tooling' ? stop : null
+}
+
 // The sha a merger job answered with, when it is one.
 function shaOf(out) {
   const sha = String((out && out.commit) || '').trim()
   return SHA.test(sha) ? sha : null
 }
 
-function stateOf(number) {
-  return (byNumber[number] || {}).state || 'missing'
+// One line that fits a table cell.
+function oneLine(text) {
+  return String(text || '').replace(/[\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+// The typed stop of a role's answer, or null when the role did not stop.
+function stopOf(out) {
+  const stop = (out && out.stop) || {}
+  if (stop.kind === 'tooling') return { kind: 'tooling', tool: stop.tool || 'other', line: oneLine(stop.question) }
+  if (stop.kind === 'question') {
+    return { kind: 'question', class: stop.class || 'none', question: oneLine(stop.question), default: oneLine(stop.default) }
+  }
+  return null
+}
+
+// Record a stop under its number (a note's, or `final`) and return the report state.
+function recordStop(number, role, stop) {
+  stops.push({ number, role, ...stop })
+  if (stop.kind === 'tooling') {
+    toolingStops.push(`${String(args.started).slice(0, 10)} ${number}: ${stop.tool}: ${stop.line}`)
+    return `stopped: tooling: ${stop.tool}: ${stop.line}`
+  }
+  return `stopped: ${stop.question}`
+}
+
+// A note stops: its row says why, and a question goes under Decide with its
+// class and its default. A tooling stop has no Decide line.
+function stopNote(n, role, stop) {
+  n.state = recordStop(n.number, role, stop)
+  n.stop = stop
+  if (stop.kind === 'question') n.decide.push(`[${stop.class}] ${stop.question} Default: ${stop.default}`)
+  log(`note ${n.number}: ${n.state}`)
 }
 
 function isMerged(n) {
@@ -173,8 +243,14 @@ function reportBody(state, extra) {
     'Defaults taken, one line each with its note number (an earlier run\'s lines first):',
     ...linesOrNone([...earlier.defaults, ...notes.flatMap(n => n.defaults.map(l => `${n.number}: ${l}`))]),
     '',
-    'Decide, one line per question the run put under "Decide" in ~/.claude/pending.md:',
-    ...(notes.flatMap(n => n.decide.map(l => `${n.number}: ${l}`)).length ? notes.flatMap(n => n.decide.map(l => `${n.number}: ${l}`)) : ['none']),
+    'Decide, one line per question a note stopped on, with its class in brackets and its default:',
+    ...linesOrNone(notes.flatMap(n => n.decide.map(l => `${n.number}: ${l}`))),
+    '',
+    'Tooling stops, one line per tool fault, as given (an earlier run\'s lines first):',
+    ...linesOrNone(toolingStops),
+    '',
+    'Ruled while you were away, one line per ruling by default or panel, as given; write "none" when there is none:',
+    ...linesOrNone(away),
     '',
     ...(extra || []),
   ].join('\n')
@@ -235,14 +311,15 @@ function gatePrompt(n, base, reportPath, extra) {
   ].join('\n')
 }
 
-// A strike: record the report, and at the second strike spawn the note checker.
+// A strike: record the report, and at the second strike spawn the note
+// checker. Returns false when the note stopped, true when it tries again.
 async function strike(n, role, reportPath) {
   n.strikes += 1
   strikesByRole[role] += 1
   n.last_report = reportPath
   if (!n.reports.includes(reportPath)) n.reports.push(reportPath)
   log(`note ${n.number}: strike ${n.strikes} (${role})`)
-  if (n.strikes !== 2 || n.checked) return 'again'
+  if (n.strikes !== 2 || n.checked) return true
   n.checked = true
   const checkPath = `${args.reports}/${n.number}-note-checker.md`
   const prompt = [
@@ -254,11 +331,18 @@ async function strike(n, role, reportPath) {
     `Report path: ${checkPath}`,
   ].join('\n')
   const out = await runAgain('note-checker', prompt, `note ${n.number}: note checker`, 'Notes', CHECKED)
-  if (out === null) return 'stop:note-checker returned no result'
+  if (out === null) { n.state = 'stopped: note-checker returned no result'; return false }
   n.reports.push(checkPath)
-  if (out.outcome === 'stopped') { n.decide.push(out.line); return 'stop:' + out.line.replace(/^stopped:\s*/i, '') }
+  const stop = stopOf(out)
+  if (stop !== null && (stop.kind === 'tooling' || out.outcome === 'stopped')) { stopNote(n, 'note-checker', stop); return false }
+  if (out.outcome === 'stopped') {
+    // Stopped with no typed stop: a class nobody named is never read as
+    // outside the risk classes, so this one waits for the human.
+    stopNote(n, 'note-checker', { kind: 'question', class: 'unclassified', question: oneLine(out.line), default: '' })
+    return false
+  }
   if (out.outcome === 'corrected') { n.defaults.push(out.line); log(`note ${n.number}: ${out.line}`) }
-  return 'again'
+  return true
 }
 
 async function runNote(n) {
@@ -276,15 +360,15 @@ async function runNote(n) {
     if (built === null) { n.attempts -= 1; return requeue(n, 'implementer') }
     n.edits.push(...built.edits)
     n.defaults.push(...built.defaults)
-    const stopped = String(built.stopped || '').trim()
-    if (stopped) { n.state = /^stopped:/i.test(stopped) ? stopped : `stopped: ${stopped}`; n.decide.push(stopped); return }
+    const builtStop = stopOf(built)
+    if (builtStop !== null) { stopNote(n, 'implementer', builtStop); return }
 
     const verifyPath = `${args.reports}/${tag}-verifier.md`
     const verified = await run('verifier', gatePrompt(n, base, verifyPath), `note ${n.number}: verifier ${n.attempts}`, 'Notes', VERDICT)
     if (verified === null) { n.attempts -= 1; return requeue(n, 'verifier') }
+    if (toolingOf(verified) !== null) { stopNote(n, 'verifier', toolingOf(verified)); return }
     if (verified.verdict !== 'PASS') {
-      const next = await strike(n, 'verifier', verifyPath)
-      if (next.startsWith('stop:')) { n.state = `stopped: ${next.slice(5)}`; return }
+      if (!(await strike(n, 'verifier', verifyPath))) return
       continue
     }
 
@@ -295,9 +379,9 @@ async function runNote(n) {
       `keeps: titles: ${keeps.length ? keeps.join('; ') : 'none'}`,
     ]), `note ${n.number}: reviewer ${n.attempts}`, 'Notes', VERDICT)
     if (reviewed === null) { n.attempts -= 1; return requeue(n, 'reviewer') }
+    if (toolingOf(reviewed) !== null) { stopNote(n, 'reviewer', toolingOf(reviewed)); return }
     if (reviewed.verdict !== 'PASS') {
-      const next = await strike(n, 'reviewer', reviewPath)
-      if (next.startsWith('stop:')) { n.state = `stopped: ${next.slice(5)}`; return }
+      if (!(await strike(n, 'reviewer', reviewPath))) return
       continue
     }
 
@@ -312,8 +396,7 @@ async function runNote(n) {
     if (merged === null) { n.attempts -= 1; return requeue(n, 'merger') }
     const sha = merged.outcome === 'done' ? shaOf(merged) : null
     if (!sha) {
-      const next = await strike(n, 'merger', mergePath)
-      if (next.startsWith('stop:')) { n.state = `stopped: ${next.slice(5)}`; return }
+      if (!(await strike(n, 'merger', mergePath))) return
       fresh = true // the note tries again from the current feature branch
       continue
     }
@@ -321,8 +404,11 @@ async function runNote(n) {
     log(`note ${n.number}: merged ${sha.slice(0, 9)}`)
     return
   }
-  n.state = 'failed'
-  log(`note ${n.number}: failed after ${n.strikes} strikes`)
+  // A note gets one automatic re-arm, which the session writes as a ruling
+  // between runs. Its second failure waits for the human with no timeout,
+  // and the other notes run on.
+  n.state = n.rearmed ? 'waiting: failed again after its re-arm' : 'failed'
+  log(`note ${n.number}: ${n.state} after ${n.strikes} strikes`)
 }
 
 // A note whose agent returned nothing goes to the back of the queue once; a
@@ -382,83 +468,117 @@ if (merged.length + cut.length === notes.length && !halted) {
   // Rounds number on from an earlier run's, so a restart's reports and lines
   // do not overwrite the earlier run's `final-1-*` files.
   let round = earlier.final.filter(l => /^Final verifier \d+:/.test(l)).length
-  let fixed = false
+  let fixes = 0
   let tested = null
   let passed = false
   let findings = []
   let mainMoved = 0
+  // An earlier run's final check passed and was held at the gate, and nothing
+  // but the plan and the report changed since (feature_run.py, `held`): this
+  // run goes straight to the merge. Main-out still refuses when main moved.
+  let standing = Boolean(args.held)
 
   while (true) {
-    const brought = await merger('main-in', [
-      `Bring ${args.main} into the feature branch before the final check, renumbering the feature's migrations above main's first.`,
-      `Answer: outcome done with commit the full sha of feature/${feature} after the merge; on a conflict you cannot resolve, abort the merge and answer outcome conflict with the \`Conflict: <files>\` line as the line and commit the sha of feature/${feature} as it stands.`,
-    ].join('\n'), 'main-in', 'Final check')
-    if (brought === null) { finalLines.push('main-in: merger returned no result twice'); break }
-    const conflict = brought.outcome === 'conflict' ? brought.line : null
-    tested = shaOf(brought) || tested
-    findings = conflict ? [`main-in: ${conflict}`] : []
+    if (standing) {
+      standing = false
+      passed = true
+      log('the final check of the held run stands; nothing but the plan and the report changed since')
+    } else {
+      const brought = await merger('main-in', [
+        `Bring ${args.main} into the feature branch before the final check, renumbering the feature's migrations above main's first.`,
+        `Answer: outcome done with commit the full sha of feature/${feature} after the merge; on a conflict you cannot resolve, abort the merge and answer outcome conflict with the \`Conflict: <files>\` line as the line and commit the sha of feature/${feature} as it stands.`,
+      ].join('\n'), 'main-in', 'Final check')
+      if (brought === null) { finalLines.push('main-in: merger returned no result twice'); break }
+      const conflict = brought.outcome === 'conflict' ? brought.line : null
+      tested = shaOf(brought) || tested
+      findings = conflict ? [`main-in: ${conflict}`] : []
 
-    while (true) {
-      round += 1
-      const verifyPath = `${args.reports}/final-${round}-verifier.md`
-      const reviewPath = `${args.reports}/final-${round}-reviewer.md`
-      const verifierLines = [
-        `Feature worktree: ${args.tree} (branch feature/${feature})`,
-        `Feature: ${feature}`,
-        `Commit under test: ${tested}`,
-        'Screens lines of every merged note:',
-        ...screensLines,
-        `Staging: ${args.staging || 'none; run the gate locally'}`,
-        `Report path: ${verifyPath}`,
-        fixed ? `Second run after the fix round: the red check's base is the commit the first run tested, ${tested}.` : '',
-      ].filter(Boolean).join('\n')
-      const reviewerLines = [
-        `Feature worktree: ${args.tree} (branch feature/${feature})`,
-        `Feature: ${feature}`,
-        `Diff range: ${args.main}..feature/${feature}`,
-        `Attempt: ${round}`,
-        `Risk class: ${args.risk ? 'yes, a note names a class, so /code-review runs at max' : 'no'}`,
-        `Report path: ${reviewPath}`,
-      ].join('\n')
-      const [fv, fr] = await parallel([
-        () => runAgain('final-verifier', verifierLines, `final verifier ${round}`, 'Final check', FINAL_VERDICT),
-        () => runAgain('final-reviewer', reviewerLines, `final reviewer ${round}`, 'Final check', FINAL_VERDICT),
-      ])
-      // The job reads the tree, not the verifier's message: in the rehearsal the
-      // message listed the files in backticks, the old `.png$` match found none,
-      // and the retaken baselines and the screens page stayed uncommitted.
-      if (fv !== null) {
-        await merger('baselines', [
-          'Commit what the final verifier left in the feature worktree, as the job says: every changed or new file',
-          `\`git -C ${args.tree} status --short\` shows under e2e/*-snapshots/ (the retaken and new baselines), plus changes/${feature}/screens.md and changes/${feature}/screens/ when they exist,`,
-          'as `baselines: <screens>`. When the status shows none of these, commit nothing and say `Nothing to commit`.',
-        ].join('\n'), `baselines ${round}`, 'Final check')
+      while (true) {
+        round += 1
+        const verifyPath = `${args.reports}/final-${round}-verifier.md`
+        const reviewPath = `${args.reports}/final-${round}-reviewer.md`
+        const verifierLines = [
+          `Feature worktree: ${args.tree} (branch feature/${feature})`,
+          `Feature: ${feature}`,
+          `Commit under test: ${tested}`,
+          'Screens lines of every merged note:',
+          ...screensLines,
+          `Staging: ${args.staging || 'none; run the gate locally'}`,
+          `Report path: ${verifyPath}`,
+          fixes ? `Run after fix round ${fixes}: the red check's base is the commit the first run tested, ${tested}.` : '',
+        ].filter(Boolean).join('\n')
+        const reviewerLines = [
+          `Feature worktree: ${args.tree} (branch feature/${feature})`,
+          `Feature: ${feature}`,
+          `Diff range: ${args.main}..feature/${feature}`,
+          `Attempt: ${round}`,
+          `Risk class: ${args.risk ? 'yes, a note names a class, so /code-review runs at max' : 'no'}`,
+          `Report path: ${reviewPath}`,
+        ].join('\n')
+        const [fv, fr] = await parallel([
+          () => runAgain('final-verifier', verifierLines, `final verifier ${round}`, 'Final check', FINAL_VERDICT),
+          () => runAgain('final-reviewer', reviewerLines, `final reviewer ${round}`, 'Final check', FINAL_VERDICT),
+        ])
+        // The job reads the tree, not the verifier's message: in the rehearsal the
+        // message listed the files in backticks, the old `.png$` match found none,
+        // and the retaken baselines and the screens page stayed uncommitted.
+        if (fv !== null) {
+          await merger('baselines', [
+            'Commit what the final verifier left in the feature worktree, as the job says: every changed or new file',
+            `\`git -C ${args.tree} status --short\` shows under e2e/*-snapshots/ (the retaken and new baselines), plus changes/${feature}/screens.md and changes/${feature}/screens/ when they exist,`,
+            'as `baselines: <screens>`. When the status shows none of these, commit nothing and say `Nothing to commit`.',
+          ].join('\n'), `baselines ${round}`, 'Final check')
+        }
+        const vOk = fv !== null && fv.verdict === 'PASS'
+        const rOk = fr !== null && fr.verdict === 'PASS'
+        finalLines.push(`Final verifier ${round}: ${fv === null ? 'no result' : fv.line} (${verifyPath})`)
+        finalLines.push(`Final reviewer ${round}: ${fr === null ? 'no result' : fr.line} (${reviewPath})`)
+        // A tool that refused a final role is not a finding: no fix round can
+        // clear it, so none is spent on it.
+        const faults = [['final-verifier', toolingOf(fv)], ['final-reviewer', toolingOf(fr)]].filter(f => f[1] !== null)
+        if (faults.length) {
+          for (const [role, stop] of faults) finalLines.push(`Final check ${recordStop('final', role, stop)}`)
+          break
+        }
+        if (vOk && rOk && !findings.length) { passed = true; break }
+        if (!vOk) strikesByRole['final-verifier'] += 1
+        if (!rOk) strikesByRole['final-reviewer'] += 1
+        if (fixes >= FIX_ROUNDS) break
+        fixes += 1
+        // Every finding of the round goes to the one fix round, in one batch.
+        const fixPrompt = [
+          `Tree: ${args.tree} (branch feature/${feature})`,
+          `Feature: ${feature}`,
+          'Final fix round: there is no note; the findings below are the work. Commit on the feature branch as `fix: <what>`.',
+          `Base commit (the commit the final check tested; each new test must fail there): ${tested}`,
+          `Attempt: ${fixes} of ${FIX_ROUNDS}`,
+          `Findings, all of them in one batch: ${[...findings, fv === null ? '' : 'final verifier: ' + fv.line, fr === null ? '' : 'final reviewer: ' + fr.line].filter(Boolean).join('; ')}; the two reports below hold each finding in full.`,
+          `Final verifier report: ${fv === null ? 'none' : verifyPath}`,
+          `Final reviewer report: ${fr === null ? 'none' : reviewPath}`,
+        ].join('\n')
+        const fix = await runAgain('implementer', fixPrompt, `fix round ${fixes}: implementer`, 'Final check', BUILT)
+        if (fix === null) { finalLines.push(`Fix round ${fixes}: implementer returned no result twice`); break }
+        finalLines.push(`Fix round ${fixes}: ${fix.line}`)
+        const fixStop = stopOf(fix)
+        if (fixStop !== null) { finalLines.push(`Fix round ${fixes} ${recordStop('final', 'implementer', fixStop)}`); break }
+        // A finding that needs a new test is a fix note, which the session
+        // writes under a ruling; no further round can pass without it.
+        if (fix.needs_note.length) {
+          for (const line of fix.needs_note) { fixNotes.push(oneLine(line)); finalLines.push(`Fix note needed: ${oneLine(line)}`) }
+          break
+        }
+        findings = []
       }
-      const vOk = fv !== null && fv.verdict === 'PASS'
-      const rOk = fr !== null && fr.verdict === 'PASS'
-      finalLines.push(`Final verifier ${round}: ${fv === null ? 'no result' : fv.line} (${verifyPath})`)
-      finalLines.push(`Final reviewer ${round}: ${fr === null ? 'no result' : fr.line} (${reviewPath})`)
-      if (vOk && rOk && !findings.length) { passed = true; break }
-      if (!vOk) strikesByRole['final-verifier'] += 1
-      if (!rOk) strikesByRole['final-reviewer'] += 1
-      if (fixed) break
-      fixed = true
-      const fixPrompt = [
-        `Tree: ${args.tree} (branch feature/${feature})`,
-        `Feature: ${feature}`,
-        'Final fix round: there is no note; the findings below are the work. Commit on the feature branch as `fix: <what>`.',
-        `Base commit (the commit the final check tested; each new test must fail there): ${tested}`,
-        'Attempt: 1 of 1',
-        `Findings: ${[...findings, fv === null ? '' : 'final verifier: ' + fv.line, fr === null ? '' : 'final reviewer: ' + fr.line].filter(Boolean).join('; ')}; the two reports below hold each finding in full.`,
-        `Final verifier report: ${fv === null ? 'none' : verifyPath}`,
-        `Final reviewer report: ${fr === null ? 'none' : reviewPath}`,
-      ].join('\n')
-      const fix = await runAgain('implementer', fixPrompt, 'fix round: implementer', 'Final check', BUILT)
-      if (fix === null) { finalLines.push('Fix round: implementer returned no result twice'); break }
-      finalLines.push(`Fix round: ${fix.line}`)
-      findings = []
     }
     if (!passed) break
+
+    // The one gate before local main: a ruling by default or panel that the
+    // human has not confirmed holds the merge. The hook refuses it too.
+    if (gateOpen.length) {
+      finalState = 'held'
+      log(`held before ${args.main}: the rulings on ${gateOpen.join(', ')} wait for the human`)
+      break
+    }
 
     // The final report goes on the feature branch first, so the merge commit
     // carries it and main-out adds only the `Merged:` line on main.
@@ -476,7 +596,7 @@ if (merged.length + cut.length === notes.length && !halted) {
       mainMoved += 1
       log('main moved since the final check; it runs again')
       passed = false
-      fixed = true // no second fix round
+      fixes = FIX_ROUNDS // no further fix round
       continue
     }
     finalLines.push(`main-out: ${out.line}`)
@@ -487,21 +607,30 @@ if (merged.length + cut.length === notes.length && !halted) {
 // ── the report and the result ──────────────────────────────────────────────
 
 // A merged feature's report was written before main-out and the merge
-// carried it; any other end writes the report as stopped, a refused or
-// skipped main-out included.
-if (finalState !== 'merged') {
+// carried it; a held feature's report says so; any other end writes the
+// report as stopped, a refused or skipped main-out included.
+if (finalState === 'held') {
+  await merger('report', reportBody('held', finalParts()), 'report: held', 'Final check')
+} else if (finalState !== 'merged') {
   await merger('report', reportBody('stopped', finalParts()), 'report: stopped', 'Notes')
 }
 
-const toDecide = notes.reduce((k, n) => k + n.decide.length, 0)
+const waitingForHuman = notes.filter(n => n.state.startsWith('waiting:'))
+const toDecide = stops.filter(s => s.kind === 'question').length
+const toolFaults = stops.filter(s => s.kind === 'tooling').length
 const parts = [`${merged.length} of ${notes.length} notes merged`]
 if (failed.length) parts.push(`${failed.length} failed`)
 if (stopped.length) parts.push(`${stopped.length} stopped`)
+if (waitingForHuman.length) parts.push(`${waitingForHuman.length} waiting for you`)
 if (waiting.length) parts.push(`${waiting.length} not started`)
 if (toDecide) parts.push(`${toDecide} to decide`)
+if (toolFaults) parts.push(`${toolFaults} tool fault(s)`)
+if (fixNotes.length) parts.push(`${fixNotes.length} fix note(s) needed`)
 const notice = finalState === 'merged'
-  ? `${feature}: merged into ${args.main} at ${String(mergeCommit).slice(0, 9)}, ${merged.length} note(s)${toDecide ? `, ${toDecide} to decide` : ''}`
-  : `${feature}: ${parts.join(', ')}${halted ? `; stopped: ${halted}` : ''}`
+  ? `${feature}: merged into ${args.main} at ${String(mergeCommit).slice(0, 9)}, ${merged.length} note(s)`
+  : finalState === 'held'
+    ? `${feature}: the final check passed; ${gateOpen.length} ruling(s) to confirm before the merge into ${args.main}`
+    : `${feature}: ${parts.join(', ')}${halted ? `; stopped: ${halted}` : ''}`
 
 return {
   feature,
@@ -509,6 +638,12 @@ return {
   mergeCommit,
   halted,
   notes: notes.map(n => ({ number: n.number, state: n.state, strikes: n.strikes, attempts: n.attempts, last_report: n.last_report || null })),
+  // What the session rules on between runs: each stop with its typed parts,
+  // the findings that need a fix note, and how long to wait for the human.
+  stops,
+  fix_notes: fixNotes,
+  gate_open: gateOpen,
+  ruling_wait_seconds: args.ruling_wait_seconds,
   strikesByRole,
   finalLines,
   notice,
