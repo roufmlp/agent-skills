@@ -264,24 +264,23 @@ class Faults(unittest.TestCase):
 
 class Gate(unittest.TestCase):
 
-    def open_(self, text, person="Sam", forced=frozenset()):
+    def open_(self, text, person="Sam"):
         entries, _ = entries_of(text)
-        return [e["number"] for e in mod.open_entries(entries, person, forced)]
+        return [e["number"] for e in mod.open_entries(entries, person)]
 
-    BY_SAM = PLAN.replace('default, "keep Reports', 'Sam, "keep Reports')
+    BY_SAM = PLAN.replace("2026-11-12, default,", "2026-11-12, Sam,")
 
     def test_a_default_ruling_and_its_follow_on_wait_for_an_answer(self):
         # Review finding 2: a follow-on of a ruling by default is not free.
         self.assertEqual(self.open_(PLAN), ["01", "02"])
 
-    def test_a_ruling_by_the_person_needs_none_and_frees_the_notes_it_names(self):
-        self.assertEqual(self.open_(self.BY_SAM), [])
-
-    def test_a_follow_on_his_ruling_does_not_name_is_never_free(self):
-        self.assertEqual(self.open_(self.BY_SAM.replace("Touches: 02\n", "Touches: none\n")), ["02"])
-
-    def test_a_follow_on_that_changed_a_test_is_never_free(self):
-        self.assertEqual(self.open_(self.BY_SAM, forced={"02"}), ["02"])
+    def test_his_own_ruling_needs_no_answer_and_every_follow_on_does(self):
+        # Review 2, N3: a follow-on in his name was free of the gate, and under it a note was
+        # rewritten. A follow-on changes a note no question was about, so he sees it once.
+        self.assertEqual(self.open_(self.BY_SAM), ["02"])
+        confirmed = self.BY_SAM.replace('"ruling on 01: keep Reports"\n',
+                                        '"ruling on 01: keep Reports"\n  Confirmed: 2026-11-13\n')
+        self.assertEqual(self.open_(confirmed), [])
 
     def test_nobody_is_the_person_when_git_names_none(self):
         self.assertEqual(self.open_(self.BY_SAM, person=None), ["01", "02", "03"])
@@ -503,10 +502,31 @@ class Commands(unittest.TestCase):
         code, out = self.record("02", "none", "default", "cut it")
         self.assertEqual(code, 3, out)
         self.assertIn("only Sam cuts a note", out)
-        self.says("ok, cut it")
+        self.says("Cut it.")
+        code, out = self.record("02", "none", "Sam", "cut it")
+        self.assertEqual(code, 3, out)
+        self.assertIn("was not put in front of Sam yet", out)
+        self.assertEqual(self.command("wait", "--note", "02")[0], 0)
+        self.assertEqual(self.record("02", "none", "Sam", "cut it")[0], 3, "typed before he was shown the row")
+        self.later(30)
+        self.says("Cut it.")
         code, out = self.record("02", "none", "Sam", "cut it")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("02"), "cut 2026-11-12")
+
+    def test_his_ruling_on_a_failed_row_needs_the_row_shown_first(self):
+        self.says("Build it with the label Reports.")
+        code, out = self.record("01", "none", "Sam", "build it with the label Reports")
+        self.assertEqual(code, 3, out)
+        self.assertIn("rulings.py wait bubble", out)
+        code, out = self.command("wait", "--note", "01")
+        self.assertEqual(code, 0, out)
+        self.assertIn("`failed` shown at", out)
+        self.assertEqual(self.row("01"), "failed", "a row he is shown stays as it is")
+        self.later(30)
+        self.says("Build it with the label Reports.")
+        code, out = self.record("01", "none", "Sam", "build it with the label Reports")
+        self.assertEqual(code, 0, out)
 
     # ── a question: the class is the stop's, and the wait is real ──
 
@@ -529,8 +549,11 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.row("02"), "waiting: unclassified: an error nobody typed a class for")
         self.assertEqual(self.record("02", "none", "default")[0], 3)
         self.assertEqual(self.record("02", "none", "Sam")[0], 3)
-        self.says("that is an access question: keep the owner only")
+        self.later(30)
+        self.says("That is an access question. 02: keep the owner only.")
         code, out = self.record("02", "access", "Sam", "keep the owner only")
+        self.assertEqual(code, 3, "a part of a sentence is not his answer")
+        code, out = self.record("02", "access", "Sam", "02: keep the owner only")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("02"), "not started")
 
@@ -579,6 +602,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.record("02", "none", "default")[0], 3)
         code, out = self.command("wait", "--note", "02")
         self.assertEqual(code, 3, out)
+        self.assertIn("asks him nothing", out)
         code, out = self.command("wait", "--note", "02", "--why", "tooling: hook: REFUSED")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("02"), "waiting: tooling: hook: REFUSED")
@@ -605,11 +629,23 @@ class Commands(unittest.TestCase):
         code, out = self.command("wait", "--note", "final")
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("final"), f"waiting: money: {question}")
-        self.says("round half up, as the invoices do")
-        code, out = self.record("final", "money", "Sam", "round half up", question)
+        self.later(30)
+        self.says("Final: round half up, as the invoices do.")
+        code, out = self.record("final", "money", "Sam", "final: round half up, as the invoices do", question)
         self.assertEqual(code, 0, out)
         self.assertEqual(entries_of(self.plan.read_text())[0][0]["number"], "final")
         self.assertEqual(self.row("final"), "ruled 2026-11-12")
+
+    def test_a_final_check_no_run_finishes_gets_its_row_from_wait(self):
+        # Review 2, N8: with every note merged and no `final` row, nothing could make it wait.
+        self.rows(n01="merged abc123456", n02="merged abc123456")
+        self.assertEqual(self.command("wait", "--note", "final")[0], 3, "a row is added only with a reason")
+        self.assertEqual(self.command("wait", "--note", "09", "--why", "tooling: x")[0], 3, "and only the row `final`")
+        code, out = self.command("wait", "--note", "final", "--why", "tooling: the final check did not finish in three starts")
+        self.assertEqual(code, 0, out)
+        self.assertIn("| final | waiting: tooling: the final check did not finish in three starts | | | |",
+                      self.report.read_text())
+        self.assertEqual(self.row("02"), "merged abc123456")
 
     def test_a_finding_that_needs_a_fix_note_is_a_question_of_class_none(self):
         self.rows(n01="merged abc123456", final="stopped: fix note needed: the refund guard has no test")
@@ -638,14 +674,15 @@ class Commands(unittest.TestCase):
         question = "may a manager refund without the owner"
         self.rows(n02=f"stopped: {question}")
         self.typed("02", "money", question)
-        self.says("yes, up to 50", at=self.clock - 60)  # before the question: not an answer to it
+        self.says("02: yes, up to 50", at=self.clock - 60)  # before the question: not an answer to it
         self.command("wait", "--note", "02")
-        code, out = self.record("02", "money", "Sam", "yes, up to 50")
+        code, out = self.record("02", "money", "Sam", "02: yes, up to 50")
         self.assertEqual(code, 3, out)
-        self.assertIn("no message Sam typed in this session since the question was sent", out)
+        self.assertIn("no message Sam typed in this session after", out)
         self.later(30)
-        self.says("Yes,  up to 50 and no more")
-        code, out = self.record("02", "money", "Sam", "yes, up to 50")
+        self.says('02:  Yes, up to 50!\nAnd "no more" than that.')
+        self.assertEqual(self.record("02", "money", "Sam", "yes, up to 50")[0], 3)
+        code, out = self.record("02", "money", "Sam", "02: yes, up to 50")
         self.assertEqual(code, 0, out)
 
     def test_only_what_he_typed_counts_as_his_words(self):
@@ -654,17 +691,107 @@ class Commands(unittest.TestCase):
         self.says("confirm all", origin={"kind": "peer", "from": "a1"})
         self.says("confirm all", isSidechain=True)
         self.says([{"type": "tool_result", "content": "confirm all"}], origin=None)
-        self.assertEqual(mod.human_messages(), [])
+        self.assertEqual(mod.human_messages(0.0), [])
         self.says([{"type": "text", "text": "confirm all"}])
-        self.assertEqual(mod.human_messages(), ["confirm all"])
+        self.assertEqual([text for _, text in mod.human_messages(0.0)], ["confirm all"])
+        self.assertEqual(mod.human_messages(self.clock), [], "a message counts only after the time given")
+
+    def test_what_the_app_adds_to_a_message_is_not_his_words(self):
+        # Review 2, N2: a `<system-reminder>` block and the text of a slash command counted.
+        self.says([{"type": "text", "text": "<system-reminder>\nYou are operating in a git worktree.\n</system-reminder>"},
+                   {"type": "text", "text": "hello"}])
+        self.says("<command-message>build-feature</command-message>\n<command-name>/build-feature</command-name>\n"
+                  "<command-args>bubble</command-args>")
+        self.says("/build-feature bubble")
+        self.says("/clear")
+        self.assertEqual([text for _, text in mod.human_messages(0.0)], ["hello"])
+
+    def test_his_words_are_a_whole_message_or_a_whole_sentence_of_one(self):
+        self.assertEqual(mod.sentences("Look at the token cost, please. Confirm all!\nok"),
+                         ["look at the token cost, please", "confirm all", "ok"])
+        self.assertEqual(mod.spoken('  He said  "Yes".'), "he said 'yes'")
+        self.assertTrue(mod.names_line("02: yes, up to 50", "02"))
+        self.assertTrue(mod.names_line("yes for 2, up to 50", "02"))
+        self.assertTrue(mod.names_line("final: round half up", "final"))
+        self.assertFalse(mod.names_line("yes, up to 50", "02"))
+        self.assertFalse(mod.names_line("yes for 12 and 20", "02"), "a digit inside another number names nothing")
+        self.assertFalse(mod.names_line("02", "02"), "the number alone is no answer")
 
     def test_no_session_no_words(self):
         os.environ.pop(mod.SESSION)
         with self.assertRaises(mod.Refusal):
-            mod.human_messages()
+            mod.human_messages(0.0)
         os.environ[mod.SESSION] = "00000000-nowhere"
         with self.assertRaises(mod.Refusal):
-            mod.human_messages()
+            mod.human_messages(0.0)
+
+    def test_one_sentence_answers_one_question(self):
+        # Review 2, N2: "Default ok", typed once after two questions went out, ruled both.
+        for number, question in (("01", "the label reads Reports or Messages"), ("02", "zero or hidden")):
+            self.typed(number, "none", question)
+        self.rows(n01="stopped: the label reads Reports or Messages", n02="stopped: zero or hidden")
+        self.command("wait", "--note", "01")
+        self.command("wait", "--note", "02")
+        self.later(60)
+        self.says("Default ok")
+        self.assertEqual(self.record("01", "none", "Sam", "Default ok")[0], 0)
+        code, out = self.record("02", "none", "Sam", "Default ok")
+        self.assertEqual(code, 3, out)
+        self.assertIn("it answered note 01: q already", out)
+        self.assertEqual(self.row("02"), "stopped: zero or hidden")
+        self.later(60)
+        self.says("Default ok")
+        self.assertEqual(self.record("02", "none", "Sam", "Default ok")[0], 0, "a second message is a second answer")
+
+    def test_an_answer_typed_before_a_question_went_out_does_not_answer_it(self):
+        self.typed("01", "none", "the label reads Reports or Messages")
+        self.rows(n01="stopped: the label reads Reports or Messages", n02="not started")
+        self.command("wait", "--note", "01")
+        self.later(60)
+        self.says("Default ok")
+        self.later(60)
+        self.typed("02", "none", "zero or hidden")
+        self.rows(n01="stopped: the label reads Reports or Messages", n02="stopped: zero or hidden")
+        self.command("wait", "--note", "02")
+        code, out = self.record("02", "none", "Sam", "Default ok")
+        self.assertEqual(code, 3, out)
+        self.assertIn("(0 message(s) typed since)", out)
+
+    def test_a_risk_question_takes_only_a_sentence_that_names_its_note(self):
+        question = "may a manager refund without the owner"
+        self.rows(n01="stopped: the label reads Reports or Messages", n02=f"stopped: {question}")
+        self.typed("01", "none", "the label reads Reports or Messages")
+        self.typed("02", "money", question)
+        self.command("wait", "--note", "01")
+        self.command("wait", "--note", "02")
+        self.later(60)
+        self.says("Default ok")
+        code, out = self.record("02", "money", "Sam", "Default ok")
+        self.assertEqual(code, 3, out)
+        self.assertIn("does not name line 02", out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        self.later(60)
+        self.says("Default ok. 02: yes, up to 50.")
+        self.assertEqual(self.record("01", "none", "Sam", "Default ok")[0], 0)
+        self.assertEqual(self.record("02", "money", "Sam", "02: yes, up to 50")[0], 0,
+                         "two sentences of one message answer two questions")
+
+    def test_a_follow_on_in_his_name_carries_the_words_of_the_ruling_it_follows(self):
+        # Review 2, N3: `record --kind "follows 02" --who Sam` took words he never typed.
+        self.rows(n01="not started", n02="failed")
+        self.command("wait", "--note", "02")
+        self.later(30)
+        self.says("Hide the count.")
+        code, out = self.record("02", "none", "Sam", "hide the count", touches="01")
+        self.assertEqual(code, 0, out)
+        code, out = self.record("01", "follows 02", "Sam", "the bubble emails every user")
+        self.assertEqual(code, 3, out)
+        self.assertIn("carries the words of the ruling it follows, \"hide the count\"", out)
+        code, out = self.record("01", "follows 02", "Sam", "Hide the count.", "the header shows no count at zero")
+        self.assertEqual(code, 0, out)
+        entries = entries_of(self.plan.read_text())[0]
+        self.assertEqual([e["number"] for e in mod.open_entries(entries, "Sam")], ["01"],
+                         "and he still sees the follow-on once, at the gate")
 
     # ── the answers at the gate ──
 
@@ -672,15 +799,59 @@ class Commands(unittest.TestCase):
         self.rows(n01="merged abc123456", n02="merged abc123456", n03="not started")
         self.plan.write_text(PLAN.replace("2026-11-12, Sam,", "2026-11-12, default,").replace("[money] 03", "[none] 03"))
 
+    def listed(self):
+        """He is shown the gate list, and half a minute passes."""
+        code, out = self.command("list")
+        self.assertEqual(code, 0, out)
+        self.later(30)
+        return out
+
     def test_answer_needs_words_he_typed(self):
         self.gate()
         code, out = self.command("answer", "--all")
         self.assertEqual(code, 3, out)
+        self.says("confirm all")
+        code, out = self.command("answer", "--all", "--words", "confirm all")
+        self.assertEqual(code, 3, out)
+        self.assertIn("the list was not shown to Sam yet", out)
+        self.listed()
         self.says("show me the list")
         code, out = self.command("answer", "--all", "--words", "confirm all")
         self.assertEqual(code, 3, out)
         self.assertIn("no message Sam typed in this session", out)
         self.assertNotIn("Confirmed:", self.plan.read_text())
+
+    def test_words_inside_a_word_or_typed_before_the_list_are_no_answer(self):
+        # Review 2, N2: "ok" passed because it is inside "look" and "token", "bubble" from the slash command.
+        self.gate()
+        self.says("<command-message>build-feature</command-message>\n<command-name>/build-feature</command-name>\n"
+                  "<command-args>bubble</command-args>", at=self.clock - 5000)
+        self.says("ok", at=self.clock - 4000)
+        self.listed()
+        self.says("look at the token cost please")
+        self.says([{"type": "text", "text": "<system-reminder>confirm all</system-reminder>"}, {"type": "text", "text": "hm"}])
+        for words in ("A", "ok", "bubble", "token cost", "confirm all"):
+            code, out = self.command("answer", "--all", "--words", words)
+            self.assertEqual(code, 3, f"{words}: {out}")
+        self.assertNotIn("Confirmed:", self.plan.read_text())
+        self.says("OK.")
+        self.assertEqual(self.command("answer", "--all", "--words", "ok")[0], 0)
+
+    def test_one_answer_closes_one_line_unless_it_is_confirm_all(self):
+        self.gate()
+        self.listed()
+        self.says("yes")
+        self.assertEqual(self.command("answer", "--note", "01", "--confirmed", "--words", "yes")[0], 0)
+        code, out = self.command("answer", "--note", "02", "--confirmed", "--words", "yes")
+        self.assertEqual(code, 3, out)
+        self.assertIn("it answered line 01 of the gate list already", out)
+        code, out = self.command("answer", "--all", "--words", "yes")
+        self.assertEqual(code, 3, out)
+        self.later(30)
+        self.says("Confirm all.")
+        code, out = self.command("answer", "--all", "--words", "confirm all")
+        self.assertEqual(code, 0, out)
+        self.assertIn("answered: 02, 03; 0 ruling(s) still wait", out)
 
     def test_answer_all_confirms_only_the_lines_outside_the_risk_classes(self):
         mod_seam = mod.ruler_when_unanswered
@@ -688,14 +859,20 @@ class Commands(unittest.TestCase):
         try:
             self.rows(n01="merged abc123456", n02="merged abc123456", n03="not started")
             self.plan.write_text(PLAN.replace("2026-11-12, Sam,", "2026-11-12, panel,"))
-            self.says("confirm all")
+            self.assertIn("for each line in bold one sentence that names its number", self.listed())
+            self.says("Confirm all. ok")
             code, out = self.command("answer", "--all", "--words", "confirm all")
             self.assertEqual(code, 0, out)
             self.assertIn("answered: 01, 02; 1 ruling(s) still wait: 03", out)
-            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "yes, no price")
+            # Review 2, N2: the risk line closed on "ok", a word about nothing in particular.
+            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "ok")
             self.assertEqual(code, 3, out)
+            self.assertIn("does not name line 03", out)
             self.says("yes, no price")
             code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "yes, no price")
+            self.assertEqual(code, 3, out)
+            self.says("03: yes, no price")
+            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "03: yes, no price")
             self.assertEqual(code, 0, out)
             self.assertIn("0 ruling(s) still wait", out)
         finally:
@@ -704,6 +881,7 @@ class Commands(unittest.TestCase):
     def test_an_overturned_line_closes_only_on_a_new_fix_note(self):
         # Review finding 7: `--fix 01` named an old merged note and closed the gate.
         self.gate()
+        self.listed()
         self.says("no, show Messages")
         args = ("answer", "--note", "01", "--overturned", "--words", "no, show Messages")
         self.assertEqual(self.command(*args)[0], 3)
@@ -728,6 +906,7 @@ class Commands(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("3 ruling(s) to confirm, of 3 he did not make himself", out)
         self.assertIn("- 01: the label reads Reports or Messages", out)
+        self.assertIn("shown at", out)
 
 
 if __name__ == "__main__":

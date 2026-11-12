@@ -49,10 +49,15 @@ sends the session to rule on them first. A note whose file or tests changed
 after its note branch's base commit is `fresh` too: a ruling changed it, and
 the old tree holds the build of the old note. `rearmed` is true when the plan
 carries a `[re-arm]` ruling for the note; the script sends such a note's
-second failure to `waiting:`. A `fresh` note's old worktree and branch are
-removed by the session before the run, as the skill says: the merger's spawn
-cannot, because the auto-mode classifier refuses `git worktree remove --force`
-as irreversible (measured in the rehearsal on 2026-11-04).
+second failure to `waiting:`. `args` refuses while a `fresh` note's old
+worktree or branch exists, and prints the commands that remove them. The
+session runs those: the merger's spawn cannot, because the auto-mode
+classifier refuses `git worktree remove --force` as irreversible (measured in
+the rehearsal on 2026-11-04), and the script cannot see a folder.
+
+`args` also refuses a product whose `.githooks/reference-transaction` is
+missing, not executable or not on `core.hooksPath`, and the fourth start in a
+row that merged no new note (`count_start`), the final check's starts included.
 
 `roles` reads every `agent-*.jsonl` under the transcript dir, groups the
 assistant messages by the `agentType` in each `.meta.json`, and rewrites the
@@ -187,15 +192,24 @@ def held(tree: pathlib.Path, folder: str) -> bool:
     return all(path in (report, plan) for path in changed) and all(s.startswith(("merged", "cut")) for s in states)
 
 
-def count_start(reports: pathlib.Path, rows: dict, clock: float) -> None:
+def count_start(reports: pathlib.Path, rows: dict, clock: float, state: str = "") -> None:
     """Count this start, and refuse it past the bound on automatic restarts.
 
     A start is automatic when a row reads `running` or a state the run starts
-    again by itself. The streak ends when a new note merged or no such row is
-    left. Nothing else bounds these restarts: the plan check passes each one."""
+    again by itself, and when every note is merged and the report still reads
+    `stopped` or `running`: the final check of an earlier run did not finish,
+    and no row says so. The streak ends when a new note merged, when no such start is
+    left, or when Abdul gave a ruling on the final check. Nothing else bounds
+    these restarts: the plan check passes each one."""
     states = [row.get("State", "") for row in rows.values()]
     merged = sum(1 for s in states if s.startswith("merged"))
     again = [s for s in states if s == "running" or RESTART_STATES.match(s)]
+    final = rows.get(rulings.FINAL, {}).get("State", "")
+    notes = [row.get("State", "") for number, row in rows.items() if number != rulings.FINAL]
+    if (not again and notes and all(s.startswith(("merged", "cut")) for s in notes)
+            and state in ("stopped", "running")
+            and not final.startswith(("stopped:", plan_check.WAITING, "ruled"))):
+        again = ["the final check, which an earlier run did not finish"]
     path = reports / STARTS
     try:
         past = json.loads(path.read_text(encoding="utf-8"))
@@ -211,7 +225,7 @@ def count_start(reports: pathlib.Path, rows: dict, clock: float) -> None:
             refusal = (f"{MAX_STARTS_WITHOUT_MERGE} automatic restarts in a row merged no new note, and the rows "
                        f"still read: {'; '.join(sorted(set(again)))}. No further restart: set each such note to "
                        f"wait for Abdul (`rulings.py wait <feature> --tree <tree> --note <nn> --why \"tooling: "
-                       f"<its line>\"`), and the other notes run on.")
+                       f"<its line>\"`, with `--note final` for the final check), and the other notes run on.")
         elif clock - float(past["since"] if isinstance(past.get("since"), (int, float)) else clock) > MAX_OUTAGE_SECONDS:
             refusal = (f"the run has started again for {MAX_OUTAGE_SECONDS // 86400} days with no newly merged "
                        f"note. No further restart: tell Abdul.")
@@ -297,11 +311,22 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
     # A product that installed its hooks before the gate has no hook on a
     # fast-forward, so a ruling nobody answered could reach its main branch.
     hooks = repo / ".githooks"
-    if hooks.is_dir() and not (hooks / REF_HOOK).is_file():
-        raise Refusal(f"{hooks} has no `{REF_HOOK}` hook, so a fast-forward into {main} skips the gate before "
-                      f"local main. On {main}: copy `{REF_HOOK}` and `prepare` from "
-                      f"~/.claude/skills/workflow/templates/githooks/ into .githooks/, run `sh .githooks/prepare`, "
-                      f"and commit the two files by name.")
+    if hooks.is_dir():
+        hook = hooks / REF_HOOK
+        if not hook.is_file():
+            raise Refusal(f"{hooks} has no `{REF_HOOK}` hook, so a fast-forward into {main} skips the gate before "
+                          f"local main. On {main}: copy `{REF_HOOK}` and `prepare` from "
+                          f"~/.claude/skills/workflow/templates/githooks/ into .githooks/, run `sh .githooks/prepare`, "
+                          f"and commit the two files by name.")
+        # git passes over a hook it may not execute, and over every hook when
+        # `core.hooksPath` names another folder (review 2, N9).
+        if not os.access(hook, os.X_OK):
+            raise Refusal(f"{hook} is not executable, so git does not run it and a fast-forward into {main} skips "
+                          f"the gate before local main. In {repo}: `chmod +x .githooks/{REF_HOOK}`, and commit it.")
+        wrong = plan_check.suite.hooks_refusal(repo)
+        if wrong:
+            raise Refusal(f"the hooks of {repo} do not run, so nothing holds the gate before local main. "
+                          f"In {repo}: `sh .githooks/prepare`. {wrong}")
     reports = common / "build-feature" / feature
     reports.mkdir(parents=True, exist_ok=True)
     rows = report_rows(tree, folder)
@@ -312,13 +337,13 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
     # or a correction nobody recorded, starts no run.
     entries, found = plan_check.ruling_faults(
         tree, folder, plan.read_text(encoding="utf-8"),
-        {n for n, row in rows.items() if row.get("State", "").startswith("merged")}) if plan.is_file() else ([], [])
+        {n for n, row in rows.items() if row.get("State", "").startswith("merged")},
+        {n for n, row in rows.items() if row.get("State", "").startswith("cut")}) if plan.is_file() else ([], [])
     found += [f"note {n}: the note checker corrected it and the plan has no `[correction]` entry"
               for n in rulings.uncorrected(entries, report_text)]
     if found:
         raise Refusal(f"the rulings in {folder}/{plan_check.PLAN} do not hold:\n  " + "\n  ".join(found))
     person = rulings.person(tree)
-    forced = plan_check.weakened_follow_ons(tree, folder, entries)
     rearmed = rulings.rearmed(entries)
     # A question of the final check lives in the row `final`. While it is not
     # ruled, no final check runs.
@@ -360,6 +385,21 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
             "worktree": str(repo / ".claude" / "worktrees" / f"note-{feature}-{number}"),
         })
     notes.sort(key=lambda n: n["number"])
+    # A fresh note is built in a new tree. The old tree holds the build of the
+    # old note, and nothing but this refusal keeps a run from using it again:
+    # the script cannot see a folder, and an agent may not remove one.
+    stale = []
+    for n in notes:
+        tree_left = pathlib.Path(n["worktree"]).exists()
+        branch_left = bool(plan_check.git(tree, "rev-parse", "-q", "--verify", f"refs/heads/{n['branch']}", check=False))
+        if n["fresh"] and (tree_left or branch_left):
+            stale.append(f"note {n['number']}: "
+                         + (f"`git -C {repo} worktree remove --force {n['worktree']}`; " if tree_left else "")
+                         + (f"`git -C {repo} branch -D {n['branch']}`; " if branch_left else "")
+                         + f"`git -C {repo} worktree prune`")
+    if stale:
+        raise Refusal("a note that starts again needs a new tree, and its old tree or branch is still there. "
+                      "Remove them from this session, then run this command again:\n  " + "\n  ".join(stale))
     claude_md = tree / "CLAUDE.md"
     staging = None
     if claude_md.is_file():
@@ -371,8 +411,8 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
         "started": started, "staging": staging, "risk": risk, "notes": notes,
         "roles": read_roles(overrides), "earlier": earlier_lines(tree, folder),
         "ruling_wait_seconds": rulings.RULING_WAIT_SECONDS,
-        "gate_open": [e["number"] for e in rulings.open_entries(entries, person, forced)],
-        "away": rulings.away_lines(entries, person, forced), "held": held(tree, folder), "final": final,
+        "gate_open": [e["number"] for e in rulings.open_entries(entries, person)],
+        "away": rulings.away_lines(entries, person), "held": held(tree, folder), "final": final,
     }
 
 
@@ -536,8 +576,11 @@ def main(argv=None) -> int:
         if opts.kind == "args":
             started = opts.started or datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
             built = build_args(opts.feature, pathlib.Path(opts.tree).resolve(), opts.role, opts.batch, started)
-            count_start(pathlib.Path(built["reports"]), report_rows(pathlib.Path(built["tree"]),
-                        f"{plan_check.CHANGES}/{opts.feature}"), datetime.datetime.now().timestamp())
+            folder = f"{plan_check.CHANGES}/{opts.feature}"
+            report = pathlib.Path(built["tree"]) / folder / plan_check.REPORT
+            count_start(pathlib.Path(built["reports"]), report_rows(pathlib.Path(built["tree"]), folder),
+                        datetime.datetime.now().timestamp(),
+                        plan_check.read_report(report.read_text(encoding="utf-8"))["state"] if report.is_file() else "")
             print(json.dumps(built, indent=1))
             return 0
         transcripts, report = pathlib.Path(opts.transcripts), pathlib.Path(opts.report)

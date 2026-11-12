@@ -63,8 +63,9 @@ The plan is `changes/<feature>/plan.md`, from `templates/plan.md`; the report is
   The session rules each one, by Abdul's answer or by the written default, sets
   its row to `not started` and starts the run again in the same session. A
   `waiting:` row waits for Abdul with no timeout and holds nothing else.
-- The report's `State:` is `held` and a ruling by `default` or `panel` has no
-  `Confirmed:` or `Overturned:` line: `GATE: <n> ruling(s) ...`, exit 2, with
+- The report's `State:` is `held` and a ruling Abdul did not make, or any
+  `[follows <nn>]` entry, has no `Confirmed:` or `Overturned:` line: `GATE: <n>
+  ruling(s) ...`, exit 2, with
   the lines. The final check passed and the merge into local main waits for
   his answers; `note_check.py merge` refuses that merge on the same lines.
 - Else `plan: approved <date> at <commit>`, exit 0.
@@ -285,12 +286,12 @@ def approved_lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.startswith("Approved:")]
 
 
-def approval_commit(tree: pathlib.Path, plan: str, current: list[str], rev: str = "HEAD") -> str | None:
+def approval_commit(tree: pathlib.Path, plan: str, current: list[str]) -> str | None:
     """The commit that wrote the plan's `Approved:` lines as they are now: the
     oldest of the newest run of commits whose lines equal them. None when the
     newest commit differs, so the approval is not committed."""
     found = None
-    for commit in git(tree, "log", "--format=%H", rev, "--", plan).splitlines():
+    for commit in git(tree, "log", "--format=%H", "--", plan).splitlines():
         if approved_lines(git(tree, "show", f"{commit}:{plan}", check=False)) != current:
             break
         found = commit
@@ -347,14 +348,15 @@ def waits_closure(waits: dict[str, list[str]], number: str) -> set[str]:
     return seen
 
 
-def ruling_faults(tree: pathlib.Path, folder: str, text: str, merged: set[str]) -> tuple[list[dict], list[str]]:
+def ruling_faults(tree: pathlib.Path, folder: str, text: str, merged: set[str],
+                  cut: set[str] = frozenset()) -> tuple[list[dict], list[str]]:
     """The plan's rulings and every reason they do not hold, the `Waits for:`
     line of a touched note included: a note that follows a ruling waits for the
     ruled note, unless that note is merged or already waits for this one."""
     entries, found = rulings.read(text)
     notes = {number: read_note((tree / path).read_text(encoding="utf-8"))
              for number, path in note_files(tree, folder)}
-    found += rulings.faults(entries, set(notes), rulings.person(tree), merged)
+    found += rulings.faults(entries, set(notes), rulings.person(tree), merged, cut)
     waits = {number: note["waits_for"] for number, note in notes.items()}
     for entry in entries:
         first, number = entry["follows"], entry["number"]
@@ -406,41 +408,6 @@ def plan_changed(text: str, then: str, entries: list[dict], who: str | None) -> 
         if line not in cut_then and (not number or number.group(1) not in his):
             return True
     return False
-
-
-def weakened_follow_ons(tree: pathlib.Path, folder: str, entries: list[dict], rev: str | None = None) -> set[str]:
-    """The follow-on entries whose note had a test it named at the approval
-    changed or deleted since. Such an entry is never free of his answer.
-    The feature is read from the working tree, or from the commit `rev` when
-    a hook asks about a branch on its way to main."""
-    plan = f"{folder}/{PLAN}"
-
-    def text_of(path: str) -> str:
-        if rev:
-            return git(tree, "show", f"{rev}:{path}", check=False)
-        return (tree / path).read_text(encoding="utf-8") if (tree / path).is_file() else ""
-
-    if not any(e["follows"] for e in entries) or not text_of(plan):
-        return set()
-    try:
-        commit = approval_commit(tree, plan, approved_lines(text_of(plan)), rev or "HEAD")
-    except subprocess.CalledProcessError:
-        commit = None  # no commit yet
-    if not commit:
-        return {e["number"] for e in entries if e["follows"]}
-    notes = note_files(tree, folder) if not rev else sorted(notes_in(
-        folder, git(tree, "ls-tree", "--name-only", rev, f"{folder}/", check=False).splitlines()))
-    found = set()
-    for number, path in notes:
-        if not any(e["follows"] and e["number"] == number for e in entries):
-            continue
-        tests = set(read_note(text_of(path))["tests"])
-        then = git(tree, "show", f"{commit}:{path}", check=False)
-        tests |= set(read_note(then)["tests"]) if then else set()
-        span = [commit, rev] if rev else [commit]
-        if tests and git(tree, "diff", "--name-only", "--diff-filter=MD", *span, "--", *sorted(tests), check=False):
-            found.add(number)
-    return found
 
 
 def uncovered(tree: pathlib.Path, folder: str, plan: str, commit: str, text: str, entries: list[dict],
@@ -525,7 +492,8 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
     here = tree / folder / REPORT
     report = read_report(here.read_text(encoding="utf-8") if here.is_file() else None)
     merged = {n for n, state in report["states"].items() if state.startswith("merged")}
-    entries, found = ruling_faults(tree, folder, text, merged)
+    cut = {n for n, state in report["states"].items() if state.startswith("cut")}
+    entries, found = ruling_faults(tree, folder, text, merged, cut)
     if found:
         raise Refusal(f"the rulings in {plan} do not hold:\n  " + "\n  ".join(found))
     watched = {plan}
@@ -558,11 +526,10 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                      f"{who}'s answer, or the written default once the wait is over; then the run "
                      f"starts again." + (f" Note {', '.join(again)} failed again after its one "
                                          f"re-arm: it waits for {who} (`rulings.py wait`)." if again else ""))
-    forced = weakened_follow_ons(tree, folder, entries)
-    waiting = rulings.open_entries(entries, person, forced)
+    waiting = rulings.open_entries(entries, person)
     if report["state"] == HELD and waiting:
         raise Gate(f"{len(waiting)} ruling(s) {who} did not make wait for him before the merge "
-                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(entries, person, forced, open_only=True)) +
+                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(entries, person, open_only=True)) +
                    "\nHe confirms or overturns each one (`rulings.py answer`).")
     count = len(note_files(tree, folder))
     waits = sorted(n for n, state in report["states"].items() if state.startswith(WAITING))

@@ -1,6 +1,9 @@
 #!/bin/sh
-# Refuse a push to main that carries a migration migrate:production has not
-# applied. Reads only the file that script writes; never a database.
+# Refuse a push to main that brings a plan page with a ruling its owner has
+# not answered: the push is the step nobody takes back, so it is the backstop
+# for the roads the two other hooks do not see. Then refuse a push that carries
+# a migration migrate:production has not applied. Reads only the file that
+# script writes; never a database.
 CHECK="${WORKFLOW_LIB:-$HOME/.claude/skills/workflow/lib}/note_check.py"
 [ -f "$CHECK" ] || { echo "REFUSED: $CHECK is missing, so no push passes. Clone the workflow plugin there, or set WORKFLOW_LIB." >&2; exit 1; }
 exec python3 "$CHECK" push "$@"

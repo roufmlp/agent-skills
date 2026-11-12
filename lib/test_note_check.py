@@ -11,6 +11,7 @@ directory, so the hooks' one path line resolves to the script under test.
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -672,13 +673,36 @@ class Merges(Product):
     def test_an_entry_with_no_ruled_line_is_refused(self):
         self.refused(self.PLAN.replace('  Ruled: 2026-11-12, default, "hide it at zero"\n', ""), says="has no `Ruled:` line")
 
+    def put_back(self, text):
+        """Run the command the refusal prints between backticks to put the checkout back."""
+        line = re.search(r"`(git (?:read-tree|merge|rebase) [^`]+)`", text.split("The branch did not move.")[1]).group(1)
+        self.git(*line.split()[1:])
+        return line
+
+    def edit_nobody_committed(self):
+        self.write("README.md", "# a local edit nobody committed\n")
+        self.write("scratch.txt", "mine\n")
+
+    def assert_edit_kept(self, main):
+        self.assertEqual(self.git("status", "--porcelain").stdout, " M README.md\n?? scratch.txt\n",
+                         "the printed command puts the checkout back and keeps his edit")
+        self.assertEqual((self.tree / "README.md").read_text(), "# a local edit nobody committed\n")
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD").stdout.strip(), "main")
+        self.assertEqual(self.head(), main)
+
     def fast_forward_refused(self, form):
         # Review finding 5: `pre-merge-commit` does not run on a fast-forward.
-        text = self.refused(self.PLAN, form, says="ruling(s) Sam did not make")
-        self.assertIn("The branch did not move", text)
-        self.git("read-tree", "-u", "--reset", "HEAD")
-        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no").stdout, "",
-                         "the line the refusal prints puts the checkout back")
+        # Review 2, N6: the line the refusal printed, `git read-tree -u --reset HEAD`, removed his edit.
+        main = self.feature_with_plan(self.PLAN)
+        self.edit_nobody_committed()
+        done = self.git("merge", form, "feature/bubble", check=False)
+        text = done.stdout + done.stderr
+        self.assertNotEqual(done.returncode, 0, text)
+        self.assertIn("ruling(s) Sam did not make", text)
+        self.assertIn("A  changes/bubble/plan.md", self.git("status", "--porcelain").stdout,
+                      "the refused fast-forward left the feature's files staged")
+        self.assertIn("read-tree -u -m", self.put_back(text))
+        self.assert_edit_kept(main)
 
     def test_a_fast_forward_only_merge_into_main_is_refused(self):
         self.fast_forward_refused("--ff-only")
@@ -697,30 +721,17 @@ class Merges(Product):
   Undo: none
 """
 
-    def follow_on(self, weakened):
+    def follow_on(self, answered=False):
         """The feature with a ruling of his own and a note it touched; main checked out."""
         entry = self.PLAN[self.PLAN.index("- [none] 02"):self.PLAN.index("Approved:")]
-        main = self.feature_with_plan(self.PLAN.replace(entry, "\n"))
-        self.git("checkout", "-q", "feature/bubble")
-        self.write("changes/bubble/plan.md", self.PLAN.replace(entry, self.FOLLOWED + "\n"))
-        if weakened:
-            self.write("tests/money.test.ts", "// every assertion removed\n")
-        code, out = self.commit("ruling: note 02", "changes", "tests")
-        self.assertEqual(code, 0, out)
-        self.git("checkout", "-q", "main")
-        return main
+        followed = self.FOLLOWED.replace("  Undo: none\n", "  Undo: none\n  Confirmed: 2026-11-13\n") if answered else self.FOLLOWED
+        return self.feature_with_plan(self.PLAN.replace(entry, followed + "\n"))
 
-    def test_a_note_his_ruling_touched_merges_with_no_further_answer(self):
-        main = self.follow_on(weakened=False)
-        done = self.git("merge", "feature/bubble", check=False)
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertNotEqual(self.head(), main)
-
-    def test_a_touched_note_whose_approved_test_changed_is_never_free_at_the_hook(self):
-        # Review finding 2: an entry that weakens a test he approved needs his answer on every road.
+    def test_a_follow_on_in_his_name_holds_the_merge_until_he_answers(self):
+        # Review 2, N3: such an entry merged with no answer, and under it a note was rewritten.
         for form in ((), ("--ff-only",)):
             with self.subTest(form=form):
-                main = self.follow_on(weakened=True) if not form else self.head()
+                main = self.follow_on() if not form else self.head()
                 done = self.git("merge", *form, "feature/bubble", check=False)
                 text = done.stdout + done.stderr
                 self.assertNotEqual(done.returncode, 0, text)
@@ -728,6 +739,153 @@ class Merges(Product):
                 self.assertIn("1 ruling(s) Sam did not make", text)
                 self.assertIn("03: the money test reads the hidden count", text)
                 self.git("merge", "--abort", check=False)
+
+    def test_a_follow_on_he_confirmed_merges(self):
+        main = self.follow_on(answered=True)
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
+    # ── what puts the checkout back (review 2, N6) ──
+
+    def test_a_refused_merge_commit_is_put_back_by_merge_abort_and_his_edit_stays(self):
+        main = self.feature_with_plan(self.PLAN)
+        self.edit_nobody_committed()
+        done = self.git("merge", "--no-verify", "feature/bubble", check=False)  # pre-merge-commit skipped: the ref hook answers
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(self.put_back(done.stdout + done.stderr), "git merge --abort")
+        self.assert_edit_kept(main)
+
+    def test_a_refused_reset_is_put_back_with_the_untracked_files_kept(self):
+        main = self.feature_with_plan(self.PLAN)
+        self.write("scratch.txt", "mine\n")
+        done = self.git("reset", "-q", "--hard", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("read-tree -u -m", self.put_back(done.stdout + done.stderr))
+        self.assertEqual(self.git("status", "--porcelain").stdout, "?? scratch.txt\n")
+        self.assertEqual(self.head(), main)
+
+    def test_a_refused_rebase_is_put_back_by_rebase_abort(self):
+        main = self.feature_with_plan(self.PLAN)
+        self.write("scratch.txt", "mine\n")
+        done = self.git("rebase", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(self.put_back(done.stdout + done.stderr), "git rebase --abort")
+        self.assertEqual(self.git("status", "--porcelain").stdout, "?? scratch.txt\n")
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD").stdout.strip(), "main")
+        self.assertEqual(self.head(), main)
+
+    def test_a_refused_commit_on_main_keeps_its_files_staged_and_names_no_command(self):
+        self.git("checkout", "-q", "main")
+        self.write("changes/bubble/plan.md", self.PLAN)
+        code, out = self.commit("the plan, straight on main", "changes")
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("The files of the refused commit stay staged as they were", out)
+        self.assertNotIn("read-tree", out)
+        self.assertEqual(self.git("status", "--porcelain").stdout, "A  changes/bubble/plan.md\n")
+
+    # ── a clone, and a machine without the plugin (review 2, N4 and N5) ──
+
+    def origin(self):
+        bare = pathlib.Path(self.tmp.name) / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True, env=self.env)
+        self.git("remote", "add", "origin", str(bare))
+        return bare
+
+    def test_a_clone_under_another_name_pulls_a_feature_the_upstream_main_carries(self):
+        self.feature_with_plan(self.PLAN.replace(", default, ", ", Sam, "))
+        self.git("merge", "feature/bubble")
+        merged = self.head()
+        bare = self.origin()
+        self.git("push", "-q", "--no-verify", "origin", "main", "HEAD~1:refs/heads/old")
+        other = pathlib.Path(self.tmp.name) / "other"
+        subprocess.run(["git", "clone", "-q", "-b", "old", str(bare), str(other)], env=self.env, check=True, capture_output=True)
+
+        def run(*args):
+            return subprocess.run(["git", *args], cwd=other, env=self.env, capture_output=True, text=True)
+        run("checkout", "-q", "-b", "main", "old")
+        run("config", "user.name", "Robin Roe")
+        subprocess.run(["sh", ".githooks/prepare"], cwd=other, env=self.env, check=True, capture_output=True)
+        done = run("pull", "--ff-only", "origin", "main")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(run("rev-parse", "HEAD").stdout.strip(), merged)
+        # The pass is for the page upstream carries, and for no other: the same page, edited here, is held.
+        plan = other / "changes" / "bubble" / "plan.md"
+        plan.write_text(plan.read_text().replace('"hide it at zero"', '"show a price"'))
+        run("add", "changes")
+        done = run("commit", "-qm", "an edit of the plan on the clone")
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("`Sam` is not `default`, `panel` or `Robin`", done.stdout + done.stderr)
+
+    def cannot_run(self, env, why):
+        self.git("checkout", "-q", "main")
+        main = self.head()
+        self.write("src/lib/a.ts", "export const a = 1;\n")
+        self.git("add", "src")
+        done = self.git("commit", "-qm", "plain", "--no-verify", check=False, env=env)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(self.git("rev-parse", "main").stdout.strip(), main, "it fails closed")
+        lines = [line for line in done.stderr.strip().splitlines() if not line.startswith("fatal: ")]  # git's own line
+        self.assertEqual(len(lines), 2, done.stderr)
+        self.assertTrue(lines[0].startswith("REFUSED: the main branch did not move"), lines[0])
+        self.assertIn(why, lines[0])
+        self.assertIn("git -c core.hooksPath=/dev/null <the same arguments>", lines[1])
+        # A branch whose name only starts like main is not main, and the printed command restores work.
+        self.git("checkout", "-q", "-b", "maintenance")
+        self.git("commit", "-qm", "plain", "--no-verify", env=env)
+        self.git("checkout", "-q", "main")
+        self.git("-c", "core.hooksPath=/dev/null", "merge", "-q", "--ff-only", "maintenance", env=env)
+        self.assertNotEqual(self.head(), main)
+
+    def test_without_the_plugin_main_does_not_move_and_two_lines_say_why_and_what_to_type(self):
+        empty = pathlib.Path(self.tmp.name) / "nohome"
+        empty.mkdir()
+        self.cannot_run({"HOME": str(empty)}, "note_check.py is missing")
+
+    def test_without_python_main_does_not_move_and_two_lines_say_why_and_what_to_type(self):
+        tools = pathlib.Path(self.tmp.name) / "bin"
+        tools.mkdir()
+        for tool in ("git", "cat", "sh"):
+            os.symlink(shutil.which(tool), tools / tool)
+        self.cannot_run({"PATH": str(tools)}, "python3 is not on PATH")
+
+    # ── the push, the step nobody takes back ──
+
+    def past_the_hooks(self, plan):
+        """A feature put on local main by a road the hooks do not see."""
+        self.feature_with_plan(plan)
+        bare = self.origin()
+        common = self.git("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()
+        (pathlib.Path(common) / mod.LAST_APPLIED).write_text("0001_a.sql\n")
+        self.git("push", "-q", "origin", "main")
+        self.git("-c", "core.hooksPath=/dev/null", "merge", "-q", "--ff-only", "feature/bubble")
+        return bare, self.git("rev-parse", "origin/main").stdout.strip()
+
+    def test_a_push_of_main_is_refused_while_a_ruling_it_carries_has_no_answer(self):
+        bare, pushed = self.past_the_hooks(self.PLAN)
+        self.assertNotEqual(self.head(), pushed, "the feature is on local main")
+        done = self.git("push", "origin", "main", check=False)
+        text = done.stdout + done.stderr
+        self.assertNotEqual(done.returncode, 0, text)
+        self.assertIn("REFUSED: changes/bubble/plan.md: 1 ruling(s) Sam did not make", text)
+        self.assertIn("refs/heads/main was not pushed", text)
+        at_origin = subprocess.run(["git", "rev-parse", "refs/heads/main"], cwd=bare, env=self.env,
+                                   capture_output=True, text=True).stdout.strip()
+        self.assertEqual(at_origin, pushed)
+
+    def test_a_push_of_main_passes_once_every_ruling_is_answered(self):
+        self.past_the_hooks(self.PLAN.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        done = self.git("push", "origin", "main", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(self.git("rev-parse", "origin/main").stdout.strip(), self.head())
+
+    def test_a_push_of_the_feature_onto_local_main_is_refused(self):
+        main = self.feature_with_plan(self.PLAN)
+        self.git("checkout", "-q", "feature/bubble")
+        done = self.git("push", ".", "feature/bubble:main", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("ruling(s) Sam did not make", done.stdout + done.stderr)
+        self.assertEqual(self.git("rev-parse", "main").stdout.strip(), main)
 
     def test_a_merge_told_to_skip_the_hooks_is_refused(self):
         # `--no-verify` skips `pre-merge-commit`; git has no flag that skips `reference-transaction`.

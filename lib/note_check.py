@@ -77,13 +77,20 @@ reads it) or holds a ruling Abdul did not make with no `Confirmed:` or
 `Overturned:` line (`rulings.open_entries`). Abdul confirms what was ruled
 while he was away once, before local main. `ref` runs the same gate from the
 `reference-transaction` hook for every other command that moves `main` or
-`master`: a fast-forward, a reset, `git update-ref`. Then the red check
+`master`: a fast-forward, a reset, `git update-ref`. Its refusal names the
+command that puts the checkout back and keeps uncommitted edits. A plan page
+the upstream main branch already carries as it is passes both, so a clone
+pulls a merged feature whatever its `user.name` is. Then the red check
 for the whole feature: `suite.py red --base HEAD`, main's code from before the
 merge ("Whether the build agents work test-first", ticket 22).
 
 ## What `push` does
 
-For each ref pushed to main it lists the migrations in the pushed commit and
+For each ref pushed to main it first reads each plan page the push changes on
+the remote and refuses the push on the same gate as `merge` and `ref`. This
+is the backstop for the roads the two do not see (`skills/build-feature/
+when-a-run-stops.md` lists them): the push is the step nobody takes back. Then
+it lists the migrations in the pushed commit and
 reads `<git common dir>/last-production-migration`, the one line
 `migrate:production` writes. A migration numbered after that file's, a tree
 that lacks the named file, or no file at all while the tree has migrations,
@@ -461,26 +468,23 @@ def check_commit(tree) -> int:
     return 0
 
 
-def plan_refusals(tree, path: str, text: str | None, paths: list[str], report: str | None,
-                  rev: str | None = None) -> list[str]:
+def plan_refusals(tree, path: str, text: str | None, paths: list[str], report: str | None) -> list[str]:
     """One plan page on its way to the main branch: every fault of its
     rulings, read as strictly as the plan check reads them, and every ruling
-    that still waits for Abdul's answer. `rev` is the commit that brings it."""
-    import plan_check  # it imports this module, so not at the top
+    that still waits for Abdul's answer."""
     entries, found = rulings.read(text or "")
     folder = path.rsplit("/", 1)[0]
     person = rulings.person(tree)
     found += rulings.faults(entries, {number for number, _ in notes_in(folder, paths)}, person,
-                            rulings.merged_notes(report or ""))
-    forced = plan_check.weakened_follow_ons(pathlib.Path(tree), folder, entries, rev)
-    waiting = rulings.open_entries(entries, person, forced)
+                            rulings.merged_notes(report or ""), rulings.cut_notes(report or ""))
+    waiting = rulings.open_entries(entries, person)
     reasons = []
     if found:
         reasons.append(f"{path}: the rulings do not hold: " + " ".join(found))
     if waiting:
         reasons.append(f"{path}: {len(waiting)} ruling(s) {person or 'the owner'} did not make have no "
                        f"`Confirmed:` or `Overturned:` line, so the feature stays off the main branch:\n  "
-                       + "\n  ".join(rulings.away_lines(entries, person, forced, open_only=True)) +
+                       + "\n  ".join(rulings.away_lines(entries, person, open_only=True)) +
                        "\n  The next `/build-feature` shows him the list.")
     return reasons
 
@@ -490,19 +494,56 @@ def is_plan(path: str) -> bool:
     return len(parts) == 3 and parts[0] == CHANGES and parts[2] == PLAN
 
 
+def upstream_has(tree, branch: str, path: str, text: str | None) -> bool:
+    """Whether the upstream main branch already carries this plan page as it
+    is: `origin/<branch>`, or the upstream the branch is set to follow. Such a
+    feature went through the gate where it was merged, and a clone pulls it
+    whatever its `user.name` is. On 2026-11-12 a pull on a clone named Robin
+    was refused because the page names Sam."""
+    refs = {f"refs/remotes/origin/{branch}",
+            git(tree, "for-each-ref", "--format=%(upstream)", f"refs/heads/{branch}", check=False).strip()}
+    return bool(text) and any(git(tree, "show", f"{ref}:{path}", check=False) == text for ref in refs if ref)
+
+
 def gate_refusals(tree) -> list[str]:
     """Each plan page the merge brings, read from the index."""
-    reasons, paths = [], index_paths(tree)
-    # git names the commit a merge brings in `GITHEAD_<sha>`; MERGE_HEAD is not
-    # written yet when this hook runs. With no such name, or two, every
-    # follow-on is read from main's own history and so waits for his answer.
-    heads = [key[len("GITHEAD_"):] for key in os.environ if key.startswith("GITHEAD_")]
-    coming = heads[0] if len(heads) == 1 else None
+    reasons, paths, branch = [], index_paths(tree), branch_name(tree)
     for _, path in staged_changes(tree):
-        if is_plan(path):
-            reasons += plan_refusals(tree, path, index_text(tree, path), paths,
-                                     index_text(tree, path.rsplit("/", 1)[0] + "/report.md"), coming)
+        text = index_text(tree, path) if is_plan(path) else None
+        if is_plan(path) and not upstream_has(tree, branch, path, text):
+            reasons += plan_refusals(tree, path, text, paths, index_text(tree, path.rsplit("/", 1)[0] + "/report.md"))
     return reasons
+
+
+def tree_refusals(tree, sha: str, changed: list[str], branch: str | None = None) -> list[str]:
+    """Each plan page among `changed`, read from the commit `sha`."""
+    reasons = []
+    paths = git(tree, "ls-tree", "-r", "--name-only", sha, "--", CHANGES, check=False).splitlines()
+    for path in changed:
+        if not is_plan(path) or path not in paths:
+            continue
+        text = git(tree, "show", f"{sha}:{path}", check=False)
+        if branch and upstream_has(tree, branch, path, text):
+            continue
+        folder = path.rsplit("/", 1)[0]
+        report = git(tree, "show", f"{sha}:{folder}/report.md", check=False) if f"{folder}/report.md" in paths else None
+        reasons += plan_refusals(tree, path, text, paths, report)
+    return reasons
+
+
+def put_back(tree, new: str) -> str:
+    """What puts the checkout back after a refused move of a main branch, and
+    keeps an edit nobody committed. The line this replaced, `git read-tree -u
+    --reset HEAD`, removed such an edit (review 2, N6)."""
+    git_dir = pathlib.Path(git(tree, "rev-parse", "--absolute-git-dir").strip())
+    if (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists():
+        return "A rebase is in progress: `git rebase --abort` puts the checkout back."
+    if (git_dir / "MERGE_HEAD").exists():
+        return "A merge is in progress: `git merge --abort` puts the checkout back and keeps uncommitted edits."
+    if git(tree, "for-each-ref", "--count=1", "--contains", new, check=False).strip():
+        return (f"When `git status` now shows the feature's files staged, the move was a fast-forward, a pull or "
+                f"a reset: `git read-tree -u -m {new[:12]} HEAD` puts the checkout back and keeps uncommitted edits.")
+    return "The files of the refused commit stay staged as they were, and nothing else changed."
 
 
 def check_ref(tree, lines: list[str]) -> int:
@@ -524,16 +565,11 @@ def check_ref(tree, lines: list[str]) -> int:
             if not old:
                 continue  # the branch is made: nothing merges into it
         changed = git(tree, "diff", "--name-only", old, new, "--", CHANGES, check=False).splitlines()
-        paths = git(tree, "ls-tree", "-r", "--name-only", new, "--", CHANGES, check=False).splitlines()
-        for path in changed:
-            if is_plan(path) and path in paths:
-                folder = path.rsplit("/", 1)[0]
-                report = git(tree, "show", f"{new}:{folder}/report.md", check=False) if f"{folder}/report.md" in paths else None
-                reasons += plan_refusals(tree, path, git(tree, "show", f"{new}:{path}", check=False), paths, report, new)
+        found = tree_refusals(tree, new, changed, ref[len("refs/heads/"):])
+        if found:
+            reasons += found + [f"The branch did not move. {put_back(tree, new)}"]
     if reasons:
-        raise Refusal("\n".join(reasons) + "\nThe branch did not move. When `git status` now shows the "
-                      "feature's files staged, the merge was a fast-forward: `git read-tree -u --reset HEAD` "
-                      "puts the checkout back.")
+        raise Refusal("\n".join(reasons))
     return 0
 
 
@@ -570,10 +606,21 @@ def check_push(tree, lines: list[str]) -> int:
         fields = line.split()
         if len(fields) != 4:
             continue
-        _, local_sha, remote_ref, _ = fields
+        _, local_sha, remote_ref, remote_sha = fields
         if remote_ref.rsplit("/", 1)[-1] not in MAIN_BRANCHES or set(local_sha) == {"0"}:
             continue
         tree_paths = git(tree, "ls-tree", "-r", "--name-only", local_sha).splitlines()
+        # The push is the step nobody takes back: no feature goes out on a
+        # main branch while a ruling in its plan waits for Abdul's answer,
+        # whatever road put it on local main. Read: each plan page this push
+        # changes on the remote; every page when the remote's commit is not here.
+        known = set(remote_sha) != {"0"} and bool(git(tree, "cat-file", "-t", remote_sha, check=False).strip())
+        changed = (git(tree, "diff", "--name-only", remote_sha, local_sha, "--", CHANGES, check=False).splitlines()
+                   if known else tree_paths)
+        held = tree_refusals(tree, local_sha, changed)
+        if held:
+            reasons += held + [f"{remote_ref} was not pushed. He answers the list first: the next `/build-feature`."]
+            continue
         migrations = [p for p in tree_paths if MIGRATION.search(p)]
         if not migrations:
             continue

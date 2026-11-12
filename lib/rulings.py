@@ -53,10 +53,27 @@ roles` writes from the agents' transcripts:
   takes a fix note), and a row that did not stop takes none;
 - `--kind correction` is by `default`, for a correction the report's Decide
   part lists and the plan does not yet carry;
-- a ruling or an answer in Abdul's name carries words he typed: `--words`
-  must occur in a message a person typed in this session's transcript
-  (`CLAUDE_CODE_SESSION_ID` names it), after the question went out. With no
-  such session nobody rules in his name.
+- a ruling or an answer in Abdul's name carries words he typed, read from
+  this session's transcript (`CLAUDE_CODE_SESSION_ID` names it). With no
+  such session nobody rules in his name. The rule:
+  1. only a message a person typed counts, and only one typed after the
+     note was put in front of him: after `wait` for a ruling (`wait --note
+     <nn>` with no `--why` records the time for a failed row, a waiting row
+     or a cut), after `list` for an answer at the gate;
+  2. what the app adds to a message is taken out first: a
+     `<system-reminder>` block, the `<command-...>` parts of a slash
+     command, and a line that is a slash command;
+  3. `--words` must equal the whole message, or one whole sentence of it;
+     case, quotes, white space and the closing `.`, `!` or `?` aside;
+  4. one sentence answers once (`sent.json` keeps what it answered).
+     `answer --all` is the one call that takes several entries;
+  5. a risk-class entry, in `record` and in `answer`, takes only a sentence
+     that names the note's number and says something more.
+  A follow-on in his name carries the words of the ruling it follows.
+
+The check stops a session that writes an answer itself. It does not stop one
+that forges a transcript or names another session's id: the limit is stated
+in `skills/build-feature/when-a-run-stops.md`.
 
 ## What the page refuses
 
@@ -66,8 +83,8 @@ roles` writes from the agents' transcripts:
 - a kind or a who it does not know;
 - a ruling Abdul did not make on a risk class, and a follow-on whose who is
   not the who of the ruling it follows;
-- `Touches:` naming a note that is not in the feature, or a touched note with
-  no `follows` entry of its own; each touched note that is merged needs a
+- `Touches:` naming a note that is not in the feature (a note he cut since
+  is passed over), or a touched note with no `follows` entry of its own; each touched note that is merged needs a
   fix note of its own, with a `follows` entry;
 - `follows <nn>` when `<nn>` has no ruling above it;
 - a second `re-arm` for one note, and more than MAX_DEFAULT_RULINGS rulings
@@ -76,10 +93,9 @@ roles` writes from the agents' transcripts:
   with an entry `[follows <nn>]`.
 
 `open_entries` is the gate before local main: each ruling Abdul did not make
-that has no answer. A follow-on is free only when he made the ruling it
-follows, that ruling's `Touches:` line names it, and it changed no test he
-approved. A risk-class line counts as confirmed only when the line carries
-his words. An overturned line closes on a fix note that was not merged when
+that has no answer, and each follow-on, whoever made the ruling it follows:
+a follow-on changes a note no question was asked about, so he sees it once.
+A risk-class line counts as confirmed only when the line carries his words. An overturned line closes on a fix note that was not merged when
 he answered. `plan_check.py`, `feature_run.py args` and the hooks
 (`note_check.py merge` and `note_check.py ref`) all call `faults` and
 `open_entries`, with the same person.
@@ -96,6 +112,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -121,7 +138,9 @@ PLAIN_STOPS = ("done check passes before the work", "fix note needed:")
 # Rows a run starts again by itself; none is a question (`plan_check.RESTART_STATES`).
 NOT_A_QUESTION = re.compile(r"^stopped: (API errors|[a-z-]+ returned no result|worktree:|tooling:)")
 STOPS = "stops.jsonl"  # the run's own record of each typed stop, written from the agents' transcripts
-SENT = "sent.json"     # when each question went to Abdul
+SENT = "sent.json"     # when each question went to Abdul, when the gate list was shown, and what each typed sentence answered
+GATE = "gate"          # its key for the time `list` last printed the gate list
+USED = "used"          # its key for the sentences of his that answered something already
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 SESSION = "CLAUDE_CODE_SESSION_ID"
 HEADING = "## Rulings"
@@ -290,9 +309,10 @@ def by_person(entry: dict, who: str | None) -> bool:
     return who is not None and entry["who"] == who
 
 
-def faults(entries: list[dict], numbers: set[str], who: str | None, merged=frozenset()) -> list[str]:
+def faults(entries: list[dict], numbers: set[str], who: str | None, merged=frozenset(), cut=frozenset()) -> list[str]:
     """Every reason the rulings do not hold together. `numbers` are the notes
-    of the feature, `who` is `person()`, `merged` the notes already merged."""
+    of the feature, `who` is `person()`, `merged` the notes already merged and
+    `cut` the notes cut since: a ruling that touched one asks nothing more of it."""
     found = []
     ruled = {e["number"] for e in entries if not e["follows"]}
     rearmed, defaults = set(), collections.Counter()
@@ -324,6 +344,8 @@ def faults(entries: list[dict], numbers: set[str], who: str | None, merged=froze
         fix_notes = [f for f in entries if f["follows"] == e["number"] and f["number"] not in touched]
         need_fix = []
         for number in touched:
+            if number in cut and number != e["number"]:
+                continue
             if number not in numbers or number == e["number"]:
                 found.append(f"{name}: `Touches: {number}` names no other note of the feature.")
             elif number in own:
@@ -359,16 +381,11 @@ def faults(entries: list[dict], numbers: set[str], who: str | None, merged=froze
     return found
 
 
-def needs_answer(entry: dict, entries: list[dict], who: str | None, forced=frozenset()) -> bool:
-    """Abdul answers everything he did not rule himself. A follow-on is free
-    only when he made the ruling it follows and that ruling's `Touches:` line
-    names it; `forced` holds the follow-ons that changed a test he approved,
-    and those are never free."""
-    if not entry["follows"]:
-        return not by_person(entry, who)
-    first = parent(entry, entries)
-    return not (first is not None and by_person(first, who) and entry["number"] in (first["touches"] or [])
-                and entry["number"] not in forced)
+def needs_answer(entry: dict, entries: list[dict], who: str | None) -> bool:
+    """Abdul answers everything he did not rule himself. A follow-on is an
+    edit a reader and a session wrote, on a note the question was not about,
+    so it always waits for him, whoever made the ruling it follows."""
+    return bool(entry["follows"]) or not by_person(entry, who)
 
 
 def answered(entry: dict, entries: list[dict]) -> bool:
@@ -380,10 +397,10 @@ def answered(entry: dict, entries: list[dict]) -> bool:
     return bool(entry["confirmed"]["words"]) or not is_risk(entry, entries)
 
 
-def open_entries(entries: list[dict], who: str | None = None, forced=frozenset()) -> list[dict]:
+def open_entries(entries: list[dict], who: str | None = None) -> list[dict]:
     """The gate before local main: each ruling that still waits for his answer.
     With no `who`, nobody is the person and every ruling waits."""
-    return [e for e in entries if needs_answer(e, entries, who, forced) and not answered(e, entries)]
+    return [e for e in entries if needs_answer(e, entries, who) and not answered(e, entries)]
 
 
 def rearmed(entries: list[dict]) -> set[str]:
@@ -406,12 +423,10 @@ def away_line(entry: dict, entries: list[dict]) -> str:
             f"Undo: {entry['undo'] or 'not stated'}.")
 
 
-def away_lines(entries: list[dict], who: str | None, forced=frozenset(), open_only=False) -> list[str]:
+def away_lines(entries: list[dict], who: str | None, open_only=False) -> list[str]:
     """The report's "Ruled while you were away" lines, risk classes first."""
-    shown = [e for e in entries if needs_answer(e, entries, who, forced)
-             and not (open_only and answered(e, entries))]
-    shown.sort(key=lambda e: (not is_risk(e, entries), e["line"]))
-    return [away_line(e, entries) for e in shown]
+    shown = [e for e in entries if needs_answer(e, entries, who) and not (open_only and answered(e, entries))]
+    return [away_line(e, entries) for e in sorted(shown, key=lambda e: (not is_risk(e, entries), e["line"]))]
 
 
 # ── Writing ──────────────────────────────────────────────────────────────────
@@ -450,9 +465,10 @@ def with_sub_lines(text: str, entry: dict, lines: list[str]) -> str:
     return "\n".join(rows) + "\n"
 
 
-def with_row(text: str, number: str, state: str, strikes: int | None = None) -> tuple[str, bool]:
-    """The report with one note row's state set, and its strikes when given."""
-    rows, columns, changed = text.splitlines(), None, False
+def with_row(text: str, number: str, state: str, strikes: int | None = None, add: bool = False) -> tuple[str, bool]:
+    """The report with one note row's state set, and its strikes when given.
+    With `add`, a table that has no such row gets one at its end."""
+    rows, columns, changed, last = text.splitlines(), None, False, None
     for i, line in enumerate(rows):
         match = TABLE_ROW.match(line.strip())
         if not match:
@@ -462,12 +478,17 @@ def with_row(text: str, number: str, state: str, strikes: int | None = None) -> 
         if columns is None:
             columns = cells if cells[:2] == ["Note", "State"] else []
             continue
+        if columns:
+            last = (i, len(columns))
         if not columns or cells[0] != number:
             continue
         cells[1] = state
         if strikes is not None and "Strikes" in columns and columns.index("Strikes") < len(cells):
             cells[columns.index("Strikes")] = str(strikes)
         rows[i] = "| " + " | ".join(cells) + " |"
+        changed = True
+    if add and not changed and last:
+        rows.insert(last[0] + 1, f"| {number} | {state} |" + " |" * (last[1] - 2))
         changed = True
     return "\n".join(rows) + "\n", changed
 
@@ -499,6 +520,10 @@ def report_rows(report_text: str) -> dict[str, str]:
 
 def merged_notes(report_text: str) -> set[str]:
     return {number for number, state in report_rows(report_text).items() if state.startswith("merged")}
+
+
+def cut_notes(report_text: str) -> set[str]:
+    return {number for number, state in report_rows(report_text).items() if state.startswith("cut")}
 
 
 def decided(report_text: str) -> list[tuple[str, str, str]]:
@@ -534,10 +559,29 @@ def stamp(value) -> float:
         return 0.0
 
 
-def human_messages(since: float = 0.0) -> list[str]:
-    """What Abdul typed in this session, from its transcript: the `user`
-    records whose origin is `human`. A tool result, a task notice, another
-    agent's message and a compaction summary carry another origin or none."""
+HARNESS_BLOCK = re.compile(r"<([a-z]+(?:-[a-z]+)+)>.*?</\1>", re.S)  # <system-reminder>, <command-args> and the like
+SLASH_LINE = re.compile(r"^\s*/[A-Za-z][\w:-]*(\s|$)")
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def typed_text(content) -> str:
+    """What a person typed in one record. The blocks the app adds to it
+    (`<system-reminder>`, the three `<command-*>` parts of a slash command)
+    and a line that is a slash command are not his words."""
+    if isinstance(content, list):
+        content = "\n".join(str(block.get("text", "")) for block in content
+                            if isinstance(block, dict) and block.get("type") == "text")
+    if not isinstance(content, str):
+        return ""
+    lines = HARNESS_BLOCK.sub("\n", content).splitlines()
+    return "\n".join(line for line in lines if not SLASH_LINE.match(line)).strip()
+
+
+def human_messages(since: float) -> list[tuple[str, str]]:
+    """What Abdul typed in this session after `since`, from its transcript:
+    (timestamp, text) of each `user` record whose origin is `human`. A tool
+    result, a task notice, another agent's message and a compaction summary
+    carry another origin or none."""
     session = os.environ.get(SESSION, "")
     if not re.fullmatch(r"[0-9A-Za-z-]{8,}", session):
         raise Refusal(f"${SESSION} is not set, so this session's transcript cannot be found and his "
@@ -558,31 +602,68 @@ def human_messages(since: float = 0.0) -> list[str]:
                 origin = rec.get("origin")
                 if not isinstance(origin, dict) or origin.get("kind") != "human":
                     continue
-                if stamp(rec.get("timestamp")) < since:
+                if stamp(rec.get("timestamp")) <= since:
                     continue
-                content = (rec.get("message") or {}).get("content")
-                if isinstance(content, list):
-                    content = " ".join(str(block.get("text", "")) for block in content
-                                       if isinstance(block, dict) and block.get("type") == "text")
-                if isinstance(content, str):
-                    found.append(content)
+                text = typed_text((rec.get("message") or {}).get("content"))
+                if text:
+                    found.append((str(rec.get("timestamp")), text))
     return found
 
 
 def spoken(text: str) -> str:
-    return " ".join(str(text).replace('"', "'").casefold().split())
+    """Words as they are compared: case, quotes, white space and the closing mark of a sentence aside."""
+    return " ".join(str(text).replace('"', "'").casefold().split()).rstrip(".!?").rstrip()
 
 
-def said(words: str, since: float, who: str | None) -> None:
-    """Refuse words that no message he typed in this session carries."""
+def sentences(message: str) -> list[str]:
+    found = []
+    for part in SENTENCE_END.split(message):
+        if spoken(part) and spoken(part) not in found:
+            found.append(spoken(part))
+    return found
+
+
+def names_line(sentence: str, number: str) -> bool:
+    """Whether a sentence names a line by its number and says something more."""
+    token = re.escape(number.lstrip("0") or "0") if number.isdigit() else re.escape(number)
+    named = re.compile(rf"(?<!\w)0*{token}(?!\w)")
+    return bool(named.search(sentence)) and len(re.findall(r"\w", named.sub(" ", sentence, count=1))) >= 2
+
+
+def said(words: str, since: float, who: str | None, used: dict, names: str | None = None) -> tuple[str, list[str]]:
+    """The message of his that carries `words`, as (timestamp, sentences).
+
+    `words` are his answer only when they are one whole message he typed after
+    `since`, or one whole sentence of it. A sentence answers once: `used` holds
+    what earlier calls took. With `names`, the sentence must also name that
+    line by its number: a risk-class line takes no answer meant for another."""
     want = spoken(words)
-    if len(want) < 2:
-        raise Refusal("his words are two characters or more.")
-    if not any(want in spoken(message) for message in human_messages(since)):
-        raise Refusal(f"no message {who} typed in this session"
-                      + (" since the question was sent" if since else "")
-                      + f" contains \"{words.strip()}\". A ruling or an answer in his name carries his own "
-                        f"words; without them the default rules, or the note waits.")
+    if not want:
+        raise Refusal("his words are empty.")
+    messages = human_messages(since)
+    taken = None
+    for when, text in messages:
+        parts = sentences(text)
+        if want == spoken(text):
+            mine = parts
+        elif want in parts:
+            mine = [want]
+        else:
+            continue
+        if names and not names_line(want, names):
+            raise Refusal(f"\"{words.strip()}\" does not name line {names}. A risk-class line closes on a sentence "
+                          f"of his that names it by its number and gives the answer, such as \"{names}: yes, <his words>\".")
+        before = [answered for part in mine for answered in [used.get(when, {}).get(part)] if answered]
+        if before:
+            taken = before[0]
+            continue
+        return when, mine
+    if taken:
+        raise Refusal(f"he typed \"{words.strip()}\" once, and it answered {taken} already. One sentence answers one "
+                      f"question; a second answer is a second message.")
+    raise Refusal(f"no message {who} typed in this session after {clock(since)} is \"{words.strip()}\", as a whole "
+                  f"message or a whole sentence of one ({len(messages)} message(s) typed since). A ruling or an answer "
+                  f"in his name quotes him exactly; without his words the default rules, or the note waits.")
 
 
 def records_dir(tree, feature: str) -> pathlib.Path:
@@ -610,22 +691,19 @@ class Feature:
     def report_text(self) -> str:
         return self.report.read_text(encoding="utf-8") if self.report.is_file() else ""
 
-    def forced(self, entries: list[dict]) -> set[str]:
-        import plan_check  # here, because plan_check imports this module
-        return plan_check.weakened_follow_ons(self.tree, f"{CHANGES}/{self.name}", entries)
-
     def checked(self, text: str) -> list[dict]:
         """The entries of `text`, refused when they do not hold together."""
         entries, found = read(text)
-        found += faults(entries, note_numbers(self.folder), self.who, merged_notes(self.report_text()))
+        found += faults(entries, note_numbers(self.folder), self.who, merged_notes(self.report_text()),
+                        cut_notes(self.report_text()))
         if found:
             raise Refusal("\n  ".join(found))
         return entries
 
-    def set_row(self, number: str, state: str, strikes: int | None = None) -> bool:
+    def set_row(self, number: str, state: str, strikes: int | None = None, add: bool = False) -> bool:
         if not self.report.is_file():
             return False
-        text, changed = with_row(self.report.read_text(encoding="utf-8"), number, state, strikes)
+        text, changed = with_row(self.report.read_text(encoding="utf-8"), number, state, strikes, add)
         if changed:
             self.report.write_text(text, encoding="utf-8")
         return changed
@@ -660,22 +738,73 @@ class Feature:
             return {}
         return found if isinstance(found, dict) else {}
 
+    def keep(self, times: dict) -> None:
+        folder = self.records()
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / SENT).write_text(json.dumps(times, indent=1) + "\n", encoding="utf-8")
+
     def sent(self, number: str, question: str) -> float | None:
         value = self.sent_times().get(f"{number}: {plain(question)}")
         return float(value) if isinstance(value, (int, float)) else None
 
-    def mark_sent(self, number: str, question: str) -> float:
-        """When the question went to him. The first time stands."""
+    def shown(self, number: str) -> float | None:
+        """The last time `wait` put this note in front of him, whatever the question."""
+        times = [t for key, t in self.sent_times().items()
+                 if key.startswith(f"{number}: ") and isinstance(t, (int, float))]
+        return float(max(times)) if times else None
+
+    def mark_sent(self, number: str, question: str, again: bool = False) -> float:
+        """When the question went to him. The first time stands, so the wait
+        for a default cannot be started over; `again` is for a row he is shown
+        once more."""
         times, key = self.sent_times(), f"{number}: {plain(question)}"
-        if not isinstance(times.get(key), (int, float)):
+        if again or not isinstance(times.get(key), (int, float)):
             times[key] = now()
-            folder = self.records()
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / SENT).write_text(json.dumps(times, indent=1) + "\n", encoding="utf-8")
+            self.keep(times)
         return float(times[key])
 
-    def commit_line(self, what: str) -> str:
-        return (f"commit it: git -C {self.tree} add {CHANGES}/{self.folder.name} && "
+    def used(self) -> dict:
+        found = self.sent_times().get(USED)
+        return found if isinstance(found, dict) else {}
+
+    def mark_used(self, claim: tuple[str, list[str]], what: str) -> None:
+        """One sentence of his answers one question: keep what this one answered."""
+        times = self.sent_times()
+        when, parts = claim
+        times.setdefault(USED, {}).setdefault(when, {}).update({part: what for part in parts})
+        self.keep(times)
+
+    def ruled_paths(self, number: str) -> list[str]:
+        """Every path a ruling may change: the feature's folder, and the tests
+        of the ruled note and of each note that follows the same ruling, as the
+        note names them now, named them at the last commit, or names them from
+        `cut/`. One commit applies a ruling, so the line `record` prints takes
+        them all (review 2, N7: the tests stayed out and the ruling was stranded)."""
+        import plan_check  # here, because plan_check imports this module
+        folder = f"{CHANGES}/{self.name}"
+        paths = [folder]
+        entries = read(self.plan.read_text(encoding="utf-8"))[0]
+        root = next((e["follows"] or number for e in reversed(entries) if e["number"] == number), number)
+        numbers = {n for n in {number, root, *(e["number"] for e in entries if e["follows"] == root)} if n.isdigit()}
+        texts = [path.read_text(encoding="utf-8") for where in (self.folder, self.folder / "cut")
+                 for n in sorted(numbers) for path in sorted(where.glob(f"{n}-*.md"))]
+        listed = subprocess.run(["git", "-C", str(self.tree), "ls-tree", "-r", "--name-only", "HEAD", "--", folder],
+                                capture_output=True, text=True).stdout.splitlines()
+        for path in listed:
+            if path.rsplit("/", 1)[-1].split("-")[0] in numbers and path.endswith(".md"):
+                texts.append(subprocess.run(["git", "-C", str(self.tree), "show", f"HEAD:{path}"],
+                                            capture_output=True, text=True).stdout)
+        for text in texts:
+            for test in plan_check.read_note(text)["tests"]:
+                tracked = subprocess.run(["git", "-C", str(self.tree), "ls-files", "--error-unmatch", "--", test],
+                                         capture_output=True).returncode == 0
+                if test not in paths and ((self.tree / test).exists() or tracked):
+                    paths.append(test)
+        return paths
+
+    def commit_line(self, what: str, number: str = "") -> str:
+        paths = " ".join(shlex.quote(path) for path in self.ruled_paths(number))
+        return (f"commit it: git -C {self.tree} add -- {paths} && "
                 f"git -C {self.tree} commit -m \"{what}\"")
 
 
@@ -683,9 +812,19 @@ def clock(seconds: float) -> str:
     return datetime.datetime.fromtimestamp(seconds).strftime("%H:%M:%S")
 
 
+def shown_since(feature: Feature, number: str, name: str) -> float:
+    """Since when a message of his answers this row: the last time `wait` put it in front of him."""
+    since = feature.shown(number)
+    if since is None:
+        raise Refusal(f"{name} was not put in front of {feature.who} yet: `rulings.py wait {feature.name} --tree "
+                      f"{feature.tree} --note {number}` records when. His answer is a message he types after that.")
+    return since
+
+
 def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, float | None]:
     """Refuse a ruling the note's row does not ask for. Returns whether the
-    row goes back to `not started`, and since when his words count.
+    row goes back to `not started`, and since when a message of his answers
+    it (None when the ruling is not in his name, or follows another).
 
     The class is the stop's, never the session's: `--kind` must be the class
     the agent typed. A default rules one question at a time, after the wait,
@@ -710,12 +849,12 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
     if state.startswith("cut"):
         if not his:
             raise Refusal(f"only {feature.who} cuts a note.")
-        return False, 0.0
+        return False, shown_since(feature, number, name)
     if state == "failed":
         if not his and kind != "re-arm":
             raise Refusal(f"{name} failed three strikes. A default gives it one re-arm, `--kind re-arm`; "
                           f"any other ruling on it is {feature.who}'s.")
-        return True, 0.0
+        return True, shown_since(feature, number, name) if his else None
     if state.startswith("waiting:"):
         if not his:
             raise Refusal(f"{name} waits for {feature.who}: `{state}`. No default rules it.")
@@ -723,9 +862,7 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
         cls = next((c for c in RISK_CLASSES if why.startswith(c + ":")), None)
         if kind not in ("none", *RISK_CLASSES) or (cls and kind != cls):
             raise Refusal(f"{name} waits on a [{cls or 'none or a risk class'}] question; `--kind {kind}` is not it.")
-        sent = max((t for key, t in feature.sent_times().items()
-                    if key.startswith(f"{number}: ") and isinstance(t, (int, float))), default=0.0)
-        return True, sent
+        return True, shown_since(feature, number, name)
     if state.startswith("stopped:") and not NOT_A_QUESTION.match(state):
         question = state[len("stopped:"):].strip()
         cls = feature.stop_class(number, question)
@@ -743,7 +880,7 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
         if not his and now() < sent + RULING_WAIT_SECONDS:
             raise Refusal(f"the question of {name} went out at {clock(sent)}. His answer rules until "
                           f"{clock(sent + RULING_WAIT_SECONDS)}; the default rules after that.")
-        return True, sent
+        return True, sent if his else None
     raise Refusal(f"{name} did not stop on a question: its row reads `{state or 'no row'}`. A ruling settles a "
                   f"failed, stopped or waiting note; any other change after the approval is {feature.who}'s "
                   f"new `Approved:` line.")
@@ -758,9 +895,20 @@ def record(opts) -> int:
     for value in (opts.question, opts.words, opts.undo):
         if "\n" in value or not value.strip():
             raise Refusal("a question, the words and the undo cost are one line each, and none is empty.")
-    reset, since = standing(feature, opts.note, opts.kind.strip(), opts.who)
-    if opts.who == feature.who and since is not None:
-        said(opts.words, since, feature.who)
+    kind = opts.kind.strip()
+    reset, since = standing(feature, opts.note, kind, opts.who)
+    claim = None
+    if opts.who == feature.who and FOLLOWS.match(kind):
+        # A follow-on in his name carries the words of the ruling it follows,
+        # which were checked when that ruling was recorded, and no others.
+        first = [e for e in read(feature.plan.read_text(encoding="utf-8"))[0]
+                 if e["number"] == FOLLOWS.match(kind).group(1) and not e["follows"]]
+        if not first or spoken(first[-1]["words"] or "") != spoken(opts.words):
+            raise Refusal(f"a follow-on in {feature.who}'s name carries the words of the ruling it follows"
+                          + (f", \"{first[-1]['words']}\"" if first else "") + ", and no others. What changed in "
+                          f"this note goes in --question.")
+    elif opts.who == feature.who:
+        claim = said(opts.words, since, feature.who, feature.used(), opts.note if kind in RISK_CLASSES else None)
     lines = entry_text(opts.note, opts.kind, opts.date, opts.who, opts.question.strip(),
                        opts.words.strip().replace('"', "'"), touches, opts.undo.strip())
     text = with_entry(feature.plan.read_text(encoding="utf-8"), lines)
@@ -768,7 +916,7 @@ def record(opts) -> int:
     # entries exist, so that one fault waits for the plan check at the restart.
     entries, found = read(text)
     found += [f for f in faults(entries, note_numbers(feature.folder), feature.who,
-                                merged_notes(feature.report_text()))
+                                merged_notes(feature.report_text()), cut_notes(feature.report_text()))
               if "is touched and has no entry" not in f and "a merged note is never edited" not in f]
     if found:
         raise Refusal("\n  ".join(found))
@@ -779,7 +927,9 @@ def record(opts) -> int:
     if touches:
         print(f"touched: {', '.join(touches)}. Each needs its own `[follows {opts.note}]` entry "
               f"(a merged one: a fix note) before the restart.")
-    print(feature.commit_line(f"ruling: note {opts.note}"))
+    if claim:
+        feature.mark_used(claim, f"note {opts.note}: {opts.question.strip()}")
+    print(feature.commit_line(f"ruling: note {opts.note}", opts.note))
     return 0
 
 
@@ -788,11 +938,15 @@ def wait(opts) -> int:
     and the default rules after the wait; any other row waits for him."""
     feature = Feature(opts.tree, opts.feature)
     state = report_rows(feature.report_text()).get(opts.note)
-    if state is None:
-        raise Refusal(f"{feature.report} has no row for note {opts.note}.")
     why = (opts.why or "").strip()
     if "\n" in why or "|" in why:
         raise Refusal("--why is one line with no `|`.")
+    # The final check has a row only once it stopped or waited. A final check
+    # that no run finishes has none, and it waits for him all the same.
+    adds = state is None and opts.note == FINAL and bool(why) and feature.report.is_file()
+    if state is None and not adds:
+        raise Refusal(f"{feature.report} has no row for note {opts.note}.")
+    state = state or ""
     if state.startswith("stopped:") and not NOT_A_QUESTION.match(state):
         question = state[len("stopped:"):].strip()
         cls = feature.stop_class(opts.note, question)
@@ -804,24 +958,40 @@ def wait(opts) -> int:
             return 0
         why = f"{cls}: {question}"
     elif not why:
-        raise Refusal(f"note {opts.note} reads `{state}`, which holds no question: say why it waits with --why.")
+        if NOT_A_QUESTION.match(state) or state.startswith("merged"):
+            raise Refusal(f"note {opts.note} reads `{state}`, which asks him nothing. To make it wait for him, "
+                          f"say why with --why.")
+        # A failed row, a waiting row or a note he may cut: he is shown it now,
+        # and only a message he types after this answers it.
+        at = feature.mark_sent(opts.note, "shown", again=True)
+        print(f"note {opts.note}: `{state}` shown at {clock(at)}. His answer is a message he types after this; "
+              f"to make the row wait for him, say why with --why.")
+        return 0
     else:
         feature.mark_sent(opts.note, why)
-    feature.set_row(opts.note, f"waiting: {why}")
+    if not feature.set_row(opts.note, f"waiting: {why}", add=adds):
+        raise Refusal(f"{feature.report} has no notes table to hold the row `{opts.note}`.")
     print(f"note {opts.note}: waiting: {why}")
     print(feature.commit_line(f"report: note {opts.note} waits"))
     return 0
 
 
 def show(opts) -> int:
+    """The gate list. Printing it records the time: his answers are the
+    messages he types after he was shown it."""
     feature = Feature(opts.tree, opts.feature)
     entries = feature.checked(feature.plan.read_text(encoding="utf-8"))
-    forced = feature.forced(entries)
-    waiting = open_entries(entries, feature.who, forced)
+    waiting = open_entries(entries, feature.who)
     print(f"{len(waiting)} ruling(s) to confirm, of "
-          f"{sum(1 for e in entries if needs_answer(e, entries, feature.who, forced))} he did not make himself")
-    for line in away_lines(entries, feature.who, forced, open_only=True):
+          f"{sum(1 for e in entries if needs_answer(e, entries, feature.who))} he did not make himself")
+    for line in away_lines(entries, feature.who, open_only=True):
         print(f"- {line}")
+    if waiting:
+        times = feature.sent_times()
+        times[GATE] = now()
+        feature.keep(times)
+        print(f"shown at {clock(times[GATE])}. An answer is a message he types after this: one sentence for "
+              f"\"confirm all\", and for each line in bold one sentence that names its number.")
     return 0
 
 
@@ -829,21 +999,24 @@ def answer(opts) -> int:
     feature = Feature(opts.tree, opts.feature)
     text = feature.plan.read_text(encoding="utf-8")
     entries = feature.checked(text)
-    forced = feature.forced(entries)
-    waiting = open_entries(entries, feature.who, forced)
+    waiting = open_entries(entries, feature.who)
     words = (opts.words or "").strip()
     if not words:
         raise Refusal(f"an answer carries {feature.who}'s own words: --words \"<what he typed>\".")
-    said(words, 0.0, feature.who)
-    words = words.replace('"', "'")
+    since = feature.sent_times().get(GATE)
+    if not isinstance(since, (int, float)):
+        raise Refusal(f"the list was not shown to {feature.who} yet: `rulings.py list {feature.name} --tree "
+                      f"{feature.tree}` prints it and records when. An answer is a message he types after that.")
     if opts.all:
         chosen = [e for e in waiting if not is_risk(e, entries) and not e["confirmed"]]
-        lines = [f'Confirmed: {opts.date}, "{words}"']
+        if not chosen:
+            raise Refusal("no line outside the risk classes waits for an answer.")
+        claim = said(words, since, feature.who, feature.used())
+        what = "the lines outside the risk classes"
     else:
-        chosen = [e for e in waiting if e["number"] == opts.note]
+        chosen = [e for e in waiting if e["number"] == opts.note][:1]
         if not chosen:
             raise Refusal(f"note {opts.note} has no ruling that waits for an answer.")
-        chosen = chosen[:1]
         if opts.overturned:
             if not opts.fix:
                 raise Refusal("an overturned ruling needs --fix, the number of the fix note that undoes it.")
@@ -851,13 +1024,16 @@ def answer(opts) -> int:
             if state.startswith(("merged", "cut")):
                 raise Refusal(f"note {opts.fix} reads `{state}`. An overturned ruling closes on a new fix "
                               f"note that the run still builds.")
-            lines = [f'Overturned: {opts.date}, "{words}"', f"Fix: {opts.fix}"]
-        else:
-            lines = [f'Confirmed: {opts.date}, "{words}"']
+        claim = said(words, since, feature.who, feature.used(), opts.note if is_risk(chosen[0], entries) else None)
+        what = f"line {opts.note} of the gate list"
+    words = words.replace('"', "'")
+    lines = ([f'Overturned: {opts.date}, "{words}"', f"Fix: {opts.fix}"] if opts.overturned and not opts.all
+             else [f'Confirmed: {opts.date}, "{words}"'])
     for entry in sorted(chosen, key=lambda e: -e["line"]):
         text = with_sub_lines(text, entry, lines)
-    left = open_entries(feature.checked(text), feature.who, forced)
+    left = open_entries(feature.checked(text), feature.who)
     feature.plan.write_text(text, encoding="utf-8")
+    feature.mark_used(claim, what)
     print(f"answered: {', '.join(e['number'] for e in chosen) or 'none'}; {len(left)} ruling(s) still wait"
           + (f": {', '.join(e['number'] for e in left)}" if left else ""))
     print(feature.commit_line("rulings: answered"))

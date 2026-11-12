@@ -6,6 +6,8 @@ import io
 import json
 import os
 import pathlib
+import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -314,21 +316,49 @@ class Feature(unittest.TestCase):
         self.assertEqual(self.args()["earlier"]["tooling"],
                          ["2026-11-12 02: hook: PreToolUse:Write hook error: an isolated git worktree"])
 
-    def test_a_note_changed_after_its_worktrees_base_starts_fresh(self):
+    def commands(self, out):
+        """The commands a refusal prints between backticks, run as written."""
+        found = re.findall(r"`(git -C [^`]+)`", out)
+        for line in found:
+            subprocess.run(shlex.split(line), env=self.env, check=True, capture_output=True)
+        return found
+
+    def test_a_note_changed_after_its_worktrees_base_never_starts_on_the_old_tree(self):
+        # Old finding 13: the run handed such a note to the merger with "Fresh: yes", and one
+        # sentence of that prompt was all that kept the old build out.
         note_tree = self.repo / ".claude" / "worktrees" / "note-bubble-02"
         self.git(self.repo, "worktree", "add", "-q", str(note_tree), "-b", "note/bubble/02", "feature/bubble")
-        one, two = self.args()["notes"]
-        self.assertFalse(two["fresh"], "an unchanged note keeps its tree")
+        self.assertFalse(self.args()["notes"][1]["fresh"], "an unchanged note keeps its tree")
         self.write(self.tree, "changes/bubble/02-order.md", fixture.NOTE_02.replace("report count", "count"))
         self.commit("ruling: note 02")
-        one, two = self.args()["notes"]
-        self.assertTrue(two["fresh"], "the old tree holds the note from before the ruling")
-        self.assertFalse(one["fresh"])
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("note 02: `git -C", out)
+        self.assertNotIn("note 01:", out)
+        ran = self.commands(out)
+        self.assertEqual([line.split()[3] for line in ran], ["worktree", "branch", "worktree"], ran)
+        self.assertFalse(note_tree.exists())
+        self.assertEqual([n["state"] for n in self.args()["notes"]], ["not started", "not started"])
 
-    def test_a_note_whose_test_changed_after_the_base_starts_fresh(self):
+    def test_a_note_whose_test_changed_after_the_base_never_starts_on_the_old_branch(self):
         self.git(self.repo, "branch", "note/bubble/02", "feature/bubble")
         self.write(self.tree, "e2e/order.spec.ts", "// spec, changed by a ruling\n")
-        self.assertTrue(self.args()["notes"][1]["fresh"], "an uncommitted change counts too")
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, "an uncommitted change counts too")
+        self.assertEqual([line.split()[3] for line in self.commands(out)], ["branch", "worktree"])
+        self.args()
+
+    def test_a_note_a_killed_run_left_running_never_starts_on_its_old_tree(self):
+        note_tree = self.repo / ".claude" / "worktrees" / "note-bubble-02"
+        self.git(self.repo, "worktree", "add", "-q", str(note_tree), "-b", "note/bubble/02", "feature/bubble")
+        self.write(note_tree, "half.ts", "// half a build\n")
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="running"))
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.commands(out)
+        self.assertFalse(note_tree.exists(), "the printed command removes a tree with work in it")
+        self.assertTrue(self.args()["notes"][1]["fresh"])
 
     def test_held_is_true_only_while_nothing_but_the_plan_and_the_report_changed(self):
         self.write(self.tree, "changes/bubble/report.md",
@@ -369,7 +399,18 @@ class Feature(unittest.TestCase):
         code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
         self.assertEqual(code, 3, out)
         self.assertIn("has no `reference-transaction` hook", out)
+        # Review 2, N9: a file git may not execute, and a hooks path nobody set, both passed.
         (hooks / "reference-transaction").write_text("#!/bin/sh\n")
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("is not executable, so git does not run it", out)
+        (hooks / "reference-transaction").chmod(0o755)
+        self.git(self.repo, "config", "core.hooksPath", "elsewhere")
+        code, out = self.run_main("args", "bubble", "--tree", str(self.tree))
+        self.assertEqual(code, 3, out)
+        self.assertIn("`sh .githooks/prepare`", out)
+        self.assertIn("core.hooksPath is `elsewhere`", out)
+        self.git(self.repo, "config", "core.hooksPath", ".githooks")
         self.assertEqual(self.run_main("args", "bubble", "--tree", str(self.tree))[0], 0)
 
     def test_args_refuses_a_correction_the_plan_does_not_record(self):
@@ -400,9 +441,33 @@ class Feature(unittest.TestCase):
 
     # ── the bound on automatic restarts ──
 
-    def start(self, clock, **states):
-        rows = {number.lstrip("n"): {"State": state} for number, state in states.items()}
-        mod.count_start(pathlib.Path(self.tmp.name) / "records", rows, clock)
+    def start(self, clock, state="stopped", **states):
+        rows = {number.lstrip("n"): {"State": row} for number, row in states.items()}
+        mod.count_start(pathlib.Path(self.tmp.name) / "records", rows, clock, state)
+
+    def test_a_final_check_no_run_finishes_has_three_starts_too(self):
+        # Review 2, N8: every note merged and no `final` row: eight starts over eight days passed.
+        done = {"n01": "merged abc1234", "n02": "cut 2026-11-12"}
+        for day in range(3):
+            self.start(day * 86400, **done)
+        with self.assertRaises(mod.Refusal) as refused:
+            self.start(3 * 86400, **done)
+        self.assertIn("the final check, which an earlier run did not finish", str(refused.exception))
+        self.assertIn("`--note final`", str(refused.exception))
+        with self.assertRaises(mod.Refusal):
+            self.start(4 * 86400, state="running", **done)
+        # It waits for him, and his ruling starts the count again.
+        self.start(5 * 86400, final="waiting: tooling: the final check did not finish", **done)
+        self.start(6 * 86400, final="ruled 2026-11-12", **done)
+        for day in range(7, 10):
+            self.start(day * 86400, **done)
+        with self.assertRaises(mod.Refusal):
+            self.start(10 * 86400, **done)
+
+    def test_a_held_or_merged_feature_is_no_restart(self):
+        for state in ("held", "merged"):
+            for _ in range(5):
+                self.start(0, state=state, n01="merged abc1234", n02="merged def5678")
 
     def test_three_automatic_restarts_with_no_new_merge_then_no_more(self):
         # Review finding 12: nothing bounded the restarts after a tool fault.
@@ -435,6 +500,12 @@ class Feature(unittest.TestCase):
     def test_the_args_command_counts_its_starts(self):
         self.write(self.tree, "changes/bubble/report.md",
                    self.REPORT.format(state="stopped", s01="merged abc1234", s02="stopped: tooling: hook: REFUSED"))
+        codes = [self.run_main("args", "bubble", "--tree", str(self.tree))[0] for _ in range(4)]
+        self.assertEqual(codes, [0, 0, 0, 3])
+
+    def test_the_args_command_counts_the_starts_of_a_final_check_with_no_row(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="merged def5678"))
         codes = [self.run_main("args", "bubble", "--tree", str(self.tree))[0] for _ in range(4)]
         self.assertEqual(codes, [0, 0, 0, 3])
 

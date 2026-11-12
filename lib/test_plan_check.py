@@ -529,29 +529,39 @@ class Rulings(Product):
 
     # ── the commands, with a session he typed in ──
 
-    def rule(self, *args):
+    def session(self):
+        """This session's transcript, and a clock that moves ten seconds at each
+        command and each message, so "typed after he was shown it" is exact."""
+        import datetime
         import rulings
+        if not hasattr(self, "transcript"):
+            kept = (rulings.PROJECTS, os.environ.get(rulings.SESSION), rulings.now)
+            self.clock = [datetime.datetime.now().timestamp()]
+            rulings.PROJECTS = pathlib.Path(self.tmp.name) / "projects"
+            rulings.now = lambda: self.clock[0]
+            os.environ[rulings.SESSION] = "feedbeef-1111-4000-8000-000000000000"
+
+            def restore():
+                rulings.PROJECTS, rulings.now = kept[0], kept[2]
+                os.environ.pop(rulings.SESSION, None) if kept[1] is None else os.environ.update({rulings.SESSION: kept[1]})
+            self.addCleanup(restore)
+            self.transcript = rulings.PROJECTS / "-product" / f"{os.environ[rulings.SESSION]}.jsonl"
+            self.transcript.parent.mkdir(parents=True)
+        self.clock[0] += 10
+        return rulings
+
+    def rule(self, *args):
+        rulings = self.session()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = rulings.main([args[0], "bubble", "--tree", str(self.tree), *args[1:]])
         return code, out.getvalue()
 
     def says(self, text):
-        """One message he types in this session, a second from now."""
+        """One message he types in this session."""
         import datetime
-        import rulings
-        if not hasattr(self, "transcript"):
-            kept = (rulings.PROJECTS, os.environ.get(rulings.SESSION))
-            rulings.PROJECTS = pathlib.Path(self.tmp.name) / "projects"
-            os.environ[rulings.SESSION] = "feedbeef-1111-4000-8000-000000000000"
-
-            def restore():
-                rulings.PROJECTS = kept[0]
-                os.environ.pop(rulings.SESSION, None) if kept[1] is None else os.environ.update({rulings.SESSION: kept[1]})
-            self.addCleanup(restore)
-            self.transcript = rulings.PROJECTS / "-product" / f"{os.environ[rulings.SESSION]}.jsonl"
-            self.transcript.parent.mkdir(parents=True)
-        stamp = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=1)).isoformat()
+        self.session()
+        stamp = datetime.datetime.fromtimestamp(self.clock[0], datetime.timezone.utc).isoformat()
         with open(self.transcript, "a") as fh:
             fh.write(json.dumps({"type": "user", "timestamp": stamp, "origin": {"kind": "human"},
                                  "message": {"role": "user", "content": text}}) + "\n")
@@ -569,9 +579,9 @@ class Rulings(Product):
         self.assertEqual(self.rule("wait", "--note", "01")[0], 0)
         self.assertEqual(self.rule("record", "--note", "01", "--kind", "none", "--who", "default", "--question",
                                    question, "--words", "no", "--touches", "none", "--undo", "x")[0], 3)
-        self.says("no price on the bubble, ever")
+        self.says("That is a money question. 01: no price on the bubble, ever.")
         code, out = self.rule("record", "--note", "01", "--kind", "money", "--who", "Sam", "--question", question,
-                              "--words", "no price on the bubble", "--touches", "none", "--undo", "a migration")
+                              "--words", "01: no price on the bubble, ever", "--touches", "none", "--undo", "a migration")
         self.assertEqual(code, 0, out)
         self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble with no price"))
         self.commit_all("ruling: note 01")
@@ -613,7 +623,8 @@ class Rulings(Product):
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 2, out)
         self.assertIn("03: the fix note for the overturned ruling", out)
-        self.says("confirm all")
+        self.assertIn("03: the fix note for the overturned ruling", self.rule("list")[1])
+        self.says("Confirm all.")
         self.assertEqual(self.rule("answer", "--all", "--words", "confirm all")[0], 0)
         self.commit_all("rulings: answered")
         code, out = self.run_check("plan", "bubble")
@@ -633,7 +644,8 @@ class Rulings(Product):
         self.commit_all("cut")
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 3, "a cut with no ruling of his refuses")
-        self.says("cut it, it goes to the next feature")
+        self.assertEqual(self.rule("wait", "--note", "02")[0], 0)
+        self.says("Cut it. It goes to the next feature.")
         code, out = self.rule("record", "--note", "02", "--kind", "none", "--who", "Sam", "--question",
                               "note 02 failed three strikes", "--words", "cut it", "--touches", "none", "--undo", "x")
         self.assertEqual(code, 0, out)
@@ -641,6 +653,72 @@ class Rulings(Product):
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 0, out)
         self.assertIn("| 02 | cut 2026-11-12 |", (self.tree / "changes/bubble/report.md").read_text())
+
+    def test_his_cut_of_a_note_an_earlier_ruling_touches_passes(self):
+        # Review 2, N10: `Touches: 01` on his ruling, then he cut note 01, and every tool
+        # refused "names no other note of the feature".
+        import feature_run
+        self.follow_on("Sam", "01")
+        os.makedirs(self.tree / "changes/bubble/cut")
+        self.git("mv", "changes/bubble/01-header.md", "changes/bubble/cut/01-header.md")
+        text = (self.tree / "changes/bubble/plan.md").read_text()
+        self.write("changes/bubble/plan.md", text.replace(
+            "Approved: 2026-11-03", "## Cut\n\n01 Header, cut 2026-11-12: Sam cut it\n\nApproved: 2026-11-03"))
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero").replace(
+            "Waits for: 01", "Waits for: none"))
+        self.write("changes/bubble/report.md", report(s01="cut 2026-11-12", s02="not started"))
+        self.assertEqual(self.rule("wait", "--note", "01")[0], 0)
+        self.says("Cut note 01.")
+        code, out = self.rule("record", "--note", "01", "--kind", "none", "--who", "Sam", "--question", "cut note 01",
+                              "--words", "cut note 01", "--touches", "none", "--undo", "x")
+        self.assertEqual(code, 0, out)
+        self.commit_all("ruling: note 01")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        got = feature_run.build_args("bubble", self.tree, [], None, "2026-11-12 09:00")
+        self.assertEqual([(n["number"], n["state"]) for n in got["notes"]],
+                         [("01", "cut 2026-11-12"), ("02", "not started")])
+
+    def test_the_commit_line_record_prints_takes_the_tests_of_the_ruling(self):
+        # Review 2, N7: the line was `git add changes/<feature>`, the test edit stayed out of
+        # the commit, and the plan check then refused it for ever.
+        self.write("changes/bubble/report.md", report(state="stopped", s02="failed"))
+        self.commit_all("report: failed")
+        self.change_02()
+        code, out = self.rule("record", "--note", "02", "--kind", "re-arm", "--who", "default",
+                              "--question", "note 02 failed three strikes", "--words", "hide the count at zero",
+                              "--touches", "none", "--undo", "x")
+        self.assertEqual(code, 0, out)
+        line = [text for text in out.splitlines() if text.startswith("commit it: ")][0][len("commit it: "):]
+        self.assertIn("e2e/order.spec.ts", line)
+        subprocess.run(line, shell=True, check=True, capture_output=True)
+        self.assertEqual(self.git("status", "--porcelain"), "", "the one commit took every file of the ruling")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plan: approved", out)
+
+    def test_the_last_commit_line_of_a_ruling_takes_the_tests_of_the_notes_that_follow_it(self):
+        self.write("changes/bubble/report.md", report(state="stopped", s01="not started", s02="failed"))
+        self.commit_all("report: failed")
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero").replace(
+            "Waits for: 01", "Waits for: none"))
+        self.write("e2e/order.spec.ts", "// spec, hidden at zero\n")
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble with no count at zero").replace(
+            "Waits for: none", "Waits for: 02"))
+        self.write("tests/bubble.test.ts", "// the header test, with no count at zero\n")
+        fields = ("--who", "default", "--words", "hide the count at zero", "--undo", "x")
+        code, out = self.rule("record", "--note", "02", "--kind", "re-arm", "--question", "note 02 failed three strikes",
+                              "--touches", "01", *fields)
+        self.assertEqual(code, 0, out)
+        code, out = self.rule("record", "--note", "01", "--kind", "follows 02", "--question", "the header shows no count",
+                              "--touches", "none", *fields)
+        self.assertEqual(code, 0, out)
+        line = [text for text in out.splitlines() if text.startswith("commit it: ")][0][len("commit it: "):]
+        subprocess.run(line, shell=True, check=True, capture_output=True)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("2 ruling(s), 2 to confirm before the merge", out)
 
     def test_a_cut_line_for_a_note_he_did_not_rule_on_refuses(self):
         self.write("changes/bubble/plan.md", ruled(RULING_02).replace(
@@ -687,7 +765,7 @@ class Rulings(Product):
 
     # ── a follow-on ──
 
-    def follow_on(self, who, touches, weaken=False):
+    def follow_on(self, who, touches, weaken=False, new_test=False):
         """His ruling on 02, and an edit to note 01 that rides on `[follows 02] 01`."""
         self.write("changes/bubble/report.md", report(s01="not started", s02="not started"))
         part = self.OWNER_02.replace("Touches: none", f"Touches: {touches}").rstrip("\n") + textwrap.dedent(f"""
@@ -700,8 +778,13 @@ class Rulings(Product):
         self.write("changes/bubble/plan.md", ruled(part))
         self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero").replace(
             "Waits for: 01", "Waits for: none"))
-        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble that also emails every user").replace(
-            "Waits for: none", "Waits for: 02"))
+        note = NOTE_01.replace("A bubble", "A bubble that also emails every user").replace(
+            "Waits for: none", "Waits for: 02")
+        if new_test:
+            self.assertIn("`e2e/bubble.spec.ts` and `tests/bubble.test.ts`", note)
+            note = note.replace("`e2e/bubble.spec.ts` and `tests/bubble.test.ts`", "`tests/new.test.ts`")
+            self.write("tests/new.test.ts", "// asserts nothing\n")
+        self.write("changes/bubble/01-header.md", note)
         if weaken:
             self.write("tests/bubble.test.ts", "// weakened\n")
         self.commit_all("ruling: note 02 and what follows")
@@ -718,15 +801,30 @@ class Rulings(Product):
         self.assertEqual(code, 0, out)
         self.assertIn("1 to confirm before the merge", out)
 
-    def test_a_follow_on_his_ruling_names_is_free_until_it_changes_a_test(self):
+    def test_a_follow_on_in_his_name_waits_for_him_though_his_ruling_names_the_note(self):
+        # Review 2, N3: under such an entry note 01 was rewritten and nothing waited for him.
         code, out = self.follow_on("Sam", "01")
         self.assertEqual(code, 0, out)
-        self.assertNotIn("to confirm", out)
+        self.assertIn("1 to confirm before the merge", out)
 
-    def test_a_follow_on_that_weakens_a_test_is_never_free(self):
+    def test_a_follow_on_that_weakens_a_test_waits_for_him(self):
         code, out = self.follow_on("Sam", "01", weaken=True)
         self.assertEqual(code, 0, out)
         self.assertIn("1 to confirm before the merge", out)
+
+    def test_a_follow_on_that_swaps_the_approved_tests_for_an_empty_one_holds_the_gate(self):
+        # Review 2, N3: the note's Tests part named a new empty test, the approved test files
+        # stayed as they were, and the guard on weakened tests saw nothing.
+        code, out = self.follow_on("Sam", "01", new_test=True)
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(state="held", s01=f"merged {merge}", s02=f"merged {merge}"))
+        self.commit_all("report: bubble held")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("GATE: 1 ruling(s)", out)
+        self.assertIn("01: anything at all", out)
 
     # ── an overturned line, a correction ──
 
