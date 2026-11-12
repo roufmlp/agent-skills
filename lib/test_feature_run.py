@@ -470,6 +470,26 @@ class Feature(unittest.TestCase):
         with self.assertRaises(mod.Refusal):
             self.start(13 * 86400, final="ruled 2026-11-20", **done)
 
+    def test_a_final_check_whose_tooling_line_differs_at_each_start_has_three_starts(self):
+        # Review 4, note B: the count started again on any change of the row `final`, and a hook's
+        # refusal line carries a commit id that differs at each attempt. Eight such starts passed.
+        done = {"n01": "merged abc1234", "n02": "merged def5678"}
+        for texts in ([f"Timeout {30000 + n}ms" for n in range(4)], ["REFUSED: abc1234", "REFUSED: def5678"] * 2):
+            with self.subTest(texts=texts):
+                (pathlib.Path(self.tmp.name) / "records" / mod.STARTS).unlink(missing_ok=True)
+                for day, text in enumerate(texts[:3]):
+                    self.start(day * 86400, final=f"stopped: tooling: e2e: {text}", **done)
+                with self.assertRaises(mod.Refusal) as refused:
+                    self.start(3 * 86400, final=f"stopped: tooling: e2e: {texts[3]}", **done)
+                self.assertIn("3 automatic restarts in a row merged no new note", str(refused.exception))
+        # His ruling on the final check still starts the count again, and so does a second one on the same date.
+        for _ in range(2):
+            self.start(4 * 86400, final="ruled 2026-11-12", **done)
+            self.start(4 * 86400, final="stopped: tooling: e2e: Timeout 1ms", **done)
+            self.start(4 * 86400, final="stopped: tooling: e2e: Timeout 2ms", **done)
+            with self.assertRaises(mod.Refusal):
+                self.start(4 * 86400, final="stopped: tooling: e2e: Timeout 3ms", **done)
+
     def test_a_held_or_merged_feature_is_no_restart(self):
         for state in ("held", "merged"):
             for _ in range(5):

@@ -25,7 +25,7 @@ One row per note. State is one of `not started`, `running`, `merged <commit>`, `
 | --- | --- | --- | --- | --- | --- |
 | implementer | <model> | <effort> | <n> | <$> | <n> |
 
-<One row per role of the run. `feature_run.py roles` fills the tokens and the cost. A panel's agents are the session's own and have no row: the paths of their transcripts are in `.git/build-feature/<name>/panel/<nn>-<key>/agents.json`.>
+<One row per role of the run. `feature_run.py roles` fills the tokens and the cost. A panel's agents are the session's own and have no row: each one's transcript is among the session's subagents under the label `panel <nn>-<key>: ...`.>
 
 ## Time
 

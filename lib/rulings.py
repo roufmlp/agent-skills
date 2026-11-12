@@ -56,8 +56,9 @@ prints one step per call and refuses before the wait is over:
 2. three readers, one per seat of SEATS, each a `panel-review-persona` agent
    on PANEL_MODEL, judge every road and write `<seat>.md`: line 1 is
    `Rule: <road id>` or `Hold: <the one fact to measure first>`. The brief
-   `panel` writes gives the whole form of that file, and says that it
-   replaces the report form of the agent file;
+   `panel` writes gives the whole form of that file, and says in words that
+   it replaces the section "What you return" of the agent file, which is
+   what that section asks for before it gives way;
 3. `count` decides. No agent is the judge.
 
 The files of one stop are in `<git dir>/build-feature/<feature>/panel/<nn>-<key>/`,
@@ -72,12 +73,13 @@ than two holds: the written default rules, and only when a reader chose it.
 Every other count makes the row `waiting:`; so do a stop with no written
 default and a note that took MAX_DEFAULT_RULINGS rulings without him.
 
-A reader's file with no vote, a missing file, an agent with no transcript
-under its label or not on PANEL_MODEL, and a reader's transcript that names
-another seat's answer file each send the readers back once: `panel` removes
-the three answers (and the finder's, when the fault is the finder's), writes
-the reason to `second-round` and prints the spawns again. A second fault
-makes the row `waiting:`.
+A reader's file with no vote, an agent with no transcript under its label or
+not on PANEL_MODEL, and a reader's transcript that names another seat's
+answer file each send the readers back once: `panel` removes the three
+answers (and the finder's, when the fault is the finder's), leaves the empty
+file `second-round` and prints the spawns again. A second fault makes the row
+`waiting:`. A call while one or two readers' files are missing is no fault:
+`panel` prints "readers still run" and changes nothing.
 
 ## What a command refuses
 
@@ -203,11 +205,13 @@ USED = "used"          # its key for the sentences of his that answered somethin
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 SESSION = "CLAUDE_CODE_SESSION_ID"
 FINDER = "finder.json"  # the road finder's typed answer, in the panel's folder for one stop
-AGENTS = "agents.json"  # the transcripts of that panel's four agents: what a panel cost is read from them
-SECOND = "second-round"  # in a panel's folder once its readers were sent back; its text says why. They run no third time
+SECOND = "second-round"  # an empty file in a panel's folder once its readers were sent back. They run no third time
 MAX_OFFERED = 4         # the roads a question's own words offer besides the default: ids B to E
 MAX_FOUND = 2           # the roads a finder may add: ids F1 and F2
 MAX_CONDITIONS = 2      # the named tests one reader may attach to its vote
+# The sentence each reader's brief carries. `agents/panel-review-persona.md` gives
+# way only to a brief that says this in words (review 4, note F).
+REPLACES = "This form replaces the section \"What you return\" of your agent file, whole"
 PANEL_MODEL = "opus"    # the model the finder and each reader run on; a reader by an override at its spawn
 DISAGREED = "the readers disagreed"
 # The three seats of a panel. They are fixed here, and nobody derives a seat at
@@ -895,9 +899,11 @@ def names_line(sentence: str, number: str) -> bool:
     """Whether a sentence answers one line by name: it starts with the line's
     number and a colon and says something after them, as in `02: A` or `03:
     confirm`. A number further inside a sentence names nothing: "Give me 2
-    minutes" closed a [money] question on note 02 (review 3, fault 5)."""
+    minutes" closed a [money] question on note 02 (review 3, fault 5). A digit
+    straight after the colon makes it a clock time: "2:30 is when I am back"
+    closed one too (review 4, fault A)."""
     token = re.escape(number.lstrip("0") or "0") if number.isdigit() else re.escape(number)
-    return bool(re.match(rf"0*{token}\s*:\s*\S", sentence.strip()))
+    return bool(re.match(rf"0*{token}\s*:(?!\d)\s*\S", sentence.strip()))
 
 
 def said(words: str, since: float, who: str | None, used: dict, names: str | None = None) -> tuple[str, list[str]]:
@@ -1202,9 +1208,7 @@ def record(opts) -> int:
                           f"this note goes in --question.")
     elif opts.who == feature.who:
         claim = said(opts.words, since, feature.who, feature.used(), opts.note if kind in RISK_CLASSES else None)
-    more, agents = (), None
-    if opts.who == PANEL and kind in RISK_CLASSES:
-        more, agents = panel_ruling(feature, opts.note, opts.words)
+    more = panel_ruling(feature, opts.note, opts.words) if opts.who == PANEL and kind in RISK_CLASSES else ()
     lines = entry_text(opts.note, opts.kind, opts.date, opts.who, opts.question.strip(),
                        opts.words.strip().replace('"', "'"), touches, opts.undo.strip(), more)
     text = with_entry(feature.plan.read_text(encoding="utf-8"), lines)
@@ -1225,9 +1229,7 @@ def record(opts) -> int:
               f"(a merged one: a fix note) before the restart.")
     if claim:
         feature.mark_used(claim, f"note {opts.note}: {opts.question.strip()}")
-    if agents:
-        path, found = agents
-        path.write_text(json.dumps(found, indent=1) + "\n", encoding="utf-8")
+    if more:
         conditions = [line[len(CONDITION):].strip() for line in more if line.startswith(CONDITION)]
         print(f"panel: {more[0][len('Panel:'):].strip()}. " + (
             f"Each of its {len(conditions)} condition(s) is a done check of note {opts.note}, word for word; the "
@@ -1338,9 +1340,9 @@ def label(key: str, seat: str | None = None) -> str:
     return f"panel {key}: reader {seat}" if seat else f"panel {key}: finder"
 
 
-def panel_agents(folder: pathlib.Path) -> tuple[dict[str, str], dict[str, str]]:
-    """The transcripts of one panel's four agents among this session's
-    subagents, and what is wrong with the run of each.
+def panel_agents(folder: pathlib.Path) -> dict[str, str]:
+    """What is wrong with the run of each of one panel's four agents, read
+    from their transcripts among this session's subagents.
 
     An agent is found by its agent type and its label. The label carries the
     name of the panel's folder, so the agents of another question, another
@@ -1397,14 +1399,14 @@ def panel_agents(folder: pathlib.Path) -> tuple[dict[str, str], dict[str, str]]:
                            f"{PANEL_MODEL}")
         elif others:
             wrong[name] = f"the transcript of the {who} names the answer file of the reader {', '.join(others)}"
-    return found, wrong
+    return wrong
 
 
-def panel_ruling(feature: Feature, number: str, words: str) -> tuple[list[str], tuple[pathlib.Path, dict]]:
-    """What `record --who panel` adds to the entry, and the transcripts it
-    keeps. Refused unless the panel's files for this stop are all there, each
-    reader's file holds a vote, the four agents ran in this session as
-    `panel_agents` asks, the count gives a road, and `words` are that road.
+def panel_ruling(feature: Feature, number: str, words: str) -> list[str]:
+    """What `record --who panel` adds to the entry. Refused unless the panel's
+    files for this stop are all there, each reader's file holds a vote, the
+    four agents ran in this session as `panel_agents` asks, the count gives a
+    road, and `words` are that road.
     `standing` checked the row, the class and the wait before this."""
     name = f"note {number}" if number != FINAL else "the final check"
     question = report_rows(feature.report_text()).get(number, "")[len("stopped:"):].strip()
@@ -1417,8 +1419,7 @@ def panel_ruling(feature: Feature, number: str, words: str) -> tuple[list[str], 
     if missing:
         raise Refusal(f"the panel of {name} is not complete: {folder} holds no file of the reader "
                       f"{', '.join(missing)}. {again}")
-    found, wrong = panel_agents(folder)
-    wrong.update(slips)
+    wrong = {**panel_agents(folder), **slips}
     if wrong:
         raise Refusal(f"the panel of {name} is not sound: {'; '.join(wrong.values())}. {again}")
     result = count(votes)
@@ -1431,8 +1432,7 @@ def panel_ruling(feature: Feature, number: str, words: str) -> tuple[list[str], 
     conditions = []
     for seat in result["seats"]:
         conditions += [c for c in votes[seat]["conditions"] if c not in conditions]
-    return ([f"Panel: {result['mark']}, files {folder.name}", *[f"{CONDITION} {c}" for c in conditions]],
-            (folder / AGENTS, found))
+    return [f"Panel: {result['mark']}, files {folder.name}", *[f"{CONDITION} {c}" for c in conditions]]
 
 
 def road_lines(roads: list[dict], who: str | None) -> list[str]:
@@ -1505,14 +1505,16 @@ def panel(opts) -> int:
     head = f"panel: note {number} [{cls}]"
     again = "Then run this command again."
     written = [seat for seat in SEATS if seat in votes or seat in slips]
-    agents, wrong = {}, {}
-    if roads is not None and written:
-        wrong = {seat: f"the reader {seat} wrote no file" for seat in SEATS if seat not in written}
-        wrong.update(slips)
-        if not wrong:
-            # The agents are checked before the count is shown, so no note
-            # changes on a panel whose agents did not run as asked.
-            agents, wrong = panel_agents(folder)
+    if 0 < len(written) < len(SEATS):
+        # Each agent reports back on its own, so a call can come while a
+        # reader still writes. That is no fault, and it changes no state: two
+        # early calls sent a sound panel's question to him (review 4, note C).
+        print(f"{head}: readers still run: call again when all three have returned. No file yet of the reader "
+              f"{', '.join(seat for seat in SEATS if seat not in written)}.")
+        return 0
+    # The agents are checked before the count is shown, so no note changes on
+    # a panel whose agents did not run as asked.
+    wrong = slips or (panel_agents(folder) if written else {})
     if wrong:
         # No reader runs again beside the answers of the first round: all
         # three go, and all three run again, once (review 3, faults 2 and 6).
@@ -1520,7 +1522,7 @@ def panel(opts) -> int:
         if (folder / SECOND).exists():
             return to_him(feature, number, cls, question, f"The panel ran twice and is not sound: {why}. It runs "
                           f"no third time: the question waits for {feature.who}.")
-        (folder / SECOND).write_text(why + "\n", encoding="utf-8")
+        (folder / SECOND).touch()
         for seat in SEATS:
             (folder / f"{seat}.md").unlink(missing_ok=True)
         if "finder" in wrong:
@@ -1557,8 +1559,8 @@ def panel(opts) -> int:
                 "Read the note, the plan page and the code before you judge. Each claim of yours cites "
                 "`file:line`. State no number you did not read.", "", "## Your answer", "",
                 f"Write one file, {folder / f'{seat}.md'}, and write nothing else. The form below is the whole "
-                f"form of that file. It replaces the report form and the return stub of your agent file: no "
-                f"verdict lines, no list of issues, no cuts, no invariant marks and no scenario walk.", "",
+                f"form of that file and of what you return. {REPLACES}: no verdict lines, no list of issues, no "
+                f"cuts, no invariant marks and no scenario walk.", "",
                 "Line 1 is your vote. It is exactly one of these two forms, with no bold, no quotation marks and "
                 "nothing after it:", "",
                 "Rule: <one road id from the list above, such as A or F1>",
@@ -1578,8 +1580,6 @@ def panel(opts) -> int:
                   f"what it says.")
         print(f"  Each writes its own file in {folder}. Run this command again when all three have returned.")
         return 0
-    # The transcripts are kept whatever the count gives: a hold cost money too.
-    (folder / AGENTS).write_text(json.dumps(agents, indent=1) + "\n", encoding="utf-8")
     result = count(votes)
     print(f"{head}, step 3 of 3: the count")
     for seat, vote in votes.items():

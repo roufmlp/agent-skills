@@ -64,10 +64,9 @@ row that merged no new note (`count_start`), the final check's starts included.
 assistant messages by the `agentType` in each `.meta.json`, and rewrites the
 Tokens and Cost cells of the report's `## Roles` table in place, at list
 price from `audit_transcripts.PRICES`. It changes nothing else in the file.
-A panel's four agents are the session's own, so no row here counts them:
-`rulings.py panel` keeps the paths of their transcripts in the panel's
-`agents.json`, to be priced from `audit_transcripts.PRICES` once the first
-risk questions have run.
+A panel's four agents are the session's own, so no row here counts them.
+Each one's transcript is among the session's subagents under the label
+`panel <nn>-<key>: ...`.
 
 Exit 0 on success, 3 with `REFUSED: <why>` on a bad role override, a missing
 file or a feature name outside lower-case letters, digits and hyphens.
@@ -204,11 +203,13 @@ def count_start(reports: pathlib.Path, rows: dict, clock: float, state: str = ""
     again by itself, and when every note is merged and the report still reads
     `stopped` or `running`: the final check of an earlier run did not finish,
     and no row says so. The streak ends when a new note merged, when no such
-    start is left, or when the row `final` changed: his ruling on the final
-    check writes `ruled <date>` there. That row is compared, never exempt: an
-    exemption for a `ruled` row passed six daily starts that finished no final
-    check (review 3, note 7). Nothing else bounds these restarts: the plan
-    check passes each one."""
+    start is left, or when the row `final` changed to a `ruled` state: his
+    ruling on the final check writes `ruled <date>` there. The row is stored
+    at each start and compared, never exempt. An exemption for a `ruled` row
+    passed six daily starts that finished no final check (review 3, note 7),
+    and a count that started again on any change of the row never ended on a
+    tooling line that differs at each start (review 4, note B). Nothing else
+    bounds these restarts: the plan check passes each one."""
     states = [row.get("State", "") for row in rows.values()]
     merged = sum(1 for s in states if s.startswith("merged"))
     again = [s for s in states if s == "running" or RESTART_STATES.match(s)]
@@ -223,8 +224,10 @@ def count_start(reports: pathlib.Path, rows: dict, clock: float, state: str = ""
         past = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         past = {}
-    if not again or not isinstance(past, dict) or merged > past.get("merged", -1) or final != past.get("final", ""):
-        past = {"merged": merged, "starts": 0, "since": clock, "final": final}
+    if (not again or not isinstance(past, dict) or merged > past.get("merged", -1)
+            or (final.startswith("ruled") and final != past.get("final", ""))):
+        past = {"merged": merged, "starts": 0, "since": clock}
+    past["final"] = final
     refusal = None
     if again:
         if any(not OUTAGE.match(s) for s in again):

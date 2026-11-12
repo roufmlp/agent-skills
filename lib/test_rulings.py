@@ -788,7 +788,7 @@ class Commands(unittest.TestCase):
             # Review 3, fault 2: the agent file of the readers gives another file shape, so the brief
             # gives the whole form and says which one holds.
             self.assertIn(f"Write one file, {folder / f'{seat}.md'}, and write nothing else.", brief)
-            self.assertIn("It replaces the report form and the return stub of your agent file", brief)
+            self.assertIn('This form replaces the section "What you return" of your agent file, whole', brief)
             self.assertIn("Rule: <one road id from the list above, such as A or F1>", brief)
             self.assertIn("Hold: <the one fact that must be measured before any road is safe>", brief)
             self.assertIn("A file whose line 1 is anything else is refused", brief)
@@ -796,13 +796,16 @@ class Commands(unittest.TestCase):
             self.assertEqual([other for other in mod.SEATS if other != seat and f"{other}.md" in brief], [],
                              "a brief names no other seat's file")
         self.assertIn("Sam on release day", (folder / "operator.brief.md").read_text())
+        # Review 4, note F: the agent file gives way only to a brief that says so in words, and names this section.
+        persona = (pathlib.Path(__file__).resolve().parents[1] / "agents" / "panel-review-persona.md").read_text()
+        self.assertIn("## What you return\n\nWhere the brief this spawn names says in words that its form replaces "
+                      "this section,\nwhole, it does.", persona)
         self.panel_files(folder, vote_text("Rule: B", "c1"), vote_text("Rule: B", "c2"),
                          vote_text("Hold: the count of open orders"))
         self.ran()
         code, out = self.command("panel", "--note", "02")
         self.assertEqual(code, 0, out)
         self.assertIn("road B, 2 of 3", out)
-        self.assertEqual(sorted(json.loads((folder / mod.AGENTS).read_text())), ["builder", "exposed", "finder", "operator"])
         self.assertIn("drop the column in this migration", out)
         self.assertIn("--who panel", out)
         self.assertIn(f"--question '{self.QUESTION}'", out)
@@ -817,7 +820,7 @@ class Commands(unittest.TestCase):
         self.assertIn("is not sound", out)
         self.assertIn(why, out)
         self.assertEqual(self.answers(folder), [], "no reader runs again beside an answer of the first round")
-        self.assertIn(why, (folder / mod.SECOND).read_text())
+        self.assertEqual((folder / mod.SECOND).read_text(), "", "the marker is an empty file; the line says why")
         self.assertIn("step 2 of 3", out)
         for seat in mod.SEATS:
             self.assertIn(f'"panel {folder.name}: reader {seat}"', out)
@@ -849,13 +852,28 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.by_panel("drop the column in this migration", cls="money")[0], 3)
         self.assertNotIn("## Rulings", self.plan.read_text())
 
-    def test_a_reader_runs_again_only_with_the_two_others_and_from_no_answer(self):
+    def test_a_call_while_a_reader_still_runs_changes_nothing_and_prints_no_spawn(self):
         # Review 3, fault 6: with two answers in the folder, `panel` printed the third spawn alone.
+        # Review 4, note C: the repair made each early call a fault, and two early calls sent the question to him.
         folder = self.risk_stop()
-        self.panel_files(folder, vote_text("Rule: B"), vote_text("Rule: B"))
+        for files in ((vote_text("Rule: B"),), (vote_text("Rule: B"), vote_text("Rule: b."))):
+            self.panel_files(folder, *files)
+            before = {path.name: path.read_bytes() for path in folder.iterdir()}
+            for _ in range(3):
+                code, out = self.command("panel", "--note", "02")
+                self.assertEqual(code, 0, out)
+                self.assertIn("readers still run: call again when all three have returned", out)
+                self.assertIn(f"No file yet of the reader {', '.join(list(mod.SEATS)[len(files):])}.", out)
+                self.assertNotIn("description", out)
+            self.assertEqual({path.name: path.read_bytes() for path in folder.iterdir()}, before)
+            self.assertEqual(self.row("02"), f"stopped: {self.QUESTION}")
+        # The third file arrives, and the panel is counted as one round.
+        self.panel_files(folder, vote_text("Rule: B"), vote_text("Rule: B"), vote_text("Rule: A"))
+        self.ran()
         code, out = self.command("panel", "--note", "02")
         self.assertEqual(code, 0, out)
-        self.sent_back(folder, out, "the reader builder wrote no file")
+        self.assertIn("road B, 2 of 3", out)
+        self.assertFalse((folder / mod.SECOND).exists())
 
     def test_a_reader_on_another_model_sends_the_three_back(self):
         folder = self.risk_stop()
@@ -867,7 +885,6 @@ class Commands(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.sent_back(folder, out, "the reader exposed ran on `claude-fable-5-2`, and a panel's agents run on opus")
         self.assertIn("model opus", out)
-        self.assertFalse((folder / mod.AGENTS).exists())
 
     def test_a_reader_whose_transcript_names_another_seats_answer_is_refused(self):
         # Review 3, fault 6: nothing but a sentence in the brief kept one reader from another's answer.
@@ -984,7 +1001,6 @@ class Commands(unittest.TestCase):
                                                "db/owner.test.ts: the old column is gone after the migration",
                                                "db/owner.test.ts: a rollback restores it"])
         self.assertEqual(self.row("02"), "not started")
-        self.assertEqual(sorted(json.loads((folder / mod.AGENTS).read_text())), ["builder", "exposed", "finder", "operator"])
         self.assertEqual([e["number"] for e in mod.open_entries(entries, "Sam")], ["02"])
 
     def test_a_found_road_rules_with_two_of_three(self):
@@ -1027,7 +1043,6 @@ class Commands(unittest.TestCase):
         self.assertIn("whether the old app still reads the column", out)
         self.assertEqual(self.by_panel(DEFAULT)[0], 3)
         self.assertNotIn("## Rulings", self.plan.read_text())
-        self.assertTrue((folder / mod.AGENTS).is_file(), "a hold is measured too")
         self.later(30)
         self.says("02: drop it.")
         self.assertEqual(self.record("02", "migration", "Sam", "02: drop it", question=self.QUESTION)[0], 0)
@@ -1365,12 +1380,16 @@ class Commands(unittest.TestCase):
                          ["look at the token cost, please", "confirm all", "ok"])
         self.assertEqual(mod.spoken('  He said  "Yes".'), "he said 'yes'")
         for sentence, number in (("02: yes, up to 50", "02"), ("02: a", "02"), ("2: a", "02"), ("03 : confirm", "03"),
-                                 ("final: round half up", "final"), ("10: confirm", "10")):
+                                 ("final: round half up", "final"), ("10: confirm", "10"), ("02: A", "02"), ("2: A", "02"),
+                                 (" 02: confirm", "02"), ("02:A", "02"), ("02: 3 retries", "02")):
             self.assertTrue(mod.names_line(sentence, number), sentence)
         # Review 3, fault 5: a number inside a sentence about something else closed a risk line.
         for sentence, number in (("yes, up to 50", "02"), ("yes for 2, up to 50", "02"), ("give me 2 minutes, i am on a call", "02"),
                                  ("i will be back at 3: do not wait for me", "03"), ("re 02: yes", "02"), ("12: yes", "02"),
-                                 ("20: yes", "02"), ("02", "02"), ("02:", "02"), ("02 yes", "02"), ("finally: yes", "final")):
+                                 ("20: yes", "02"), ("02", "02"), ("02:", "02"), ("02 yes", "02"), ("finally: yes", "final"),
+                                 # Review 4, fault A: a sentence that starts with a clock time closed a risk question.
+                                 ("2:30 is when I am back.", "02"), ("3:30 works for me.", "03"), ("10:30 is fine", "10"),
+                                 ("02:30 is when I am back", "02")):
             self.assertFalse(mod.names_line(sentence, number), sentence)
 
     def test_no_session_no_words(self):
@@ -1429,6 +1448,11 @@ class Commands(unittest.TestCase):
         # Review 3, fault 5: this sentence holds the number 2 and closed the [money] question.
         self.says("Give me 2 minutes, I am on a call.")
         code, out = self.record("02", "money", "Sam", "Give me 2 minutes, I am on a call")
+        self.assertEqual(code, 3, out)
+        self.assertIn('does not start with `02:`', out)
+        # Review 4, fault A: a clock time whose hour is the note's number closed it too.
+        self.says("2:30 is when I am back.")
+        code, out = self.record("02", "money", "Sam", "2:30 is when I am back")
         self.assertEqual(code, 3, out)
         self.assertIn('does not start with `02:`', out)
         self.assertNotIn("## Rulings", self.plan.read_text())
@@ -1534,6 +1558,10 @@ class Commands(unittest.TestCase):
         # Review 3, fault 5: a sentence about something else closed line 03, because it holds a 3.
         self.says("Thanks. I will be back at 3: do not wait for me.")
         code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "I will be back at 3: do not wait for me")
+        self.assertEqual(code, 3, out)
+        self.assertIn("does not start with `03:`", out)
+        self.says("3:30 works for me.")  # review 4, fault A
+        code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "3:30 works for me")
         self.assertEqual(code, 3, out)
         self.assertIn("does not start with `03:`", out)
         self.says("03: confirm")
