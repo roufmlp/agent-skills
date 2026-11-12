@@ -13,6 +13,7 @@ Written 2026-11-03 (stage two, session 5). The switch moves this file into the p
 | `Bash(python3 ~/.claude/skills/workflow/lib/*)` | `plan_check.py`, `feature_run.py`, `rulings.py`, `suite.py`, `note_check.py`, `side_by_side.py`: the scripts every role and the session call. |
 | `mcp__ccd_host__request_keep_awake` | Keep-awake for the run's hours. |
 | `PushNotification` | The phone notice at the end and from the watchdog, and each question a note stopped on, with its default. |
+| No rule for the Agent tool | The session spawns three kinds of agent itself: `workflow:build-feature-ruling-reader` after each ruling; and for a risk-class question Abdul did not answer, one `workflow:build-feature-road-finder` and then three `workflow:panel-review-persona` at the same time, each with the model override `opus`. The permission docs give the rule form `Agent(<agent name>)` (read 2026-11-12). Whether one of these spawns prompts in auto mode is not measured, and neither is the form of a plugin agent's name in such a rule, so the JSON below lists none. The first live panel is the place to add what prompts. |
 | `ScheduleWakeup` | The 30-minute watchdog, and the wait for an answer before a default rules. |
 | `TaskStop` | The watchdog stops a run that has written nothing in 30 minutes before it starts the run again. |
 
@@ -31,7 +32,7 @@ Written 2026-11-03 (stage two, session 5). The switch moves this file into the p
 | `Edit(~/code/**)` | The implementer's and note checker's edits in a product tree; every product lives under `~/code`. |
 | `Write(~/code/**)` | The implementer's new files, every role's report, the verifier's throwaway walk spec, the side-by-side page. |
 | `Edit(~/.claude/pending.md)` | A "Decide" entry from the session, for a note that waits for Abdul. Since 2026-11-12 no build agent writes there: a stop travels in the agent's typed answer. |
-| `Write(~/code/*/.git/build-feature/**)` | The reject reports, inside the git common dir so no report is ever read as a note. Covered by the `~/code` rule above; listed so the path is on record. |
+| `Write(~/code/*/.git/build-feature/**)` | The reject reports, inside the git common dir so no report is ever read as a note; and under `panel/<nn>-<key>/` the road finder's `finder.json` and each reader's own file, which `rulings.py` counts. Covered by the `~/code` rule above; listed so the path is on record. |
 
 Not allowed, on purpose: `rm` (the classifier judges each delete; the verifier's walk spec and the merger's `worktree remove --force` on a fresh retry are the only ones the roles make), `vercel`, `supabase` and `migrate:production` (the live-key deny refuses them in a graduated repo, and a rehearsal never deploys), and any `Bash(sudo:*)`.
 

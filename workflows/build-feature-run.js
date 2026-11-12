@@ -29,7 +29,8 @@ const MAX_STRIKES = 3
 const FIX_ROUNDS = 3 // the fix rounds a feature's final check gets before it waits for the human
 const MAIN_MOVES = 2 // the times a run checks again because main moved before the merge
 // The classes a question stop may carry. Any other value, an absent one
-// included, is `unclassified`: it waits for the human like a risk class.
+// included, is `unclassified`: it waits for the human, since no panel can
+// rule a question nobody typed a class for.
 const CLASSES = ['none', 'money', 'access', 'migration', 'data leaving']
 
 const feature = args.feature

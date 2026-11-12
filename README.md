@@ -9,14 +9,14 @@ What survived fits on one page. A fast lane gives an idea four days to become a 
 | Skills I use | 35 | 23 |
 | of them my own | 11 | 6 |
 | Hooks | 33 | 7 |
-| Agent definitions | 16 | 15 |
+| Agent definitions | 16 | 16 |
 | Minutes of build session per shipped change | 69 | measured after three products |
 
 ```
 claude plugin install workflow --marketplace roufmlp/agent-skills
 ```
 
-The plugin holds my six public skills, fifteen agents and four hooks. It installs Matt Pocock's plugin beside them, 38 skills, because 17 of the skills I use are his.
+The plugin holds my six public skills, sixteen agents and four hooks. It installs Matt Pocock's plugin beside them, 38 skills, because 17 of the skills I use are his.
 
 ## How it works
 
@@ -29,7 +29,7 @@ The fast lane is for a product with no customer yet. A brief of one page, a prot
 
 The careful lane starts on the day real users or real data arrive. `/build-feature` interviews me once, writes the feature as change notes of half a page each, with the tests that prove them, and I approve the plan. A workflow then builds each note in a fresh agent, test-first, and two more agents try to reject it: one runs the checks and walks the screens with hostile input, one reads the diff. The final check runs the whole suite on the merged feature before it reaches main, and nothing pushes.
 
-A run does not wait at my keyboard. A note that stops on a question sends it to my phone with the agent's written default; after fifteen minutes with no answer the default rules, and the run starts again by itself. A question about money, access, a migration's direction or data leaving the product never takes a default: that note waits for me and the others carry on. A note that fails three times gets one more try on the change its last reject report asks for, and waits for me if it fails again. Whatever was decided without me is listed in the report, and the feature stays off main until I have confirmed each line. A ruling or an answer in my name must quote a whole message or sentence I typed in that session after I was shown the question, and git hooks hold main, and the push of it, while a line waits. The hooks stop the easy roads; `skills/build-feature/when-a-run-stops.md` lists what they do not stop.
+A run does not wait at my keyboard. A note that stops on a question sends it to my phone with the agent's written default; after fifteen minutes with no answer the default rules, and the run starts again by itself. A question about money, access, a migration's direction or data leaving the product never takes a default. One agent first looks for a road the question does not offer. Three readers then judge every road, each from the seat of someone who pays when it is wrong: the person the rule protects, me on release day, and the next agent to build on the code. A count of their three answers decides, and no agent is the judge: two on one road and it rules, two that ask for a fact first and the note waits for me, no two alike and the written default rules. A note that fails three times gets one more try on the change its last reject report asks for, and waits for me if it fails again. Whatever was decided without me is listed in the report, and the feature stays off main until I have confirmed each line. A ruling or an answer in my name must quote a whole message or sentence I typed in that session after I was shown the question, and git hooks hold main, and the push of it, while a line waits. The hooks stop the easy roads; `skills/build-feature/when-a-run-stops.md` lists what they do not stop.
 
 ## Where a reminder failed, a hook refuses
 
@@ -54,9 +54,9 @@ A refusal names what to do instead. None of them can be skipped from an agent's 
 | `build-feature` | The interview, the plan, the run, the rulings and the gate before main | careful |
 | `panel-review` | A review of a document by several perspectives, with a gate on the findings | both |
 | `parallel-hunt` | A bug hunt: a finder and a fixer over a shared register, with gates on every claim and fix | careful |
-| 8 `build-feature-*` agents | Implementer, verifier, reviewer, note checker, merger, final verifier, final reviewer, ruling reader | careful |
+| 9 `build-feature-*` agents | Implementer, verifier, reviewer, note checker, merger, final verifier, final reviewer, ruling reader, road finder | careful |
 | 5 `parallel-hunt-*` agents | Finder, fixer, claim gate, fix gate and its critical form | careful |
-| 2 `panel-review-*` agents | Persona and gate | both |
+| 2 `panel-review-*` agents | Persona and gate. The persona also sits as each of the three readers of a risk-class question | both |
 | `workflows/build-feature-run.js` | The script that drives the agents, three notes at a time | careful |
 | `templates/` | The brief, the product `CLAUDE.md`, a change note, a plan, a report and the git hooks a product installs | both |
 
@@ -69,8 +69,8 @@ A run that stops leaves its state in the feature's report. The cases, from the r
 | What you see | What to do |
 |---|---|
 | A note row reads `failed` after three strikes | Nothing. The session changes the note as its last reject report asks and starts again, once per note |
-| A note row reads `stopped:` with a question | Answer on your phone inside fifteen minutes, or the written default rules and the run starts again |
-| A note row reads `waiting:` | Only you rule on it: a risk-class question, a second failure, or a tool fault with no listed repair. `/build-feature <name>` opens on the row; the other notes ran on |
+| A note row reads `stopped:` with a question | Answer on your phone inside fifteen minutes. After that the written default rules, or for a risk-class question the count of three readers, and the run starts again |
+| A note row reads `waiting:` | Only you rule on it: a risk-class question the readers held for a fact, a question with no typed class, a second failure, or a tool fault with no listed repair. `/build-feature <name>` opens on the row; the other notes ran on |
 | A note row reads `stopped: tooling:` | A hook, a check script or the app refused a step. The session applies the listed repair and starts again; no gate is loosened |
 | `State: held` | The final check passed, and rulings made without you wait for your answer. `/build-feature <name>` lists them; the merge follows your last answer |
 | `stopped: API errors` | A usage limit or an outage. Wait for the reset, then start again; merged notes are kept |

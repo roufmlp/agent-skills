@@ -24,6 +24,10 @@ One row per note. State is one of `not started`, `running`, `merged <commit>`, `
 | Role | Model | Effort | Tokens | Cost | Strikes |
 | --- | --- | --- | --- | --- | --- |
 | implementer | <model> | <effort> | <n> | <$> | <n> |
+| road finder, <nn> | <model> | <effort> | <n> | <$> | |
+| panel readers, <nn> | <model> | <effort> | <n> | <$> | |
+
+<One row per role of the run. `feature_run.py roles` fills the tokens and the cost, and adds the last two rows for each risk-class question a panel judged: its road finder, and its three readers together. A note's second such question is `<nn> (2)`.>
 
 ## Time
 
@@ -51,7 +55,7 @@ Blast radius: <who or what breaks if this is wrong: one word, then a clause>
 
 ## Decide
 
-<One line per note that stopped on a question, with the class, the question and the agent's written default: `<nn>: [<class>] <question> Default: <default>`; `final:` opens a line of the final check. The class is the one the agent typed, `none`, `money`, `access`, `migration` or `data leaving`, and `unclassified` when it typed none: that one waits for Abdul like a risk class. The session rules on each: Abdul's answer, or the default once the wait is over for a class of `none`. A line stays while its row stops or waits. A line `<nn>: [correction] <what the note checker corrected>` stays for good: the plan check counts it against the plan's `[correction]` entries.>
+<One line per note that stopped on a question, with the class, the question and the agent's written default: `<nn>: [<class>] <question> Default: <default>`; `final:` opens a line of the final check. The class is the one the agent typed, `none`, `money`, `access`, `migration` or `data leaving`, and `unclassified` when it typed none: that one waits for Abdul. The session rules on each: Abdul's answer, or once the wait is over the default for a class of `none` and a panel's count for a risk class. A line stays while its row stops or waits. A line `<nn>: [correction] <what the note checker corrected>` stays for good: the plan check counts it against the plan's `[correction]` entries.>
 
 ## Tooling stops
 
@@ -59,4 +63,4 @@ Blast radius: <who or what breaks if this is wrong: one word, then a clause>
 
 ## Ruled while you were away
 
-<One line per ruling Abdul did not make and has not confirmed, a correction by the note checker and every `[follows <nn>]` entry included: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>
+<One line per ruling Abdul did not make and has not confirmed, a correction by the note checker and every `[follows <nn>]` entry included: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. A panel's line also carries the count, each reader's vote and reason, the conditions, each found road marked "a road the question did not offer" with its evidence and undo cost, and each candidate road with the fact it needs from him. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>
