@@ -69,9 +69,13 @@ A commit that concludes a merge by hand, with `MERGE_HEAD` present, runs the
 
 ## What `merge` does
 
-The duplicate-number check on the merged index, and on a merge into main the
-red check for the whole feature: `suite.py red --base HEAD`, main's code from
-before the merge ("Whether the build agents work test-first", ticket 22).
+The duplicate-number check on the merged index. On a merge into main, first
+the gate: a `changes/<feature>/plan.md` the merge brings, whose `## Rulings`
+part holds a ruling by `default` or `panel` with no `Confirmed:` or
+`Overturned:` line, refuses the merge (`rulings.open_entries`). Abdul confirms
+what was ruled while he was away once, before local main. Then the red check
+for the whole feature: `suite.py red --base HEAD`, main's code from before the
+merge ("Whether the build agents work test-first", ticket 22).
 
 ## What `push` does
 
@@ -95,6 +99,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rulings  # noqa: E402
 import suite  # noqa: E402
 
 REFUSED = 3
@@ -102,6 +107,7 @@ EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 MAIN_BRANCHES = ("main", "master")
 DESIGN = "docs/design.md"
 CHANGES = "changes"
+PLAN = "plan.md"
 LAST_APPLIED = "last-production-migration"
 NOTE_FILE = re.compile(r"^(\d+)(?:[-_].*)?\.md$")
 PAGE = re.compile(r"(^|/)app/(.*/)?page\.(tsx|jsx|ts|js|mdx)$")
@@ -451,6 +457,27 @@ def check_commit(tree) -> int:
     return 0
 
 
+def gate_refusals(tree) -> list[str]:
+    """Each plan page the merge brings whose rulings still wait for Abdul: a
+    ruling by `default` or `panel` with no `Confirmed:` or `Overturned:` line,
+    or a line in the rulings part that cannot be placed."""
+    reasons = []
+    for _, path in staged_changes(tree):
+        parts = path.split("/")
+        if len(parts) != 3 or parts[0] != CHANGES or parts[2] != PLAN:
+            continue
+        entries, faults = rulings.read(index_text(tree, path) or "")
+        waiting = rulings.open_entries(entries)
+        if faults:
+            reasons.append(f"{path}: " + " ".join(faults))
+        if waiting:
+            reasons.append(f"{path}: {len(waiting)} ruling(s) by default or panel have no "
+                           f"`Confirmed:` or `Overturned:` line, so the feature stays off "
+                           f"{branch_name(tree)}:\n  " + "\n  ".join(rulings.away_lines(waiting)) +
+                           "\n  The next `/build-feature` shows him the list.")
+    return reasons
+
+
 def check_merge(tree) -> int:
     reasons = migrations_refusal(index_paths(tree))
     if reasons:
@@ -459,6 +486,9 @@ def check_merge(tree) -> int:
     if branch not in MAIN_BRANCHES:
         print("note check: migrations numbered once; not a merge into main, so no red check")
         return 0
+    reasons = gate_refusals(tree)
+    if reasons:
+        raise Refusal("\n".join(reasons))
     print(f"note check: merge into {branch}; running the red check against {branch} before "
           f"the merge", flush=True)
     # git runs a hook with GIT_INDEX_FILE=.git/index and friends in its

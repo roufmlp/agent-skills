@@ -589,6 +589,63 @@ class Merges(Product):
         self.assertIn("share the number 0001", done.stdout + done.stderr)
         self.assertNotIn("names no note", done.stdout + done.stderr)
 
+    # ── the gate before local main ──
+
+    PLAN = textwrap.dedent("""\
+        # Bubble plan
+
+        ## Rulings
+
+        - [none] 02: the count shows zero or hides at zero
+          Ruled: 2026-11-12, default, "hide it at zero"
+          Touches: none
+          Undo: one line in the order page
+
+        Approved: 2026-11-03
+    """)
+
+    def feature_with_plan(self, plan):
+        self.write("src/lib/money.ts", "export const money = 2;\n")
+        self.write("changes/bubble/plan.md", plan)
+        self.write("changes/bubble/03-money.md", "# 03 Money\n\nScreens: none\nRisk: none\n\n## Tests\n\n- `tests/money.test.ts`\n")
+        self.write("tests/money.test.ts", 'it("counts money", () => {});\n')
+        code, out = self.commit("money and the plan", "src", "tests", "changes")
+        self.assertEqual(code, 0, out)
+        self.git("checkout", "-q", "main")
+        return self.head()
+
+    def test_a_merge_into_main_is_refused_while_a_default_ruling_has_no_answer(self):
+        main = self.feature_with_plan(self.PLAN)
+        done = self.git("merge", "feature/bubble", check=False)
+        text = done.stdout + done.stderr
+        self.assertNotEqual(done.returncode, 0, text)
+        self.assertIn("REFUSED: changes/bubble/plan.md: 1 ruling(s) by default or panel have no "
+                      "`Confirmed:` or `Overturned:` line", text)
+        self.assertIn("02: the count shows zero or hides at zero", text)
+        self.assertNotIn("running the red check", text)
+        self.assertEqual(self.head(), main)
+        self.git("merge", "--abort", check=False)
+
+    def test_a_merge_into_main_passes_once_every_ruling_is_answered(self):
+        main = self.feature_with_plan(self.PLAN.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
+    def test_a_merge_into_main_is_refused_on_a_ruling_line_it_cannot_place(self):
+        main = self.feature_with_plan(self.PLAN.replace("  Undo:", "  Confirmed: yes\n  Undo:"))
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertIn("is not a ruling line", done.stdout + done.stderr)
+        self.assertEqual(self.head(), main)
+        self.git("merge", "--abort", check=False)
+
+    def test_a_ruling_by_the_person_needs_no_answer_at_the_merge(self):
+        main = self.feature_with_plan(self.PLAN.replace(", default, ", ", Sam, "))
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
 
 # ── pre-push ─────────────────────────────────────────────────────────────────
 

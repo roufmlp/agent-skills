@@ -47,6 +47,7 @@ class Feature(unittest.TestCase):
         for path, text in fixture.FILES.items():
             self.write(self.repo, path, text)
         self.git(self.repo, "init", "-q", "-b", "main")
+        self.git(self.repo, "config", "user.name", "Sam Doe")
         self.git(self.repo, "add", ".")
         self.git(self.repo, "commit", "-qm", "approved plan")
         self.tree = self.repo / ".claude" / "worktrees" / "feature-bubble"
@@ -228,7 +229,8 @@ class Feature(unittest.TestCase):
         self.assertEqual(got["strikes"], {"reviewer": 2})
 
     def test_args_earlier_is_empty_with_no_report(self):
-        self.assertEqual(self.args()["earlier"], {"defaults": [], "edits": [], "final": [], "strikes": {}})
+        self.assertEqual(self.args()["earlier"],
+                         {"defaults": [], "edits": [], "final": [], "tooling": [], "strikes": {}})
 
     def test_starting_state_rules(self):
         self.assertEqual(mod.starting_state("merged abc1234"), ("merged abc1234", False))
@@ -242,6 +244,112 @@ class Feature(unittest.TestCase):
                          ("stopped: done check passes before the work", False))
         self.assertEqual(mod.starting_state(None), ("not started", False))
         self.assertEqual(mod.starting_state("not started"), ("not started", False))
+        self.assertEqual(mod.starting_state("stopped: tooling: hook: PreToolUse:Write hook error"),
+                         ("not started", True))
+        self.assertEqual(mod.starting_state("waiting: failed again after its re-arm"),
+                         ("waiting: failed again after its re-arm", False))
+
+    # ── away mode ──
+
+    REPORT = textwrap.dedent("""\
+        # Bubble report
+
+        State: {state}
+
+        ## Notes
+
+        | Note | State | Strikes | Attempts | Last report |
+        | --- | --- | --- | --- | --- |
+        | 01 | {s01} | 0 | 1 | |
+        | 02 | {s02} | 0 | 1 | |
+
+        ## Tooling stops
+
+        2026-11-12 02: hook: PreToolUse:Write hook error: an isolated git worktree
+    """)
+
+    RULINGS = textwrap.dedent("""\
+        ## Rulings
+
+        - [re-arm] 02: note 02 failed three strikes on the label
+          Ruled: 2026-11-12, default, "the done check names the label Reports"
+          Touches: none
+          Undo: one line
+
+    """)
+
+    def rule(self, part=None):
+        plan = fixture.PLAN.replace("Approved: 2026-11-03", (part or self.RULINGS) + "Approved: 2026-11-03")
+        self.write(self.tree, "changes/bubble/plan.md", plan)
+
+    def commit(self, message):
+        self.git(self.tree, "add", "-A")
+        self.git(self.tree, "commit", "-qm", message)
+
+    def test_args_carries_the_wait_from_its_one_place(self):
+        import rulings
+        self.assertEqual(self.args()["ruling_wait_seconds"], rulings.RULING_WAIT_SECONDS)
+
+    def test_args_marks_a_note_that_had_its_re_arm(self):
+        self.rule()
+        one, two = self.args()["notes"]
+        self.assertFalse(one["rearmed"])
+        self.assertTrue(two["rearmed"])
+
+    def test_args_lists_the_rulings_that_wait_at_the_gate(self):
+        self.assertEqual((self.args()["gate_open"], self.args()["away"]), ([], []))
+        self.rule()
+        got = self.args()
+        self.assertEqual(got["gate_open"], ["02"])
+        self.assertEqual(len(got["away"]), 1)
+        self.assertIn("02: note 02 failed three strikes on the label", got["away"][0])
+        self.rule(self.RULINGS.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        got = self.args()
+        self.assertEqual(got["gate_open"], [])
+        self.assertEqual(len(got["away"]), 1, "the report keeps the line once it is confirmed")
+
+    def test_args_keeps_the_earlier_tooling_stops(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="not started"))
+        self.assertEqual(self.args()["earlier"]["tooling"],
+                         ["2026-11-12 02: hook: PreToolUse:Write hook error: an isolated git worktree"])
+
+    def test_a_note_changed_after_its_worktrees_base_starts_fresh(self):
+        note_tree = self.repo / ".claude" / "worktrees" / "note-bubble-02"
+        self.git(self.repo, "worktree", "add", "-q", str(note_tree), "-b", "note/bubble/02", "feature/bubble")
+        one, two = self.args()["notes"]
+        self.assertFalse(two["fresh"], "an unchanged note keeps its tree")
+        self.write(self.tree, "changes/bubble/02-order.md", fixture.NOTE_02.replace("report count", "count"))
+        self.commit("ruling: note 02")
+        one, two = self.args()["notes"]
+        self.assertTrue(two["fresh"], "the old tree holds the note from before the ruling")
+        self.assertFalse(one["fresh"])
+
+    def test_a_note_whose_test_changed_after_the_base_starts_fresh(self):
+        self.git(self.repo, "branch", "note/bubble/02", "feature/bubble")
+        self.write(self.tree, "e2e/order.spec.ts", "// spec, changed by a ruling\n")
+        self.assertTrue(self.args()["notes"][1]["fresh"], "an uncommitted change counts too")
+
+    def test_held_is_true_only_while_nothing_but_the_plan_and_the_report_changed(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="held", s01="merged abc1234", s02="merged def5678"))
+        self.commit("report: bubble held")
+        self.assertTrue(self.args()["held"])
+        self.rule(self.RULINGS.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        self.commit("rulings: answered")
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="held", s01="merged abc1234", s02="merged def5678") + "\nroles\n")
+        self.commit("report: bubble roles")
+        self.assertTrue(self.args()["held"], "the answers and the roles cells change no code")
+        self.write(self.tree, "src/a.ts", "export const a = 2;\n")
+        self.commit("fix")
+        self.assertFalse(self.args()["held"], "code changed since the final check passed")
+
+    def test_held_is_false_for_any_other_state(self):
+        self.write(self.tree, "changes/bubble/report.md",
+                   self.REPORT.format(state="stopped", s01="merged abc1234", s02="merged def5678"))
+        self.commit("report: bubble stopped")
+        self.assertFalse(self.args()["held"])
 
     def test_args_reads_the_staging_line(self):
         self.write(self.tree, "CLAUDE.md", "# P\n\nStaging: https://staging.example.test\n")

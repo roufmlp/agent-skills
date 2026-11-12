@@ -127,6 +127,7 @@ class Product(unittest.TestCase):
         for path, text in FILES.items():
             self.write(path, text)
         self.git("init", "-q", "-b", "main")
+        self.git("config", "user.name", "Sam Doe")
         self.git("add", ".")
         self.git("commit", "-qm", "approved plan")
         self.git("checkout", "-qb", "feature/bubble")
@@ -290,26 +291,35 @@ class PlanRoad(Product):
         self.assertEqual(code, 0, out)
         self.assertIn("approved 2026-11-04", out)
 
-    def test_a_note_stopped_on_a_question_is_the_short_interview_road(self):
+    def test_a_note_stopped_on_a_question_is_the_ruling_road(self):
         self.write("changes/bubble/report.md", report(s02="stopped: done check passes before the work"))
         self.commit_all()
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 2, out)
-        self.assertIn("INTERVIEW: failed notes 02", out)
+        self.assertIn("RULING: notes 02 (stopped: done check passes before the work)", out)
 
     def test_a_note_stopped_by_the_run_itself_is_not_the_interview_road(self):
-        for state in ("stopped: API errors", "stopped: verifier returned no result", "stopped: worktree: Error"):
+        for state in ("stopped: API errors", "stopped: verifier returned no result", "stopped: worktree: Error",
+                      "stopped: tooling: hook: PreToolUse:Write hook error: an isolated git worktree"):
             self.write("changes/bubble/report.md", report(s02=state))
             self.commit_all()
             code, out = self.run_check("plan", "bubble")
             self.assertEqual(code, 0, (state, out))
 
-    def test_failed_note_is_the_short_interview_road(self):
+    def test_failed_note_is_the_ruling_road(self):
         self.write("changes/bubble/report.md", report(s02="failed"))
         self.commit_all()
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 2)
-        self.assertIn("INTERVIEW: failed notes 02 in changes/bubble/report.md", out)
+        self.assertIn("RULING: notes 02 (failed) in changes/bubble/report.md", out)
+
+    def test_a_note_that_waits_for_abdul_does_not_hold_the_other_notes(self):
+        self.write("changes/bubble/report.md", report(s01="not started", s02="waiting: failed again after its re-arm"))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plan: approved", out)
+        self.assertIn("waiting for Sam: 02", out)
 
     def test_over_budget_needs_the_pruning_question(self):
         self.over_budget()
@@ -334,6 +344,206 @@ class PlanRoad(Product):
         code, out = self.run_check("plan", "Bubble/../x")
         self.assertEqual(code, 3)
         self.assertIn("not a feature name", out)
+
+
+RULING_02 = textwrap.dedent("""\
+    ## Rulings
+
+    - [none] 02: the count shows zero or hides at zero
+      Ruled: 2026-11-12, default, "hide it at zero"
+      Touches: none
+      Undo: one line in the order page
+
+""")
+
+
+def ruled(part=RULING_02, plan=PLAN):
+    return plan.replace("Approved: 2026-11-03", part + "Approved: 2026-11-03")
+
+
+class Rulings(Product):
+    """A ruling written after the approval covers the change it names."""
+
+    def change_02(self):
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero"))
+        self.write("e2e/order.spec.ts", "// spec, hidden at zero\n")
+
+    def test_a_ruled_line_covers_a_changed_note_and_its_test(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled())
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plan: approved 2026-11-03", out)
+        self.assertIn("1 ruling(s)", out)
+
+    def test_a_changed_note_with_no_ruled_line_still_refuses(self):
+        self.change_02()
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("changed after the approval at", out)
+        self.assertIn("  changes/bubble/02-order.md", out)
+        self.assertIn("  e2e/order.spec.ts", out)
+
+    def test_a_ruling_on_one_note_does_not_cover_another(self):
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A round bubble"))
+        self.write("changes/bubble/report.md", report(s01="not started"))
+        self.write("changes/bubble/plan.md", ruled())
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("  changes/bubble/01-header.md", out)
+        self.assertNotIn("  changes/bubble/plan.md", out)
+
+    def test_a_ruling_from_before_the_approval_covers_nothing_new(self):
+        self.write("changes/bubble/plan.md", ruled() + "Approved: 2026-11-12\n")
+        self.commit_all("ruled and approved again")
+        self.change_02()
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("  changes/bubble/02-order.md", out)
+
+    def test_the_plan_may_change_only_in_its_rulings_part(self):
+        self.write("changes/bubble/plan.md", ruled().replace("Answer: yes, add it", "Answer: no"))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("  changes/bubble/plan.md", out)
+
+    def test_a_ruled_line_with_no_touches_line_refuses_the_restart(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(RULING_02.replace("  Touches: none\n", "")))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("no `Touches:` line", out)
+
+    def test_a_merged_note_is_never_edited_even_under_a_ruling(self):
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(s01=f"merged {merge}"))
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A round bubble"))
+        self.write("changes/bubble/plan.md", ruled(RULING_02.replace("] 02:", "] 01:")))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("changes/bubble/01-header.md", out)
+        self.assertIn("a merged note is never edited", out)
+
+    def test_a_note_ruled_and_then_merged_stays_covered(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled())
+        self.commit_all("ruling: note 02")
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(s02=f"merged {merge}"))
+        self.commit_all("report: note 02 merged")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+
+    def test_a_fix_note_passes_with_its_own_entry(self):
+        fix = NOTE_02.replace("# 02 Order page", "# 03 Order count at zero").replace(
+            "Waits for: 01", "Waits for: 02").replace("e2e/order", "e2e/zero")
+        self.write("changes/bubble/03-zero.md", fix)
+        self.write("e2e/zero.spec.ts", "// spec\n")
+        self.write("e2e/zero.sh", "exit 1\n")
+        self.commit_all("fix note")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, "an added note with no ruling refuses")
+        part = RULING_02 .rstrip("\n") + textwrap.dedent("""
+            - [follows 02] 03: the fix note for the count at zero
+              Ruled: 2026-11-12, default, "ruling on 02: hide it at zero"
+              Touches: none
+
+            """)
+        self.write("changes/bubble/plan.md", ruled(part))
+        self.commit_all("ruling")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+
+    def test_a_touched_note_waits_for_the_ruled_note(self):
+        part = textwrap.dedent("""\
+            ## Rulings
+
+            - [none] 01: the bubble opens a sheet or a page
+              Ruled: 2026-11-12, default, "a sheet"
+              Touches: 02
+              Undo: one component
+            - [follows 01] 02: the count sits in the sheet
+              Ruled: 2026-11-12, default, "ruling on 01: a sheet"
+              Touches: none
+
+            """)
+        self.write("changes/bubble/report.md", report(s01="not started"))
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble that opens a sheet"))
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("Waits for: 01", "Waits for: none"))
+        self.write("changes/bubble/plan.md", ruled(part))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("note 02 follows the ruling on 01 and its `Waits for:` line does not name 01", out)
+        self.write("changes/bubble/02-order.md", NOTE_02)
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+
+    def test_a_default_may_not_rule_a_risk_class(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(RULING_02.replace("[none]", "[money]")))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3)
+        self.assertIn("may not rule a [money] question", out)
+
+    # ── the gate before local main ──
+
+    def held(self, part=RULING_02):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(part))
+        self.commit_all("ruling: note 02")
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(state="held", s02=f"merged {merge}"))
+        self.commit_all("held")
+
+    def test_a_held_run_with_an_unanswered_ruling_is_the_gate_road(self):
+        self.held()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("GATE: 1 ruling(s) by default or panel wait for Sam", out)
+        self.assertIn("02: the count shows zero or hides at zero", out)
+
+    def test_a_confirmed_ruling_clears_the_gate(self):
+        self.held(RULING_02.replace("  Undo:", "  Confirmed: 2026-11-13\n  Undo:"))
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plan: approved", out)
+
+    def test_a_run_that_is_not_held_goes_on_with_an_open_ruling(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled())
+        self.write("changes/bubble/report.md", report(state="running"))
+        self.commit_all()
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+
+    # ── the session's folder ──
+
+    def test_a_session_in_its_own_worktree_of_the_repo_refuses(self):
+        other = self.tree / ".claude" / "worktrees" / "trusting-boyd"
+        self.git("worktree", "add", "-q", str(other), "-b", "app/session", "main")
+        here = os.getcwd()
+        try:
+            os.chdir(other)
+            code, out = self.run_check("plan", "bubble")
+            self.assertEqual(code, 3, out)
+            self.assertIn("this session's folder is the worktree", out)
+            self.assertIn("main checkout", out)
+            os.chdir(self.tree)
+            code, out = self.run_check("plan", "bubble")
+            self.assertEqual(code, 0, out)
+        finally:
+            os.chdir(here)
 
 
 class NotesRoad(Product):
@@ -511,7 +721,8 @@ class Readers(unittest.TestCase):
         read = mod.read_report(report(s02="failed"))
         self.assertIsNone(read["merged"])
         self.assertEqual(read["states"], {"01": "merged abc1234", "02": "failed"})
-        self.assertEqual(mod.read_report(None), {"merged": None, "states": {}})
+        self.assertEqual(mod.read_report(None), {"merged": None, "state": None, "states": {}})
+        self.assertEqual(mod.read_report(report("held"))["state"], "held")
         self.assertEqual(mod.read_report(report("merged", "Merged: 2026-11-03 9d4cf45"))["merged"],
                          "2026-11-03 9d4cf45")
 

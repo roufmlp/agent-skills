@@ -11,14 +11,19 @@ Abdul sees the page, and before a run starts.
 interviews, with one it runs. This script is the check between the two, and
 the pre-run check that runs inside the interview before Abdul sees the page.
 `--tree` names the checkout; the default is the current directory's. Exit 0
-means the road is clear, 2 means the interview road (`INTERVIEW: ...`), 3
-means refused (`REFUSED: ...`), like `suite.py` and `note_check.py`.
+means the road is clear, 2 means a road with Abdul or a ruling on it
+(`INTERVIEW: ...`, `RULING: ...`, `GATE: ...`), 3 means refused
+(`REFUSED: ...`), like `suite.py` and `note_check.py`.
 
 ## What `plan` decides
 
 The plan is `changes/<feature>/plan.md`, from `templates/plan.md`; the report is
 `changes/<feature>/report.md`, from `templates/report.md`. In this order:
 
+- The session's folder is a worktree of the repo other than the main checkout
+  and the feature tree: refused. The desktop app refuses
+  such a session's writes into the feature tree, the note trees and the reports
+  folder, and the build agents inherit that (`session_folder_refusal`).
 - `report.md` on local main (`main` or `master`) carries a `Merged:` line:
   refused, with the merge commit. A change to a merged feature is a new
   feature or a one-note change (ticket 31, "Work that is already done").
@@ -31,19 +36,29 @@ The plan is `changes/<feature>/plan.md`, from `templates/plan.md`; the report is
   the plan has no answered `[pruning]` question: refused ("How the careful lane
   keeps the test suite fast and trusted", ticket 21).
 - The `Approved:` line is not committed: refused. The approval is the commit.
+- The `## Rulings` part of the plan does not hold together: refused, with every
+  fault `rulings.py` names. A `Ruled:` line with no `Touches:` line is one, and
+  so is a note that follows a ruling and does not wait for the ruled note.
 - A note, a test file a note's `## Tests` part names, or the plan changed
-  after the approval commit, or a note was added: refused. The approval
-  commit is the one that wrote the plan's `Approved:` lines as they are now,
-  the oldest of the newest run of commits whose lines equal them; the diff
-  runs from it to the working tree, untracked notes included. Approving again
-  appends a new `Approved:` line, which starts a new run.
+  after the approval commit, or a note was added, and no ruling written since
+  covers it: refused. The approval commit is the one that wrote the plan's
+  `Approved:` lines as they are now, the oldest of the newest run of commits
+  whose lines equal them; the diff runs from it to the working tree, untracked
+  notes included. A ruling covers the note its entry names, when the page at
+  the approval commit lacks that entry, and the plan may change in its rulings
+  part alone. A merged note that changed since its merge commit is refused
+  whatever the rulings say: what touches it becomes a fix note. Approving
+  again appends a new `Approved:` line, which starts a new run.
 - The report on the feature branch shows a note `failed`, or `stopped:` on a
-  question of Abdul's kind (a `stopped:` the run starts again by itself, such as
-  `API errors` or `worktree:`, is not one): `INTERVIEW: failed
-  notes 03`, exit 2. The skill opens the short interview ("What a run does
-  when notes collide or fail", ticket 32, C9), which sets each row it settles
-  to `not started` (changed) or `cut <date>` and approves again, so the next
-  `plan` finds no failed row.
+  question (a `stopped:` the run starts again by itself, such as `API errors`,
+  `worktree:` or `tooling:`, is not one): `RULING: notes 03 (failed)`, exit 2.
+  The session rules each one, by Abdul's answer or by the written default, sets
+  its row to `not started` and starts the run again in the same session. A
+  `waiting:` row waits for Abdul with no timeout and holds nothing else.
+- The report's `State:` is `held` and a ruling by `default` or `panel` has no
+  `Confirmed:` or `Overturned:` line: `GATE: <n> ruling(s) ...`, exit 2, with
+  the lines. The final check passed and the merge into local main waits for
+  his answers; `note_check.py merge` refuses that merge on the same lines.
 - Else `plan: approved <date> at <commit>`, exit 0.
 
 ## What `notes` refuses
@@ -85,13 +100,17 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rulings  # noqa: E402
 import suite  # noqa: E402
 from note_check import CHANGES, MAIN_BRANCHES, NOTE_FILE, TOKEN, notes_in, test_paths  # noqa: E402
 
 REFUSED = 3
 INTERVIEW = 2
-# Report rows a run starts again by itself: the run's own faults, never a question for Abdul.
-RESTART_STATES = re.compile(r"^stopped: (API errors|[a-z-]+ returned no result|worktree:)")
+# Report rows a run starts again by itself: the run's own faults and a tool's, never a question for Abdul.
+RESTART_STATES = re.compile(r"^stopped: (API errors|[a-z-]+ returned no result|worktree:|tooling:)")
+# A row that waits for Abdul with no timeout. The other notes run on.
+WAITING = "waiting:"
+HELD = "held"
 TIMEOUT = 1800
 PLAN = "plan.md"
 REPORT = "report.md"
@@ -111,6 +130,14 @@ class Refusal(Exception):
 
 
 class Interview(Exception):
+    pass
+
+
+class Ruling(Exception):
+    pass
+
+
+class Gate(Exception):
     pass
 
 
@@ -214,13 +241,15 @@ def unanswered(questions: list[dict]) -> list[dict]:
 
 
 def read_report(text: str | None) -> dict:
-    """The `Merged:` line and each note row's state."""
-    merged, rows, columns = None, {}, None
+    """The `Merged:` line, the `State:` line and each note row's state."""
+    merged, state, rows, columns = None, None, {}, None
     if text is None:
-        return {"merged": None, "states": rows}
+        return {"merged": None, "state": None, "states": rows}
     for line in text.splitlines():
         if line.startswith("Merged:"):
             merged = line[len("Merged:"):].strip()
+        if line.startswith("State:") and state is None:
+            state = line[len("State:"):].strip()
         match = TABLE_ROW.match(line.strip())
         if not match:
             columns = None
@@ -231,7 +260,7 @@ def read_report(text: str | None) -> dict:
             continue
         if columns and len(cells) >= 2 and cells[0] and not set(cells[0]) <= set("-: "):
             rows[cells[0]] = cells[1]
-    return {"merged": merged, "states": rows}
+    return {"merged": merged, "state": state, "states": rows}
 
 
 def pruning_notice(tree: pathlib.Path) -> str | None:
@@ -274,7 +303,98 @@ def changed_since(tree: pathlib.Path, commit: str, folder: str, watched: set[str
     return changed
 
 
+def session_folder_refusal(tree: pathlib.Path) -> None:
+    """Refuse a session whose folder is a worktree of this repo other than
+    the main checkout and the feature tree. The desktop app guards such a
+    session: it refuses every Write and Edit, the build agents' too, into the
+    base checkout (the reports under `.git/build-feature/` included) and into a
+    sibling worktree, which is where the feature tree and every note tree are.
+    Five runs stopped on that between 2026-11-08 and 2026-11-11; from a session
+    whose folder is the main checkout, 73 agent writes passed and none was
+    refused."""
+    here = os.getcwd()
+    try:
+        top = pathlib.Path(git(here, "rev-parse", "--show-toplevel")).resolve()
+        common_here = git(here, "rev-parse", "--path-format=absolute", "--git-common-dir")
+        common = git(tree, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    except (subprocess.CalledProcessError, OSError):
+        return
+    checkout = pathlib.Path(common).resolve().parent
+    if common_here != common or top in (checkout, tree.resolve()):
+        return
+    raise Refusal(f"this session's folder is the worktree {top}. The desktop app refuses a Write "
+                  f"or an Edit from it into the feature tree, a note tree and the reports folder, "
+                  f"for the build agents too. Start `/build-feature` from a session whose folder "
+                  f"is the main checkout, {checkout}.")
+
+
+def waits_closure(waits: dict[str, list[str]], number: str) -> set[str]:
+    """Every note `number` waits for, through other notes too."""
+    seen, todo = set(), list(waits.get(number, []))
+    while todo:
+        one = todo.pop()
+        if one not in seen:
+            seen.add(one)
+            todo.extend(waits.get(one, []))
+    return seen
+
+
+def ruling_faults(tree: pathlib.Path, folder: str, text: str, merged: set[str]) -> tuple[list[dict], list[str]]:
+    """The plan's rulings and every reason they do not hold, the `Waits for:`
+    line of a touched note included: a note that follows a ruling waits for the
+    ruled note, unless that note is merged or already waits for this one."""
+    entries, found = rulings.read(text)
+    notes = {number: read_note((tree / path).read_text(encoding="utf-8"))
+             for number, path in note_files(tree, folder)}
+    found += rulings.faults(entries, set(notes), rulings.person(tree), merged)
+    waits = {number: note["waits_for"] for number, note in notes.items()}
+    for entry in entries:
+        first, number = entry["follows"], entry["number"]
+        if not first or first == number or number not in notes or first not in notes:
+            continue
+        if number in merged or first in merged or number in waits_closure(waits, first):
+            continue
+        if first not in waits[number]:
+            found.append(f"note {number} follows the ruling on {first} and its `Waits for:` line "
+                         f"does not name {first}. A touched note builds after the ruled note.")
+    return entries, found
+
+
+def uncovered(tree: pathlib.Path, folder: str, plan: str, commit: str, text: str, entries: list[dict],
+              changed: list[str], report: dict) -> list[str]:
+    """The changes since the approval that no ruling written since covers. The
+    plan may change in its rulings part alone. A note, or a test it names, may
+    change when the note has a ruling the approved page lacks. A merged note
+    is never edited: what touches it becomes a fix note."""
+    then = git(tree, "show", f"{commit}:{plan}", check=False)
+    covered = rulings.new_since(entries, rulings.read(then)[0])
+    owners: dict[str, set[str]] = {}
+    for number, path in note_files(tree, folder):
+        owners.setdefault(path, set()).add(number)
+        for test in read_note((tree / path).read_text(encoding="utf-8"))["tests"]:
+            owners.setdefault(test, set()).add(number)
+    left = []
+    for path in changed:
+        if path == plan:
+            if rulings.outside(text) != rulings.outside(then):
+                left.append(path)
+            continue
+        numbers = owners.get(path, set())
+        state = next((report["states"].get(n, "") for n in numbers if path.startswith(folder + "/")), "")
+        if state.startswith("merged"):
+            merge = state.split()[1] if len(state.split()) > 1 else ""
+            since = subprocess.run(["git", "-C", str(tree), "diff", "--quiet", merge, "--", path],
+                                   capture_output=True)
+            if since.returncode:
+                left.append(f"{path} (a merged note is never edited: write a fix note)")
+                continue
+        if not numbers & covered:
+            left.append(path)
+    return left
+
+
 def check_plan(tree: pathlib.Path, feature: str) -> int:
+    session_folder_refusal(tree)
     folder = f"{CHANGES}/{feature}"
     plan = f"{folder}/{PLAN}"
     main = main_branch(tree)
@@ -306,6 +426,10 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                       f"commit of the plan and the notes together.")
     here = tree / folder / REPORT
     report = read_report(here.read_text(encoding="utf-8") if here.is_file() else None)
+    merged = {n for n, state in report["states"].items() if state.startswith("merged")}
+    entries, found = ruling_faults(tree, folder, text, merged)
+    if found:
+        raise Refusal(f"the rulings in {plan} do not hold:\n  " + "\n  ".join(found))
     watched = {plan}
     for number, path in note_files(tree, folder):
         watched.add(path)
@@ -313,22 +437,37 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
         # changed as the screen was built); its reviewer read the edit against
         # the note, and the report lists it. That edit is the run's, not a
         # change to what Abdul approved, so a restart does not refuse on it.
-        if report["states"].get(number, "").startswith("merged"):
+        if number in merged:
             continue
         watched |= set(read_note((tree / path).read_text(encoding="utf-8"))["tests"])
-    changed = changed_since(tree, commit, folder, watched)
+    changed = uncovered(tree, folder, plan, commit, text, entries,
+                        changed_since(tree, commit, folder, watched), report)
     if changed:
-        raise Refusal(f"changed after the approval at {commit[:9]} ({read['approved']}):\n  " +
-                      "\n  ".join(changed) +
-                      "\nAbdul approves the plan again, which writes a new `Approved:` line.")
-    failed = [n for n, state in report["states"].items() if state.startswith("failed")
-              or (state.startswith("stopped:") and not RESTART_STATES.match(state))]
-    if failed:
-        raise Interview(f"failed notes {', '.join(failed)} in {folder}/{REPORT}. Change or cut "
-                        f"each one, then approve the changed plan.")
+        raise Refusal(f"changed after the approval at {commit[:9]} ({read['approved']}), and no "
+                      f"ruling written since covers it:\n  " + "\n  ".join(changed) +
+                      "\nA ruling covers a note it names (`rulings.py record`), or Abdul approves "
+                      "the plan again, which writes a new `Approved:` line.")
+    who = rulings.person(tree) or "the human"
+    to_rule = [f"{n} ({state})" for n, state in report["states"].items() if state.startswith("failed")
+               or (state.startswith("stopped:") and not RESTART_STATES.match(state))]
+    if to_rule:
+        again = sorted(n for n, state in report["states"].items()
+                       if state.startswith("failed") and n in rulings.rearmed(entries))
+        raise Ruling(f"notes {', '.join(to_rule)} in {folder}/{REPORT}. Each takes a ruling: "
+                     f"{who}'s answer, or the written default once the wait is over; then the run "
+                     f"starts again." + (f" Note {', '.join(again)} failed again after its one "
+                                         f"re-arm: it waits for {who} (`rulings.py wait`)." if again else ""))
+    waiting = rulings.open_entries(entries)
+    if report["state"] == HELD and waiting:
+        raise Gate(f"{len(waiting)} ruling(s) by default or panel wait for {who} before the merge "
+                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(waiting)) +
+                   "\nHe confirms or overturns each one (`rulings.py answer`).")
     count = len(note_files(tree, folder))
+    waits = sorted(n for n, state in report["states"].items() if state.startswith(WAITING))
     print(f"plan: approved {read['approved']} at {commit[:9]}; {count} note(s); "
-          f"{len(read['questions'])} question(s) answered")
+          f"{len(read['questions'])} question(s) answered; {len(entries)} ruling(s)"
+          + (f", {len(waiting)} to confirm before the merge" if waiting else "")
+          + (f"; waiting for {who}: {', '.join(waits)}" if waits else ""))
     return 0
 
 
@@ -452,6 +591,12 @@ def main(argv=None) -> int:
         return check_notes(tree, args.target, args.only, args.static)
     except Interview as error:
         print(f"INTERVIEW: {error}")
+        return INTERVIEW
+    except Ruling as error:
+        print(f"RULING: {error}")
+        return INTERVIEW
+    except Gate as error:
+        print(f"GATE: {error}")
         return INTERVIEW
     except Refusal as error:
         print(f"REFUSED: {error}")

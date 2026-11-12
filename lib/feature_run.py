@@ -19,14 +19,20 @@ workflow's own transcripts.
   claim's batch id), started, staging (the `Staging:` line of the product's
   CLAUDE.md, or null), risk (true when any note's `Risk:` names a class),
   notes (one row per note file: number, path, waits_for, screens, risk,
-  state, strikes, attempts, fresh, branch, worktree `<repo>/.claude/worktrees/note-<feature>-<nn>`), roles (model and
+  state, strikes, attempts, fresh, rearmed, branch, worktree `<repo>/.claude/worktrees/note-<feature>-<nn>`), roles (model and
   effort per role, from the agent files, with `--role` overrides applied and
-  marked `override: true`) and earlier (the lines an earlier run left under the
-  report's `## Defaults taken`, `## Done-check edits` and `## Final check`, as
-  `defaults`, `edits` and `final`, and each role's strikes from `## Roles` as
-  `strikes`, so a restart's report keeps them; the
-  merger's own `Door:` and `Blast radius:` lines are left out, since it writes
-  them again at main-in).
+  marked `override: true`), earlier (the lines an earlier run left under the
+  report's `## Defaults taken`, `## Done-check edits`, `## Final check` and
+  `## Tooling stops`, as `defaults`, `edits`, `final` and `tooling`, and each
+  role's strikes from `## Roles` as `strikes`, so a restart's report keeps
+  them; the merger's own `Door:` and `Blast radius:` lines are left out, since
+  it writes them again at main-in), and what away mode needs from the plan's
+  `## Rulings` part (`rulings.py`): ruling_wait_seconds (how long the session
+  waits for Abdul's answer), gate_open (the notes whose ruling by `default` or
+  `panel` he has not confirmed; the script holds the merge while it is not
+  empty), away (the report's "Ruled while you were away" lines) and held (true
+  when an earlier run's final check passed and only the plan and the report
+  changed since, so the run goes straight to the merge).
 
 `started` is the clock when `--started` is not given, `YYYY-MM-DD HH:MM` local.
 
@@ -35,10 +41,15 @@ the run's ledger: `merged <commit>` and `cut <date>` rows are left alone (a cut
 note's file is under `cut/`, so its row alone puts it in the list, and the
 report keeps showing it);
 `running` rows come from a run that stopped mid-note and start again in a
-fresh worktree; so do `stopped: API errors`, `stopped: <role> returned no result`
-and `stopped: worktree:` rows (`plan_check.RESTART_STATES`); any other
+fresh worktree; so do `stopped: API errors`, `stopped: <role> returned no result`,
+`stopped: worktree:` and `stopped: tooling:` rows (`plan_check.RESTART_STATES`);
+a `waiting:` row is left alone, since it waits for Abdul; any other
 `stopped:` row and every `failed` row never reach here, because the plan check
-opens the short interview on them. A `fresh` note's old worktree and branch are
+sends the session to rule on them first. A note whose file or tests changed
+after its note branch's base commit is `fresh` too: a ruling changed it, and
+the old tree holds the build of the old note. `rearmed` is true when the plan
+carries a `[re-arm]` ruling for the note; the script sends such a note's
+second failure to `waiting:`. A `fresh` note's old worktree and branch are
 removed by the session before the run, as the skill says: the merger's spawn
 cannot, because the auto-mode classifier refuses `git worktree remove --force`
 as irreversible (measured in the rehearsal on 2026-11-04).
@@ -66,11 +77,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import audit_transcripts  # noqa: E402
 import check_build_agents  # noqa: E402
 import plan_check  # noqa: E402
+import rulings  # noqa: E402
 
 AGENTS_DIR = os.environ.get("BUILD_FEATURE_AGENTS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents"))
 NAME = re.compile(r"^[a-z0-9-]+$")
 RESTART_STATES = plan_check.RESTART_STATES
-EARLIER = {"defaults": "Defaults taken", "edits": "Done-check edits", "final": "Final check"}
+EARLIER = {"defaults": "Defaults taken", "edits": "Done-check edits", "final": "Final check",
+           "tooling": "Tooling stops"}
 ROLES_TABLE = "Roles"
 MERGER_OWNED = ("Door:", "Blast radius:")
 PLACEHOLDER = ("not run", "not assessed", "not yet")  # the script's and the merger's own filler
@@ -122,9 +135,44 @@ def starting_state(row: str | None) -> tuple[str, bool]:
         return "not started", True
     if RESTART_STATES.match(row):
         return "not started", True
-    if row.startswith("stopped:"):
+    if row.startswith("stopped:") or row.startswith(plan_check.WAITING):
         return row, False
     return "not started", False
+
+
+def changed_since_base(tree: pathlib.Path, feature: str, branch: str, paths: list[str]) -> bool:
+    """Whether a note's file or tests changed after its worktree's base commit:
+    the feature tree holds a note the old note branch never saw. The run then
+    makes the tree again. On 2026-11-11 note 02 of customer-tracking kept its
+    old tree after a note change and merged the old build."""
+    found = plan_check.git(tree, "rev-parse", "-q", "--verify", f"refs/heads/{branch}", check=False)
+    if not found:
+        return False
+    base = plan_check.git(tree, "merge-base", f"feature/{feature}", branch, check=False)
+    if not base:
+        return True
+    return bool(plan_check.git(tree, "diff", "--name-only", base, "--", *paths, check=False))
+
+
+def held(tree: pathlib.Path, folder: str) -> bool:
+    """Whether the final check of an earlier run still stands: the report says
+    `State: held`, and since the commit that wrote that state nothing changed
+    but the plan (his answers) and the report (the roles cells)."""
+    report, plan = f"{folder}/{plan_check.REPORT}", f"{folder}/{plan_check.PLAN}"
+    if not (tree / report).is_file():
+        return False
+    if plan_check.read_report((tree / report).read_text(encoding="utf-8"))["state"] != plan_check.HELD:
+        return False
+    first = None
+    for commit in plan_check.git(tree, "log", "--format=%H", "--", report).splitlines():
+        text = plan_check.git(tree, "show", f"{commit}:{report}", check=False)
+        if plan_check.read_report(text)["state"] != plan_check.HELD:
+            break
+        first = commit
+    if not first:
+        return False
+    changed = plan_check.git(tree, "diff", "--name-only", first).splitlines()
+    return all(path in (report, plan) for path in changed)
 
 
 def report_rows(tree: pathlib.Path, folder: str) -> dict:
@@ -203,6 +251,9 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
     reports = common / "build-feature" / feature
     reports.mkdir(parents=True, exist_ok=True)
     rows = report_rows(tree, folder)
+    plan = tree / folder / plan_check.PLAN
+    entries = rulings.read(plan.read_text(encoding="utf-8"))[0] if plan.is_file() else []
+    rearmed = rulings.rearmed(entries)
     notes, risk = [], False
     for number, path in files:
         text = (tree / path).read_text(encoding="utf-8")
@@ -214,12 +265,15 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
             risk = True
         row = rows.get(number, {})
         state, fresh = starting_state(row.get("State"))
+        branch = f"note/{feature}/{number}"
+        if state == "not started" and not fresh:
+            fresh = changed_since_base(tree, feature, branch, [path, *note["tests"]])
         notes.append({
             "number": number, "path": path, "waits_for": note["waits_for"],
             "screens": screens, "risk": risk_line, "state": state,
             "strikes": as_int(row.get("Strikes")), "attempts": as_int(row.get("Attempts")),
             "last_report": (row.get("Last report") or "").strip(), "fresh": fresh,
-            "branch": f"note/{feature}/{number}",
+            "rearmed": number in rearmed, "branch": branch,
             "worktree": str(repo / ".claude" / "worktrees" / f"note-{feature}-{number}"),
         })
     for number, row in sorted(rows.items()):
@@ -230,7 +284,7 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
             "number": number, "path": f"{folder}/cut/{number}", "waits_for": [], "screens": "none",
             "risk": "none", "state": row["State"].strip(), "strikes": as_int(row.get("Strikes")),
             "attempts": as_int(row.get("Attempts")), "last_report": (row.get("Last report") or "").strip(),
-            "fresh": False, "branch": f"note/{feature}/{number}",
+            "fresh": False, "rearmed": False, "branch": f"note/{feature}/{number}",
             "worktree": str(repo / ".claude" / "worktrees" / f"note-{feature}-{number}"),
         })
     notes.sort(key=lambda n: n["number"])
@@ -244,6 +298,9 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
         "reports": str(reports), "batch": batch or f"batch-{secrets.token_hex(3)}",
         "started": started, "staging": staging, "risk": risk, "notes": notes,
         "roles": read_roles(overrides), "earlier": earlier_lines(tree, folder),
+        "ruling_wait_seconds": rulings.RULING_WAIT_SECONDS,
+        "gate_open": [e["number"] for e in rulings.open_entries(entries)],
+        "away": rulings.away_lines(entries), "held": held(tree, folder),
     }
 
 
