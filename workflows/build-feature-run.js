@@ -315,10 +315,11 @@ function finalParts() {
 async function prepareWorktree(n) {
   const body = [
     `Make the worktree for note ${n.number}: path ${n.worktree}, branch ${n.branch}, from the current feature branch.`,
-    `Fresh: ${n.fresh ? 'yes; the session removed the old worktree and branch before the run' : 'no; if the worktree exists, keep it as it is'}.`,
     '',
     'Steps, each a command run through Bash:',
-    `1. If Fresh is yes and the worktree exists, stop: answer outcome error with line "worktree ${n.worktree} still exists; the session removes a fresh note's worktree in step 2 of the skill". Never run \`git worktree remove\` yourself: the auto-mode classifier refuses \`--force\` as irreversible (measured 2026-11-04), and the session does the removal. If Fresh is no and the worktree exists, go to step 4.`,
+    // No step tells the merger to refuse an old tree: `feature_run.py args`
+    // refuses to start a run while a note that starts again still has one.
+    '1. If the worktree exists, keep it as it is and go to step 4. Never run `git worktree remove`: the auto-mode classifier refuses `--force` as irreversible, and the session removes a tree between runs.',
     `2. \`git -C ${args.repo} worktree add ${n.worktree} -b ${n.branch} feature/${feature}\`; when the branch already exists with no worktree, \`git -C ${args.repo} worktree add ${n.worktree} ${n.branch}\` instead. Never \`git checkout -b\`; the guard refuses it.`,
     `3. Give the tree what it needs to run: \`cp -c -R ${args.repo}/node_modules ${n.worktree}/node_modules\` (an APFS clone; plain \`cp -R\` if -c fails), \`cp ${args.repo}/.env.local ${n.worktree}/.env.local\` when that file exists, then claim a database the way the product's .claude/run-isolation.json says, in the worktree: \`node scripts/run-db.mjs claim --batch ${args.batch} --slot note_${n.number} --tree ${n.worktree}\`, so each note's tree has a database of its own. Skip a step whose file or script the product does not have, and say so.`,
     `4. Print the base: \`git -C ${n.worktree} merge-base feature/${feature} ${n.branch}\`.`,
@@ -395,11 +396,9 @@ async function strike(n, role, reportPath) {
 async function runNote(n) {
   n.state = 'running'
   n.ran = true
-  let fresh = n.fresh
   while (n.strikes < MAX_STRIKES) {
     n.attempts += 1
-    const ready = await prepareWorktree({ ...n, fresh })
-    fresh = false
+    const ready = await prepareWorktree(n)
     if (ready.error) { n.state = `stopped: worktree: ${ready.error.slice(0, 120)}`; return }
     const base = ready.base
     const tag = `${n.number}-attempt-${n.attempts}`
@@ -447,8 +446,11 @@ async function runNote(n) {
     const sha = merged.outcome === 'done' ? shaOf(merged) : null
     if (!sha) {
       if (!(await strike(n, 'merger', mergePath))) return
-      fresh = true // the note tries again from the current feature branch
-      continue
+      // The note tries again from the current feature branch, in a new tree.
+      // No agent may remove the old one, so the note stops here; the next
+      // start refuses until the session removed it (`feature_run.py args`).
+      n.state = 'stopped: worktree: the merge did not go through, and the note starts again in a new tree'
+      return
     }
     n.state = `merged ${sha.slice(0, 9)}`
     log(`note ${n.number}: merged ${sha.slice(0, 9)}`)
@@ -519,7 +521,11 @@ if (merged.length + cut.length === notes.length && !halted && !finalRow) {
   // Rounds number on from an earlier run's, so a restart's reports and lines
   // do not overwrite the earlier run's `final-1-*` files.
   let round = earlier.final.filter(l => /^Final verifier \d+:/.test(l)).length
-  let fixes = 0
+  // The fix rounds are a bound on the feature, so a restart counts the rounds
+  // the report already holds. A reviewer's run gave one feature five rounds
+  // over two runs while this started at zero.
+  let fixes = earlier.final.filter(l => /^Fix round \d+:/.test(l)).length
+  let afterMove = false
   let tested = null
   let passed = false
   let findings = []
@@ -595,10 +601,13 @@ if (merged.length + cut.length === notes.length && !halted && !finalRow) {
         if (vOk && rOk && !findings.length) { passed = true; break }
         if (!vOk) strikesByRole['final-verifier'] += 1
         if (!rOk) strikesByRole['final-reviewer'] += 1
-        // The fix rounds are a bound on the feature, not on one run: with none
-        // left the final check waits for the human, and no restart gets more.
-        if (fixes >= FIX_ROUNDS) {
-          finalRow = `waiting: the final check found faults and has no fix round left (${FIX_ROUNDS} per feature until the human rules)`
+        // With no fix round left the final check waits for the human, and no
+        // restart and no ruling gives the feature more. A check that runs
+        // again because main moved gets none either.
+        if (afterMove || fixes >= FIX_ROUNDS) {
+          finalRow = afterMove
+            ? `waiting: the final check found faults after ${args.main} moved, and that check gets no fix round`
+            : `waiting: the final check found faults and has no fix round left (${FIX_ROUNDS} per feature)`
           finalLines.push(`Final check ${finalRow}`)
           break
         }
@@ -655,7 +664,7 @@ if (merged.length + cut.length === notes.length && !halted && !finalRow) {
       mainMoved += 1
       log('main moved since the final check; it runs again')
       passed = false
-      fixes = FIX_ROUNDS // no further fix round
+      afterMove = true // no further fix round
       continue
     }
     finalLines.push(`main-out: ${out.line}`)

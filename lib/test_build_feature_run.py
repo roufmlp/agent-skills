@@ -313,6 +313,19 @@ class Script(unittest.TestCase):
         self.assertEqual(self.decide(calls, r"^report: stopped$"), ["none"])
         self.assertTrue(self.state_of(result, "02").startswith("merged"))
 
+    def test_a_note_whose_merge_did_not_go_through_stops_for_a_new_tree(self):
+        # Old finding 13: the retry went back to the merger with "Fresh: yes", and one sentence
+        # of the prompt was all that kept the old tree from a second build.
+        conflict = {"outcome": "conflict", "commit": "", "line": "Conflict: src/order.ts"}
+        result, calls = self.run_script(args([note("01"), note("02")]), [(r"^note 01: merger$", [conflict])])
+        self.assertEqual(self.state_of(result, "01"),
+                         "stopped: worktree: the merge did not go through, and the note starts again in a new tree")
+        self.assertEqual(self.labels(calls, r"^note 01: (worktree|implementer)"),
+                         ["note 01: worktree", "note 01: implementer 1"])
+        self.assertEqual(result["notes"][0]["strikes"], 1)
+        self.assertNotIn("Fresh", self.prompt(calls, r"^note 01: worktree$"))
+        self.assertTrue(self.state_of(result, "02").startswith("merged"))
+
     # ── the gate before local main ──
 
     def test_a_run_with_an_unconfirmed_ruling_holds_before_local_main(self):
@@ -462,6 +475,36 @@ class Script(unittest.TestCase):
         again, calls = self.run_script(args([note("01", state="merged abc123456")], final=result["final"]))
         self.assertEqual(self.labels(calls, r"^final (verifier|reviewer)|^fix round|^main-out$"), [])
         self.assertEqual(again["final"], result["final"])
+
+    def test_a_restart_counts_the_fix_rounds_the_report_already_holds(self):
+        # Review 2, N8: run 1 used rounds 1 and 2, and run 2 got three more.
+        merged = [note("01", state="merged abc123456")]
+        first, calls = self.run_script(
+            args(merged), [(r"^final reviewer", [FINDINGS]), (r"^fix round 2: implementer", [None, None])])
+        self.assertEqual(first["final"], "")
+        self.assertEqual([line for line in first["finalLines"] if line.startswith("Fix round")],
+                         ["Fix round 1: built it", "Fix round 2: implementer returned no result twice"])
+        earlier = {"defaults": [], "edits": [], "final": first["finalLines"], "tooling": [], "strikes": {}}
+        second, calls = self.run_script(args(merged, earlier=earlier), [(r"^final reviewer", [FINDINGS])])
+        self.assertEqual(self.labels(calls, r"^fix round"), ["fix round 3: implementer"])
+        self.assertIn("Attempt: 3 of 3", self.prompt(calls, r"^fix round 3"))
+        self.assertRegex(second["final"], r"^waiting: the final check found faults and has no fix round left")
+        # His ruling on the row starts the final check again; it gives no new round.
+        earlier = {**earlier, "final": second["finalLines"]}
+        third, calls = self.run_script(args(merged, earlier=earlier), [(r"^final reviewer", [FINDINGS])])
+        self.assertEqual(self.labels(calls, r"^fix round"), [])
+        self.assertEqual(len(self.labels(calls, r"^final reviewer")), 1)
+        self.assertRegex(third["final"], r"^waiting: the final check found faults and has no fix round left")
+
+    def test_a_check_after_main_moved_that_finds_faults_waits_in_its_own_words(self):
+        # Review 2, N8: the row said "no fix round left" though none was used.
+        moved = {**DONE, "outcome": "main moved", "line": "main moved"}
+        result, calls = self.run_script(
+            args([note("01", state="merged abc123456")]),
+            [(r"^final reviewer", [PASS, FINDINGS]), (r"^main-out$", [moved])])
+        self.assertEqual(self.labels(calls, r"^fix round"), [])
+        self.assertEqual(result["final"],
+                         "waiting: the final check found faults after main moved, and that check gets no fix round")
 
     def test_a_tool_fault_in_the_final_check_spends_no_fix_round(self):
         line = "PreToolUse:Write hook error: the report file is in the base repo checkout"
