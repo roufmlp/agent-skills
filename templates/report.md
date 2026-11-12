@@ -11,7 +11,7 @@ The merger writes this file on the feature branch after every note, and the fina
 
 ## Notes
 
-One row per note. State is one of `not started`, `running`, `merged <commit>`, `failed`, `stopped: <the question>`, `stopped: tooling: <tool>: <its line>`, `waiting: <why>` or `cut <date>`. A `failed` or `stopped:` row takes a ruling and the run starts again. A `waiting:` row has no timeout: only Abdul rules on it, and the notes that do not wait for it run on. `State: held` means the final check passed and rulings made without Abdul wait for his answer before the merge.
+One row per note. State is one of `not started`, `running`, `merged <commit>`, `failed`, `stopped: <the question>`, `stopped: tooling: <tool>: <its line>`, `waiting: <why>` or `cut <date>`. A `failed` or `stopped:` row takes a ruling and the run starts again. A `waiting:` row has no timeout: only Abdul rules on it, and the notes that do not wait for it run on. A question of the final check has a row of its own, `final`, below the notes: `stopped: <the question>`, `waiting: <why>`, or `ruled <date>` once it has its entry; no final check runs while it stops or waits. `State: held` means the final check passed and rulings made without Abdul wait for his answer before the merge.
 
 | Note | State | Strikes | Attempts | Last report |
 | --- | --- | --- | --- | --- |
@@ -51,7 +51,7 @@ Blast radius: <who or what breaks if this is wrong: one word, then a clause>
 
 ## Decide
 
-<One line per note that stopped on a question, with the class, the question and the agent's written default: `<nn>: [<class>] <question> Default: <default>`. The class is `none`, `money`, `access`, `migration` or `data leaving`. The session rules on each: Abdul's answer, or the default once the wait is over for a class of `none`.>
+<One line per note that stopped on a question, with the class, the question and the agent's written default: `<nn>: [<class>] <question> Default: <default>`; `final:` opens a line of the final check. The class is the one the agent typed, `none`, `money`, `access`, `migration` or `data leaving`, and `unclassified` when it typed none: that one waits for Abdul like a risk class. The session rules on each: Abdul's answer, or the default once the wait is over for a class of `none`. A line stays while its row stops or waits. A line `<nn>: [correction] <what the note checker corrected>` stays for good: the plan check counts it against the plan's `[correction]` entries.>
 
 ## Tooling stops
 
@@ -59,4 +59,4 @@ Blast radius: <who or what breaks if this is wrong: one word, then a clause>
 
 ## Ruled while you were away
 
-<One line per ruling by `default` or `panel` that Abdul has not confirmed: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>
+<One line per ruling Abdul did not make and has not confirmed, a correction by the note checker included: the note, the question, the road taken, who took it, the notes it touched and the undo cost. A risk-class line opens with its class in bold capitals. The feature stays off local main until each has a `Confirmed:` or `Overturned:` line on the plan page.>

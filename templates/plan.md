@@ -38,7 +38,7 @@ One line per question, then its answer on the next line, written as Abdul gives 
 
 ## Rulings
 
-<Leave this part out until a run stops on a note. `rulings.py record` writes each entry, and nobody edits one by hand. One entry per note a ruling changes. The kind in brackets is `none`, a risk class (`money`, `access`, `migration`, `data leaving`), `re-arm` for a note that failed three strikes, or `follows <nn>` for a note another note's ruling touched. Who is Abdul's name, `default` or `panel`. After the approval, only this part of the page may change, and a note or a test may change only when an entry written since names it.>
+<Leave this part out until a run stops on a note. `rulings.py record` writes each entry, and nobody edits one by hand. One entry per note a ruling changes; the number is `final` for a question of the final check. The kind in brackets is the class the agent typed, `none` or a risk class (`money`, `access`, `migration`, `data leaving`); `re-arm` for a note that failed three strikes; `correction` for a note the note checker corrected; or `follows <nn>` for a note another ruling touched and for a fix note, with the who of the ruling it follows. Who is Abdul's name, `default` or `panel`; an entry in his name carries words he typed. After the approval, only this part of the page and a `## Cut` line under his own ruling may change. A note or a test may change only in the one commit that adds its entry.>
 
 - [none] <nn>: <the question, in plain words>
   Ruled: <date>, <who>, "<Abdul's words, or the agent's written default>"
