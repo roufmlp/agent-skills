@@ -38,7 +38,8 @@ The plan is `changes/<feature>/plan.md`, from `templates/plan.md`; the report is
 - The `Approved:` line is not committed: refused. The approval is the commit.
 - The `## Rulings` part of the plan does not hold together: refused, with every
   fault `rulings.py` names. A `Ruled:` line with no `Touches:` line is one, and
-  so is a note that follows a ruling and does not wait for the ruled note.
+  so is a note that follows a ruling and does not wait for the ruled note, and
+  a note under a panel's ruling that lacks one of the entry's `Condition:` lines.
 - A note, a test file a note's `## Tests` part names, or the plan changed
   after the approval commit, or a note was added, and no ruling written since
   covers it: refused. The approval commit is the one that wrote the plan's
@@ -348,15 +349,34 @@ def waits_closure(waits: dict[str, list[str]], number: str) -> set[str]:
     return seen
 
 
+def records_of(tree: pathlib.Path, feature: str) -> pathlib.Path | None:
+    """The run's own folder in the git common dir, where a panel's files are; None outside a git tree."""
+    try:
+        return rulings.records_dir(tree, feature)
+    except rulings.Refusal:
+        return None
+
+
 def ruling_faults(tree: pathlib.Path, folder: str, text: str, merged: set[str],
                   cut: set[str] = frozenset()) -> tuple[list[dict], list[str]]:
     """The plan's rulings and every reason they do not hold, the `Waits for:`
     line of a touched note included: a note that follows a ruling waits for the
-    ruled note, unless that note is merged or already waits for this one."""
+    ruled note, unless that note is merged or already waits for this one. A
+    note a panel's ruling is on carries each `Condition:` line of its entry,
+    word for word: the readers named those tests, and a condition nobody wrote
+    into the note is a done check nobody runs."""
     entries, found = rulings.read(text)
-    notes = {number: read_note((tree / path).read_text(encoding="utf-8"))
-             for number, path in note_files(tree, folder)}
+    texts = {number: (tree / path).read_text(encoding="utf-8") for number, path in note_files(tree, folder)}
+    notes = {number: read_note(note) for number, note in texts.items()}
     found += rulings.faults(entries, set(notes), rulings.person(tree), merged, cut)
+    for entry in entries:
+        if entry["overturned"] or entry["number"] not in texts:
+            continue
+        for condition in entry["conditions"]:
+            if rulings.plain(condition) not in rulings.plain(texts[entry["number"]]):
+                found.append(f"note {entry['number']} lacks a condition of its panel ruling: `{condition}`. Each "
+                             f"`Condition:` line of the entry is a done check of the note, word for word, with "
+                             f"its test.")
     waits = {number: note["waits_for"] for number, note in notes.items()}
     for entry in entries:
         first, number = entry["follows"], entry["number"]
@@ -529,7 +549,8 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
     waiting = rulings.open_entries(entries, person)
     if report["state"] == HELD and waiting:
         raise Gate(f"{len(waiting)} ruling(s) {who} did not make wait for him before the merge "
-                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(entries, person, open_only=True)) +
+                   f"into local main:\n  " + "\n  ".join(rulings.away_lines(
+                       entries, person, open_only=True, records=records_of(tree, feature))) +
                    "\nHe confirms or overturns each one (`rulings.py answer`).")
     count = len(note_files(tree, folder))
     waits = sorted(n for n, state in report["states"].items() if state.startswith(WAITING))

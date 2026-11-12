@@ -30,7 +30,8 @@ workflow's own transcripts.
   `## Rulings` part (`rulings.py`): ruling_wait_seconds (how long the session
   waits for Abdul's answer), gate_open (the notes whose ruling by `default` or
   `panel` he has not confirmed; the script holds the merge while it is not
-  empty), away (the report's "Ruled while you were away" lines) and held (true
+  empty), away (the report's "Ruled while you were away" lines, a panel
+  ruling's in its full form from the panel's files) and held (true
   when an earlier run's final check passed and only the plan and the report
   changed since, so the run goes straight to the merge).
 
@@ -62,7 +63,12 @@ row that merged no new note (`count_start`), the final check's starts included.
 `roles` reads every `agent-*.jsonl` under the transcript dir, groups the
 assistant messages by the `agentType` in each `.meta.json`, and rewrites the
 Tokens and Cost cells of the report's `## Roles` table in place, at list
-price from `audit_transcripts.PRICES`. It changes nothing else in the file.
+price from `audit_transcripts.PRICES`. For each risk-class question a panel
+judged it adds two rows, `road finder, <nn>` and `panel readers, <nn>`, from
+the transcripts `rulings.py panel` kept in that panel's `agents.json`: those
+agents are the session's own, so no workflow transcript dir holds them, and
+the first live risk questions measure what a panel costs. It changes nothing
+else in the file.
 
 Exit 0 on success, 3 with `REFUSED: <why>` on a bad role override, a missing
 file or a feature name outside lower-case letters, digits and hyphens.
@@ -103,6 +109,9 @@ NOTE_LABEL = re.compile(r"^note (\d+):")
 ROLES_TABLE = "Roles"
 MERGER_OWNED = ("Door:", "Blast radius:")
 PLACEHOLDER = ("not run", "not assessed", "not yet")  # the script's and the merger's own filler
+# A panel's two rows in the report's roles table: the name, whose transcripts it sums, and the agent file that sets its effort.
+PANEL_ROWS = (("road finder", ("finder",), "build-feature-road-finder.md"),
+              ("panel readers", tuple(rulings.SEATS), "panel-review-persona.md"))
 STAGING = re.compile(r"^Staging:\s*(\S+)", re.M)
 
 
@@ -412,7 +421,8 @@ def build_args(feature: str, tree: pathlib.Path, overrides: list[str], batch: st
         "roles": read_roles(overrides), "earlier": earlier_lines(tree, folder),
         "ruling_wait_seconds": rulings.RULING_WAIT_SECONDS,
         "gate_open": [e["number"] for e in rulings.open_entries(entries, person)],
-        "away": rulings.away_lines(entries, person), "held": held(tree, folder), "final": final,
+        "away": rulings.away_lines(entries, person, records=plan_check.records_of(tree, feature)),
+        "held": held(tree, folder), "final": final,
     }
 
 
@@ -483,6 +493,40 @@ def record_stops(report: pathlib.Path, stops: list[dict]) -> tuple[pathlib.Path 
 
 # ── roles ────────────────────────────────────────────────────────────────────
 
+def add_usage(entry: dict, transcript: str) -> None:
+    """Add one agent transcript's tokens and list-price cost to a totals row."""
+    seen = {}
+    for rec in audit_transcripts._iter_records(transcript):
+        if rec.get("type") != "assistant":
+            continue
+        message = rec.get("message") or {}
+        usage = message.get("usage") or {}
+        if not usage:
+            continue
+        cache = usage.get("cache_creation") or {}
+        tokens = {
+            "input": usage.get("input_tokens") or 0,
+            "cache_write_5m": cache.get("ephemeral_5m_input_tokens",
+                                        usage.get("cache_creation_input_tokens") or 0) or 0,
+            "cache_write_1h": cache.get("ephemeral_1h_input_tokens") or 0,
+            "cache_read": usage.get("cache_read_input_tokens") or 0,
+            "output": usage.get("output_tokens") or 0,
+        }
+        key = message.get("id") or rec.get("uuid")
+        if key in seen and seen[key] >= sum(tokens.values()):
+            continue
+        seen[key] = sum(tokens.values())
+        model = str(message.get("model") or "")
+        entry["model"] = entry["model"] or model
+        context = tokens["input"] + tokens["cache_read"] + tokens["cache_write_5m"] + tokens["cache_write_1h"]
+        cost = audit_transcripts.message_cost(model, tokens, context)
+        entry["tokens"] += sum(tokens.values())
+        if cost is None:
+            entry["unpriced"] = True
+        else:
+            entry["cost"] += cost
+
+
 def role_totals(transcripts: pathlib.Path) -> dict:
     """Tokens and list-price cost per build-feature role, from the run's transcripts."""
     totals = {}
@@ -495,45 +539,62 @@ def role_totals(transcripts: pathlib.Path) -> dict:
         role = str(meta.get("agentType") or "").removeprefix("workflow:")
         if not role.startswith("build-feature-"):
             continue
-        role = role[len("build-feature-"):]
-        entry = totals.setdefault(role, {"tokens": 0, "cost": 0.0, "model": "", "unpriced": False})
-        seen = {}
-        for rec in audit_transcripts._iter_records(meta_path[:-len(".meta.json")] + ".jsonl"):
-            if rec.get("type") != "assistant":
-                continue
-            message = rec.get("message") or {}
-            usage = message.get("usage") or {}
-            if not usage:
-                continue
-            cache = usage.get("cache_creation") or {}
-            tokens = {
-                "input": usage.get("input_tokens") or 0,
-                "cache_write_5m": cache.get("ephemeral_5m_input_tokens",
-                                            usage.get("cache_creation_input_tokens") or 0) or 0,
-                "cache_write_1h": cache.get("ephemeral_1h_input_tokens") or 0,
-                "cache_read": usage.get("cache_read_input_tokens") or 0,
-                "output": usage.get("output_tokens") or 0,
-            }
-            key = message.get("id") or rec.get("uuid")
-            if key in seen and seen[key] >= sum(tokens.values()):
-                continue
-            seen[key] = sum(tokens.values())
-            model = str(message.get("model") or "")
-            entry["model"] = entry["model"] or model
-            context = tokens["input"] + tokens["cache_read"] + tokens["cache_write_5m"] + tokens["cache_write_1h"]
-            cost = audit_transcripts.message_cost(model, tokens, context)
-            entry["tokens"] += sum(tokens.values())
-            if cost is None:
-                entry["unpriced"] = True
-            else:
-                entry["cost"] += cost
+        entry = totals.setdefault(role[len("build-feature-"):], {"tokens": 0, "cost": 0.0, "model": "", "unpriced": False})
+        add_usage(entry, meta_path[:-len(".meta.json")] + ".jsonl")
     return totals
 
 
-def fill_roles(report: pathlib.Path, totals: dict) -> int:
-    """Rewrite the Tokens and Cost cells of the `## Roles` table; return rows changed."""
+def effort_of(agent_file: str) -> str:
+    """The effort an agent file sets, or nothing when the file is not there."""
+    try:
+        with open(os.path.join(AGENTS_DIR, agent_file), encoding="utf-8") as fh:
+            fields, _ = check_build_agents.frontmatter(fh.read())
+    except OSError:
+        return ""
+    return (fields or {}).get("effort", "")
+
+
+def panel_totals(records: pathlib.Path | None) -> dict:
+    """Tokens and list-price cost of each panel, two rows per risk question:
+    its road finder, and its three readers together. `rulings.py panel` keeps
+    the transcripts of a panel's agents in `agents.json` when it counts, so a
+    question the readers held is measured like one they ruled. A note's second
+    question is `<nn> (2)`. A transcript that is gone is counted as gone."""
+    totals, asked = {}, {}
+    kept = sorted(records.glob(f"{rulings.PANEL}/*/{rulings.AGENTS}"), key=lambda path: path.stat().st_mtime) if records else []
+    for path in kept:
+        try:
+            agents = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(agents, dict):
+            continue
+        number = path.parent.name.rsplit("-", 1)[0]
+        asked[number] = asked.get(number, 0) + 1
+        which = number + (f" ({asked[number]})" if asked[number] > 1 else "")
+        for title, names, agent_file in PANEL_ROWS:
+            entry = totals.setdefault(f"{title}, {which}", {"tokens": 0, "cost": 0.0, "model": "", "unpriced": False,
+                                                           "gone": 0, "effort": effort_of(agent_file)})
+            for name in names:
+                if isinstance(agents.get(name), str) and os.path.isfile(agents[name]):
+                    add_usage(entry, agents[name])
+                else:
+                    entry["gone"] += 1
+    return totals
+
+
+def fill_roles(report: pathlib.Path, totals: dict, add=()) -> int:
+    """Rewrite the Tokens and Cost cells of the `## Roles` table; return rows
+    changed. A role named in `add` gets a row at the table's end when it has
+    none: the merger writes the seven roles of the run, and nobody else writes
+    a panel's rows."""
     lines = report.read_text(encoding="utf-8").splitlines()
-    columns, changed = None, 0
+    columns, changed, table, have = None, 0, None, set()
+
+    def cost_cell(row: dict) -> str:
+        return (f"${row['cost']:.2f}" + (" plus unpriced" if row["unpriced"] else "")
+                + (f" plus {row['gone']} transcript that is gone" if row.get("gone") else ""))
+
     for i, line in enumerate(lines):
         match = plan_check.TABLE_ROW.match(line.strip())
         if not match:
@@ -543,16 +604,30 @@ def fill_roles(report: pathlib.Path, totals: dict) -> int:
         if columns is None:
             columns = cells if cells[:1] == ["Role"] else []
             continue
+        if columns and "Tokens" in columns and "Cost" in columns:
+            table = (i, columns)
         if not columns or set(cells[0]) <= set("-: "):
             continue
         role = cells[0]
         if role not in totals or "Tokens" not in columns or "Cost" not in columns:
             continue
         cells[columns.index("Tokens")] = f"{totals[role]['tokens']:,}"
-        cost = totals[role]["cost"]
-        cells[columns.index("Cost")] = f"${cost:.2f}" + (" plus unpriced" if totals[role]["unpriced"] else "")
+        cells[columns.index("Cost")] = cost_cell(totals[role])
+        if role in add and "Model" in columns:
+            cells[columns.index("Model")] = totals[role]["model"]
         lines[i] = "| " + " | ".join(cells) + " |"
+        have.add(role)
         changed += 1
+    new = []
+    for role in add:
+        if role in have or table is None:
+            continue
+        row = {"Role": role, "Model": totals[role]["model"], "Effort": totals[role].get("effort", ""),
+               "Tokens": f"{totals[role]['tokens']:,}", "Cost": cost_cell(totals[role])}
+        new.append("| " + " | ".join(row.get(name, "") for name in table[1]) + " |")
+    if new:
+        lines[table[0] + 1:table[0] + 1] = new
+        changed += len(new)
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return changed
 
@@ -593,6 +668,13 @@ def main(argv=None) -> int:
         for role in sorted(totals):
             print(f"{role}: {totals[role]['tokens']:,} tokens, ${totals[role]['cost']:.2f}")
         print(f"roles: {changed} row(s) filled in {report}")
+        in_tree = report.resolve().parent.parent.name == plan_check.CHANGES
+        panels = panel_totals(plan_check.records_of(report.resolve().parents[2], report.parent.name) if in_tree else None)
+        if panels:
+            rows = fill_roles(report, panels, add=list(panels))
+            for role in panels:
+                print(f"{role}: {panels[role]['tokens']:,} tokens, ${panels[role]['cost']:.2f}")
+            print(f"panel: {rows} row(s) for {len(panels) // len(PANEL_ROWS)} risk question(s) in {report}")
         path, added = record_stops(report.resolve(), typed_stops(transcripts))
         print(f"stops: {added} typed stop(s) added to {path}" if path else
               "stops: none recorded, the report is not in a feature tree")

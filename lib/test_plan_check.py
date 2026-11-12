@@ -495,6 +495,57 @@ class Rulings(Product):
         self.assertEqual(code, 3)
         self.assertIn("may not rule a [money] question", out)
 
+    # ── a ruling by panel ──
+
+    CONDITION = "e2e/order.spec.ts: the count hides at zero for staff"
+    PANEL_02 = RULING_02.replace("[none]", "[money]").replace("default,", "panel,").replace(
+        '"hide it at zero"\n', '"hide it at zero"\n  Panel: road A, 2 of 3, files 02-0123456789\n'
+        f"  Condition: {CONDITION}\n")
+
+    def change_02_with_its_condition(self):
+        self.change_02()
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("the report count", "the count, hidden at zero").replace(
+            "the count shows on Order\n", f"the count shows on Order\n- `sh e2e/order.sh`: {self.CONDITION}\n"))
+
+    def test_a_panel_ruling_needs_each_condition_among_the_notes_done_checks(self):
+        self.change_02()
+        self.write("changes/bubble/plan.md", ruled(self.PANEL_02))
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("note 02 lacks a condition of its panel ruling", out)
+        self.assertIn(self.CONDITION, out)
+
+    def test_a_panel_ruling_whose_conditions_the_note_carries_passes(self):
+        self.change_02_with_its_condition()
+        self.write("changes/bubble/plan.md", ruled(self.PANEL_02))
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+
+    def test_the_gate_shows_a_panel_ruling_in_its_full_form(self):
+        self.change_02_with_its_condition()
+        self.write("changes/bubble/plan.md", ruled(self.PANEL_02))
+        self.commit_all("ruling: note 02")
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(state="held", s02=f"merged {merge}"))
+        self.commit_all("held")
+        folder = pathlib.Path(self.tree) / ".git" / "build-feature" / "bubble" / "panel" / "02-0123456789"
+        folder.mkdir(parents=True)
+        (folder / "finder.json").write_text(json.dumps({"need": "no price leaks", "offered": [], "found": []}))
+        for seat in ("exposed", "operator"):
+            (folder / f"{seat}.md").write_text("Rule: A\n\nStaff see no count they cannot act on.\n")
+        (folder / "builder.md").write_text("Hold: how many orders have zero reports\n\nNobody counted them.\n")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("GATE: 1 ruling(s) Sam did not make wait for him", out)
+        self.assertIn("**MONEY** 02: the count shows zero or hides at zero", out)
+        self.assertIn("The count: road A, 2 of 3.", out)
+        self.assertIn("exposed: Rule: A. Staff see no count they cannot act on.", out)
+        self.assertIn("builder: Hold: how many orders have zero reports. Nobody counted them.", out)
+        self.assertIn(f"Conditions: {self.CONDITION}.", out)
+
     # ── the gate before local main ──
 
     def held(self, part=RULING_02):

@@ -10,6 +10,7 @@ import io
 import json
 import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -67,6 +68,34 @@ REPORT = textwrap.dedent("""\
 
 NUMBERS = {"01", "02", "03"}
 
+# What `record --who panel` adds to an entry: the count, and each condition of the readers it counted.
+PANEL_LINE = ("  Panel: road B, 2 of 3, files 03-0123456789\n"
+              "  Condition: e2e/price.spec.ts: the bubble shows no price to staff\n")
+
+# A risk question's written default, and the road finder's typed answer to it.
+DEFAULT = "keep the old column and add a nullable one"
+FINDER = {
+    "need": "old rows stay readable while the new code ships",
+    "default_cost": "one more column to drop in a later migration",
+    "offered": [{"road": "drop the column in this migration", "cost": "a rollback leaves a shape the old code cannot read"}],
+    "found": [
+        {"road": "add a view that both shapes read", "files": ["db/migrations/0097_owner_view.sql"],
+         "evidence": ["src/orders/read.ts:41", "db/migrations/0090_orders.sql:12"],
+         "beats": "no code reads the column by name", "fails": "a report that selects every column breaks",
+         "undo": "drop the view", "needs_owner_fact": ""},
+        {"road": "backfill in production first", "files": ["scripts/backfill.mjs"], "evidence": ["scripts/backfill.mjs:3"],
+         "beats": "no row is left without an owner", "fails": "it cannot run before the release",
+         "undo": "none after it ran", "needs_owner_fact": "the count of rows with no owner in production"},
+    ],
+}
+REASON = "The old shape stays readable. A rollback needs no backfill. Third sentence."
+
+
+def vote_text(first, *conditions, reason=REASON):
+    """One reader's file: the vote on line 1, the reason, then its conditions."""
+    return "\n".join([first, "", reason, "", *[f"Condition: {c}" for c in conditions]]) + "\n"
+
+
 
 def entries_of(text):
     entries, faults = mod.read(text)
@@ -82,12 +111,14 @@ class Seam(unittest.TestCase):
         self.assertEqual(mod.ruler_when_unanswered("none"), "default")
         self.assertEqual(mod.ruler_when_unanswered("re-arm"), "default")
 
-    def test_a_risk_question_waits_for_abdul(self):
+    def test_a_panel_rules_a_risk_question_he_did_not_answer(self):
         for kind in ("money", "access", "migration", "data leaving"):
-            self.assertEqual(mod.ruler_when_unanswered(kind), "wait", kind)
+            self.assertEqual(mod.ruler_when_unanswered(kind), "panel", kind)
 
-    def test_an_unknown_class_waits(self):
+    def test_an_unknown_class_and_a_stop_with_no_class_wait(self):
         self.assertEqual(mod.ruler_when_unanswered("pricing"), "wait")
+        self.assertEqual(mod.ruler_when_unanswered("unclassified"), "wait")
+        self.assertEqual(mod.ruler_when_unanswered(""), "wait")
 
 
 class Reading(unittest.TestCase):
@@ -183,7 +214,38 @@ class Faults(unittest.TestCase):
         found = self.faults(PLAN.replace("2026-11-12, Sam,", "2026-11-12, default,"))
         self.assertEqual(len(found), 1, found)
         self.assertIn("[money]", found[0])
-        self.assertIn("waits for Sam", found[0])
+        self.assertIn("The `panel` rules it", found[0])
+
+    def test_a_panel_may_not_rule_outside_the_risk_classes(self):
+        found = self.faults(PLAN.replace('default, "keep Reports, as', 'panel, "keep Reports, as'))
+        self.assertTrue(any("`panel` may not rule a [none] question" in f for f in found), found)
+
+    def test_a_ruling_by_panel_carries_its_panel_line(self):
+        text = PLAN.replace("2026-11-12, Sam,", "2026-11-12, panel,")
+        found = self.faults(text)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("no `Panel:` line", found[0])
+        counted = text.replace('"no price on the bubble"\n', '"no price on the bubble"\n' + PANEL_LINE)
+        self.assertEqual(self.faults(counted), [])
+        entry = entries_of(counted)[0][2]
+        self.assertEqual(entry["panel"], {"count": "road B, 2 of 3", "files": "03-0123456789"})
+        self.assertEqual(entry["conditions"], ["e2e/price.spec.ts: the bubble shows no price to staff"])
+        # The folder name goes into a path, so the page may name a note number and a key and nothing else.
+        _, found = entries_of(counted.replace("files 03-0123456789", "files ../../03-0123456789"))
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("is not a ruling line", found[0])
+        mine = PLAN.replace('"no price on the bubble"\n', '"no price on the bubble"\n' + PANEL_LINE)
+        self.assertTrue(any("`Panel:` line" in f and "panel" in f for f in self.faults(mine)), self.faults(mine))
+
+    def test_a_note_takes_two_rulings_without_him_whoever_gave_them(self):
+        text = PLAN.replace("- [money] 03", "- [money] 01: may the label show a price\n"
+                            '  Ruled: 2026-11-12, panel, "no price"\n' + PANEL_LINE.replace("03-", "01-") +
+                            "  Touches: none\n- [access] 01: may staff see it\n"
+                            '  Ruled: 2026-11-12, panel, "owner only"\n' + PANEL_LINE.replace("03-", "01-") +
+                            "  Touches: none\n- [money] 03")
+        found = self.faults(text)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn("without Sam already", found[0])
 
     def test_a_follow_on_takes_the_class_of_its_first_ruling(self):
         text = PLAN.replace("[none] 01", "[access] 01").replace(
@@ -218,7 +280,7 @@ class Faults(unittest.TestCase):
                        for i in (3, 4))
         text = PLAN.replace("- [money] 03", more + "- [money] 03")
         found = self.faults(text)
-        self.assertEqual(sum("took a default already" in f for f in found), 1, found)
+        self.assertEqual(sum("without Sam already" in f for f in found), 1, found)
         self.assertEqual(mod.MAX_DEFAULT_RULINGS, 2)
 
     def test_an_unknown_who_refuses(self):
@@ -300,21 +362,18 @@ class Gate(unittest.TestCase):
         self.assertEqual(self.open_(text), ["02"])
         self.assertEqual(self.open_(text.replace("Fix: 02", "Fix: 03")), ["01", "02"])
 
+    BY_PANEL = PLAN.replace("2026-11-12, Sam,", "2026-11-12, panel,").replace(
+        '"no price on the bubble"\n', '"no price on the bubble"\n' + PANEL_LINE)
+
     def test_a_risk_line_needs_its_own_words(self):
-        mod_seam = mod.ruler_when_unanswered
-        # As item 2 will answer: a panel rules the risk question he did not answer.
-        mod.ruler_when_unanswered = lambda kind: "panel" if kind in mod.RISK_CLASSES else "default"
-        try:
-            text = PLAN.replace("2026-11-12, Sam,", "2026-11-12, panel,")
-            entries, _ = entries_of(text)
-            self.assertEqual(mod.faults(entries, NUMBERS, "Sam"), [])
-            self.assertEqual(self.open_(text), ["01", "02", "03"])
-            bare = text.replace("  Undo: a migration\n", "  Undo: a migration\n  Confirmed: 2026-11-13\n")
-            self.assertEqual(self.open_(bare), ["01", "02", "03"])
-            own = bare.replace("Confirmed: 2026-11-13\n", 'Confirmed: 2026-11-13, "yes, no price"\n')
-            self.assertEqual(self.open_(own), ["01", "02"])
-        finally:
-            mod.ruler_when_unanswered = mod_seam
+        text = self.BY_PANEL
+        entries, _ = entries_of(text)
+        self.assertEqual(mod.faults(entries, NUMBERS, "Sam"), [])
+        self.assertEqual(self.open_(text), ["01", "02", "03"])
+        bare = text.replace("  Undo: a migration\n", "  Undo: a migration\n  Confirmed: 2026-11-13\n")
+        self.assertEqual(self.open_(bare), ["01", "02", "03"])
+        own = bare.replace("Confirmed: 2026-11-13\n", 'Confirmed: 2026-11-13, "yes, no price"\n')
+        self.assertEqual(self.open_(own), ["01", "02"])
 
     def test_a_class_nobody_knows_is_a_risk_class(self):
         # Review finding 5: `[data-leaving]` with a bare `Confirmed:` line stays open.
@@ -344,6 +403,107 @@ class Gate(unittest.TestCase):
         now, _ = entries_of(PLAN)
         then, _ = entries_of(older)
         self.assertEqual(mod.new_since(now, then), {"03"})
+
+
+class Panel(unittest.TestCase):
+    """The road finder's answer, one reader's file and the counting rule. No agent is the judge."""
+
+    def roads(self, **changes):
+        return mod.read_roads(DEFAULT, {**FINDER, **changes})
+
+    def count(self, *texts):
+        roads = self.roads()
+        votes = {seat: mod.read_vote(text, roads) for seat, text in zip(mod.SEATS, texts)}
+        return mod.count(votes), votes
+
+    def test_the_three_seats_are_fixed(self):
+        self.assertEqual(list(mod.SEATS), ["exposed", "operator", "builder"])
+        self.assertIn("lets through a read, a write or a wrong result that a narrower road refuses", mod.SEATS["exposed"][1])
+        self.assertIn("runs the production migration by hand", mod.SEATS["operator"][1])
+        self.assertIn("a guard loosened", mod.SEATS["operator"][1])
+        self.assertIn("a check that can no longer go red", mod.SEATS["builder"][1])
+
+    def test_each_road_has_a_fixed_id(self):
+        roads = self.roads()
+        self.assertEqual([(r["id"], r["kind"]) for r in roads],
+                         [("A", "default"), ("B", "offered"), ("F1", "found"), ("F2", "found")])
+        self.assertEqual(roads[0]["road"], DEFAULT)
+        self.assertEqual(roads[1]["road"], "drop the column in this migration")
+        self.assertEqual(roads[2]["evidence"], ["src/orders/read.ts:41", "db/migrations/0090_orders.sql:12"])
+        self.assertEqual(roads[3]["needs_owner_fact"], "the count of rows with no owner in production")
+
+    def test_no_better_road_is_a_full_answer(self):
+        self.assertEqual([r["id"] for r in self.roads(found=[])], ["A", "B"])
+        self.assertEqual([r["id"] for r in self.roads(found=[], offered=[])], ["A"])
+
+    def test_a_finder_answer_outside_the_typed_form_is_refused(self):
+        one = FINDER["found"][0]
+        for changes, says in (
+            ({"found": [one, one, one]}, "at most 2"),
+            ({"found": [{**one, "evidence": ["the orders code"]}]}, "file:line"),
+            ({"found": [{**one, "evidence": []}]}, "evidence"),
+            ({"found": [{k: v for k, v in one.items() if k != "undo"}]}, "undo"),
+            ({"found": [{k: v for k, v in one.items() if k != "needs_owner_fact"}]}, "needs_owner_fact"),
+            ({"found": "none"}, "list"),
+            ({"need": ""}, "need"),
+        ):
+            with self.assertRaises(mod.Refusal) as caught:
+                self.roads(**changes)
+            self.assertIn(says, str(caught.exception), changes)
+        with self.assertRaises(mod.Refusal):
+            mod.read_roads(DEFAULT, ["not", "an", "object"])
+
+    def test_two_or_three_readers_on_one_road_rule_it(self):
+        result, _ = self.count("Rule: B", "Rule: A", "Rule: B")
+        self.assertEqual((result["outcome"], result["road"], result["seats"]), ("road", "B", ["exposed", "builder"]))
+        self.assertEqual(result["mark"], "road B, 2 of 3")
+        result, _ = self.count("Rule: A", "Rule: A", "Rule: A")
+        self.assertEqual((result["outcome"], result["road"], result["mark"]), ("road", "A", "road A, 3 of 3"))
+
+    def test_a_found_road_needs_two_of_three_like_any_other(self):
+        result, _ = self.count("Rule: F1", "Hold: the count of open orders", "Rule: F1")
+        self.assertEqual((result["outcome"], result["road"]), ("road", "F1"))
+        result, _ = self.count("Rule: F1", "Rule: A", "Rule: B")
+        self.assertEqual((result["outcome"], result["road"]), ("default", "A"))
+
+    def test_two_or_three_holds_and_no_road_rules(self):
+        result, votes = self.count("Hold: the count of open orders", "Rule: B",
+                                   "Hold: whether the old app still reads the column")
+        self.assertEqual((result["outcome"], result["road"], result["seats"]), ("hold", None, ["exposed", "builder"]))
+        self.assertEqual(votes["builder"]["fact"], "whether the old app still reads the column")
+        self.assertEqual(self.count("Hold: a", "Hold: b", "Hold: c")[0]["outcome"], "hold")
+
+    def test_when_no_two_agree_the_written_default_rules_and_is_marked(self):
+        result, _ = self.count("Rule: B", "Hold: the count of open orders", "Rule: A")
+        self.assertEqual((result["outcome"], result["road"], result["seats"]), ("default", "A", ["builder"]))
+        self.assertIn("the readers disagreed", result["mark"])
+
+    def test_a_malformed_first_line_is_no_vote(self):
+        roads = self.roads()
+        for text in ("**Rule: B**", "Rule B", "rule: B", "Rule: B, because it is narrow", "Rule:B", "\nRule: B",
+                     "My answer.\nRule: B", "Rule: Z", "Hold:", "", "Rule: B or A"):
+            vote = mod.read_vote(text, roads)
+            self.assertIsNone(vote["kind"], text)
+            self.assertTrue(vote["why"], text)
+        result, _ = self.count("Rule: B", "I rule B.\nRule: B", "Rule: B")
+        self.assertEqual((result["outcome"], result["mark"]), ("road", "road B, 2 of 3"))
+        result, _ = self.count("Rule: B", "Rule B", "Rule B")
+        self.assertEqual((result["outcome"], result["road"], result["seats"]), ("default", "A", []))
+
+    def test_a_road_that_needs_a_fact_from_him_never_rules(self):
+        result, votes = self.count("Rule: F2", "Rule: F2", "Rule: F2")
+        self.assertEqual((result["outcome"], result["road"]), ("default", "A"))
+        self.assertIsNone(votes["exposed"]["kind"])
+        self.assertIn("needs a fact", votes["exposed"]["why"])
+        result, _ = self.count("Rule: F2", "Rule: F2", "Rule: B")
+        self.assertEqual((result["outcome"], result["road"]), ("default", "A"))
+
+    def test_a_reader_gives_its_reason_and_two_conditions_at_most(self):
+        vote = mod.read_vote(vote_text("Rule: B", "a.test.ts: one", "b.test.ts: two", "c.test.ts: three"), self.roads())
+        self.assertEqual((vote["kind"], vote["road"]), ("rule", "B"))
+        self.assertEqual(vote["reason"], REASON)
+        self.assertEqual(vote["conditions"], ["a.test.ts: one", "b.test.ts: two"])
+        self.assertEqual(mod.read_vote(vote_text("Hold: the count of open orders"), self.roads())["conditions"], [])
 
 
 def report_of(rows, decide=()):
@@ -410,11 +570,12 @@ class Commands(unittest.TestCase):
     def row(self, number):
         return mod.report_rows(self.report.read_text())[number]
 
-    def typed(self, note, cls, question):
+    def typed(self, note, cls, question, default=""):
         """A stop as `feature_run.py roles` records it from the agent's transcript."""
         self.records.mkdir(parents=True, exist_ok=True)
         with open(self.records / mod.STOPS, "a") as fh:
-            fh.write(json.dumps({"note": note, "kind": "question", "class": cls, "question": question}) + "\n")
+            fh.write(json.dumps({"note": note, "kind": "question", "class": cls, "question": question,
+                                 "default": default}) + "\n")
 
     def says(self, text, at=None, **fields):
         """One record of this session's transcript; a human message unless `fields` say otherwise."""
@@ -437,7 +598,8 @@ class Commands(unittest.TestCase):
 
     def test_ruler_prints_the_road_and_the_wait(self):
         self.assertEqual(self.run_main("ruler", "none"), (0, "default after 900 s\n"))
-        self.assertEqual(self.run_main("ruler", "money"), (0, "wait\n"))
+        self.assertEqual(self.run_main("ruler", "money"), (0, "panel after 900 s\n"))
+        self.assertEqual(self.run_main("ruler", "unclassified"), (0, "wait\n"))
 
     # ── a failed note: one re-arm ──
 
@@ -528,6 +690,315 @@ class Commands(unittest.TestCase):
         code, out = self.record("01", "none", "Sam", "build it with the label Reports")
         self.assertEqual(code, 0, out)
 
+    # ── the panel: a risk question he did not answer ──
+
+    QUESTION = "may the migration drop the old owner column"
+
+    def risk_stop(self, note="02", cls="migration", default=DEFAULT, waited=True):
+        """A note stopped on a typed question that went out; returns the panel's folder for that stop."""
+        self.rows(**{f"n{note}": f"stopped: {self.QUESTION}"})
+        self.typed(note, cls, self.QUESTION, default)
+        code, out = self.command("wait", "--note", note)
+        self.assertEqual(code, 0, out)
+        if waited:
+            self.later(mod.RULING_WAIT_SECONDS)
+        return mod.panel_dir(mod.Feature(str(self.tree), "bubble"), note, self.QUESTION)
+
+    def panel_files(self, folder, *votes, finder=FINDER):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / mod.FINDER).write_text(json.dumps(finder))
+        for seat, text in zip(mod.SEATS, votes):
+            (folder / f"{seat}.md").write_text(text)
+
+    def ran(self, note="02", model="claude-opus-5-5", skip=()):
+        """The transcripts of the panel's agents, as this session's subagents hold them."""
+        folder = mod.PROJECTS / "-product" / SESSION / "subagents"
+        folder.mkdir(parents=True, exist_ok=True)
+        agents = {"finder": "workflow:build-feature-road-finder",
+                  **{seat: "workflow:panel-review-persona" for seat in mod.SEATS}}
+        for name, kind in agents.items():
+            for path in folder.glob(f"agent-{name}.*"):
+                path.unlink()
+            if name in skip:
+                continue
+            label = f"panel {note}: finder" if name == "finder" else f"panel {note}: reader {name}"
+            (folder / f"agent-{name}.meta.json").write_text(json.dumps({"agentType": kind, "description": label}))
+            (folder / f"agent-{name}.jsonl").write_text(json.dumps(
+                {"type": "assistant", "message": {"model": model, "usage": {"input_tokens": 10, "output_tokens": 5}}}) + "\n")
+
+    def by_panel(self, words, note="02", cls="migration"):
+        return self.record(note, cls, "panel", words, question=self.QUESTION)
+
+    def test_the_panel_command_walks_the_finder_the_readers_and_the_count(self):
+        folder = self.risk_stop(waited=False)
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 3, out)
+        self.assertIn("His answer rules until", out)
+        self.later(mod.RULING_WAIT_SECONDS)
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("workflow:build-feature-road-finder", out)
+        self.assertIn('"panel 02: finder"', out)
+        brief = (folder / "finder.brief.md").read_text()
+        for part in ("Class: migration", f"Question: {self.QUESTION}", f"Written default: {DEFAULT}",
+                     str(folder / mod.FINDER)):
+            self.assertIn(part, brief)
+        self.panel_files(folder)
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("workflow:panel-review-persona", out)
+        self.assertIn("model opus", out)
+        for seat in mod.SEATS:
+            self.assertIn(f'"panel 02: reader {seat}"', out)
+            brief = (folder / f"{seat}.brief.md").read_text()
+            self.assertIn(mod.SEATS[seat][1].format(who="Sam"), brief)
+            self.assertIn(f"A (the written default): {DEFAULT}", brief)
+            self.assertIn("F1 (a road the question did not offer): add a view that both shapes read", brief)
+            self.assertIn("src/orders/read.ts:41", brief)
+            self.assertIn("No reader rules this road", brief)
+            self.assertIn("Rule: <road id>", brief)
+            self.assertIn(str(folder / f"{seat}.md"), brief)
+        self.assertIn("Sam on release day", (folder / "operator.brief.md").read_text())
+        self.panel_files(folder, vote_text("Rule: B", "c1"), vote_text("Rule: B", "c2"),
+                         vote_text("Hold: the count of open orders"))
+        self.ran(model="claude-fable-5-2")
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 3, out)
+        self.assertIn("with the model override `opus`", out)
+        self.assertNotIn("road B, 2 of 3", out, "no count is shown before the readers ran on the panel's model")
+        self.ran()
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("road B, 2 of 3", out)
+        self.assertEqual(sorted(json.loads((folder / mod.AGENTS).read_text())), ["builder", "exposed", "finder", "operator"])
+        self.assertIn("drop the column in this migration", out)
+        self.assertIn("--who panel", out)
+        self.assertEqual(self.row("02"), f"stopped: {self.QUESTION}")
+
+    def test_record_by_panel_is_refused_without_the_panels_files(self):
+        folder = self.risk_stop()
+        self.ran()
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn(mod.FINDER, out)
+        self.panel_files(folder, vote_text("Rule: A"), vote_text("Rule: A"))
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("builder", out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        # The files of one question are not the files of the note's next question.
+        self.panel_files(folder, vote_text("Rule: A"), vote_text("Rule: A"), vote_text("Rule: A"))
+        other = "may the migration rename the table"
+        self.rows(n02=f"stopped: {other}")
+        self.typed("02", "migration", other, DEFAULT)
+        self.command("wait", "--note", "02")
+        self.later(mod.RULING_WAIT_SECONDS)
+        code, out = self.record("02", "migration", "panel", DEFAULT, question=other)
+        self.assertEqual(code, 3, out)
+        self.assertIn(mod.FINDER, out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+
+    def test_record_by_panel_is_refused_before_the_wait_is_over(self):
+        folder = self.risk_stop(waited=False)
+        self.panel_files(folder, vote_text("Rule: A"), vote_text("Rule: A"), vote_text("Rule: A"))
+        self.ran()
+        self.later(mod.RULING_WAIT_SECONDS - 1)
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("His answer rules until", out)
+        self.later(1)
+        self.assertEqual(self.by_panel(DEFAULT)[0], 0)
+
+    def test_record_by_panel_is_refused_outside_the_risk_classes(self):
+        folder = self.risk_stop(cls="none")
+        self.panel_files(folder, vote_text("Rule: A"), vote_text("Rule: A"), vote_text("Rule: A"))
+        self.ran()
+        code, out = self.record("02", "none", "panel", DEFAULT, question=self.QUESTION)
+        self.assertEqual(code, 3, out)
+        self.assertIn("the `default` rules a [none] question", out)
+        self.assertEqual(self.command("panel", "--note", "02")[0], 3)
+        # Nor a stop with no class on record, a row that waits for him, or a failed row.
+        self.rows(n02="stopped: an error nobody typed a class for")
+        code, out = self.record("02", "money", "panel", DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("no class on record", out)
+        self.assertEqual(self.command("panel", "--note", "02")[0], 3)
+        self.command("wait", "--note", "02")
+        self.assertEqual(self.row("02"), "waiting: unclassified: an error nobody typed a class for")
+        self.later(mod.RULING_WAIT_SECONDS)
+        self.assertEqual(self.record("02", "money", "panel", DEFAULT)[0], 3)
+        self.rows(n02="failed")
+        self.assertEqual(self.record("02", "re-arm", "panel", DEFAULT)[0], 3)
+        self.assertEqual(self.record("02", "money", "panel", DEFAULT)[0], 3)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+
+    def test_record_by_panel_takes_only_the_road_the_count_gives(self):
+        folder = self.risk_stop()
+        self.panel_files(folder,
+                         vote_text("Rule: B", "e2e/owner.spec.ts: an order with no owner still opens"),
+                         vote_text("Rule: A", "lib/a.test.ts: a condition of the road that lost"),
+                         vote_text("Rule: B", "db/owner.test.ts: the old column is gone after the migration",
+                                   "db/owner.test.ts: a rollback restores it", "a third one"))
+        self.ran()
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn('the count gives road B: "drop the column in this migration"', out)
+        self.assertEqual(self.by_panel("add a view that both shapes read")[0], 3)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        code, out = self.by_panel("drop the column in this migration")
+        self.assertEqual(code, 0, out)
+        entries = entries_of(self.plan.read_text())[0]
+        entry = entries[-1]
+        self.assertEqual((entry["who"], entry["kind"], entry["words"]),
+                         ("panel", "migration", "drop the column in this migration"))
+        self.assertEqual(entry["panel"], {"count": "road B, 2 of 3", "files": folder.name})
+        self.assertEqual(entry["conditions"], ["e2e/owner.spec.ts: an order with no owner still opens",
+                                               "db/owner.test.ts: the old column is gone after the migration",
+                                               "db/owner.test.ts: a rollback restores it"])
+        self.assertEqual(self.row("02"), "not started")
+        self.assertEqual(sorted(json.loads((folder / mod.AGENTS).read_text())), ["builder", "exposed", "finder", "operator"])
+        self.assertEqual([e["number"] for e in mod.open_entries(entries, "Sam")], ["02"])
+
+    def test_a_found_road_rules_with_two_of_three(self):
+        folder = self.risk_stop(note="final")
+        self.panel_files(folder, vote_text("Rule: F1"), vote_text("Rule: A"), vote_text("Rule: F1"))
+        self.ran(note="final")
+        self.assertEqual(self.by_panel(DEFAULT, note="final")[0], 3)
+        code, out = self.by_panel("add a view that both shapes read", note="final")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  Panel: road F1, 2 of 3, files {folder.name}\n", self.plan.read_text())
+
+    def test_when_the_readers_disagree_the_default_rules_and_the_entry_says_so(self):
+        folder = self.risk_stop()
+        self.panel_files(folder, vote_text("Rule: B", "cond of b"), vote_text("Hold: the count of open orders"),
+                         vote_text("Rule: A", "cond of a"))
+        self.ran()
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("the readers disagreed", out)
+        self.assertEqual(self.by_panel("drop the column in this migration")[0], 3)
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"  Panel: the readers disagreed, so the written default rules, files {folder.name}\n",
+                      self.plan.read_text())
+        self.assertEqual(entries_of(self.plan.read_text())[0][-1]["conditions"], ["cond of a"])
+
+    def test_two_holds_make_the_note_wait_and_no_road_rules(self):
+        folder = self.risk_stop()
+        self.panel_files(folder, vote_text("Hold: the count of open orders"), vote_text("Rule: B"),
+                         vote_text("Hold: whether the old app still reads the column"))
+        self.ran()
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("the readers hold", out)
+        self.assertEqual(self.row("02"), f"stopped: {self.QUESTION}")
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.row("02"), f"waiting: migration: {self.QUESTION}")
+        self.assertIn("the count of open orders", out)
+        self.assertIn("whether the old app still reads the column", out)
+        self.assertEqual(self.by_panel(DEFAULT)[0], 3)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        self.assertTrue((folder / mod.AGENTS).is_file(), "a hold is measured too")
+        self.later(30)
+        self.says("02: drop it.")
+        self.assertEqual(self.record("02", "migration", "Sam", "02: drop it", question=self.QUESTION)[0], 0)
+
+    def test_a_road_that_needs_a_fact_from_him_is_never_recorded(self):
+        folder = self.risk_stop()
+        self.panel_files(folder, vote_text("Rule: F2"), vote_text("Rule: F2"), vote_text("Rule: F2"))
+        self.ran()
+        code, out = self.by_panel("backfill in production first")
+        self.assertEqual(code, 3, out)
+        self.assertIn("the count gives road A", out)
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no vote", out)
+        self.assertIn("needs a fact", out)
+        self.assertIn("the count of rows with no owner in production", out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+
+    def test_record_by_panel_needs_the_transcripts_of_its_agents_on_the_panel_model(self):
+        folder = self.risk_stop()
+        self.panel_files(folder, vote_text("Rule: A"), vote_text("Rule: A"), vote_text("Rule: A"))
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("panel 02: finder", out)
+        self.ran(skip=("operator",))
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("panel 02: reader operator", out)
+        self.ran(model="claude-fable-5-2")
+        code, out = self.by_panel(DEFAULT)
+        self.assertEqual(code, 3, out)
+        self.assertIn("opus", out)
+        self.assertIn("claude-fable-5-2", out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        self.ran(note="03")
+        self.assertEqual(self.by_panel(DEFAULT)[0], 3, "the agents of another note are not this panel's")
+        self.ran()
+        self.assertEqual(self.by_panel(DEFAULT)[0], 0)
+
+    def test_a_stop_with_no_written_default_or_a_third_ruling_without_him_waits(self):
+        self.risk_stop(default="")
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("no written default", out)
+        self.assertEqual(self.row("02"), f"waiting: migration: {self.QUESTION}")
+        two = "".join(f'- [none] 02: question {i}\n  Ruled: 2026-11-12, default, "w"\n  Touches: none\n  Undo: one line\n'
+                      for i in (1, 2))
+        self.plan.write_text(PLAN.split("## Rulings")[0] + "## Rulings\n\n" + two + "\nApproved: 2026-11-03\n")
+        folder = self.risk_stop()
+        code, out = self.command("panel", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("without Sam already", out)
+        self.assertEqual(self.row("02"), f"waiting: migration: {self.QUESTION}")
+        self.assertFalse((folder / "finder.brief.md").exists(), "no agent is spawned for a question that waits")
+
+    def test_the_gate_line_of_a_panel_ruling_has_the_full_form(self):
+        folder = self.risk_stop()
+        self.panel_files(folder,
+                         vote_text("Rule: F1", "e2e/owner.spec.ts: an order with no owner still opens"),
+                         vote_text("Hold: the count of open orders",
+                                   reason="Nobody counted the open orders. The view hides that."),
+                         vote_text("Rule: F1", "db/view.test.ts: both shapes read the view"))
+        self.ran()
+        self.assertEqual(self.by_panel("add a view that both shapes read")[0], 0)
+        self.rows(n02="merged abc123456")
+        code, out = self.command("list")
+        self.assertEqual(code, 0, out)
+        line = next(row for row in out.splitlines() if row.startswith("- **MIGRATION** 02:"))
+        for part in (
+            f"02: {self.QUESTION}",
+            'Road taken: "add a view that both shapes read"',
+            "Ruled by panel on 2026-11-12.",
+            "The count: road F1, 2 of 3.",
+            "exposed: Rule: F1. The old shape stays readable. A rollback needs no backfill.",
+            "operator: Hold: the count of open orders. Nobody counted the open orders. The view hides that.",
+            "builder: Rule: F1. The old shape",
+            "Conditions: e2e/owner.spec.ts: an order with no owner still opens; db/view.test.ts: both shapes read the view.",
+            "A road the question did not offer: F1 (the road taken), add a view that both shapes read; "
+            "evidence: src/orders/read.ts:41, db/migrations/0090_orders.sql:12; undo: drop the view.",
+            "A candidate road that needs a fact from Sam: F2, backfill in production first; "
+            "the fact: the count of rows with no owner in production.",
+            "Touched: none.",
+            "Undo: one line.",
+        ):
+            self.assertIn(part, line)
+        self.assertNotIn("Third sentence", line)
+        entries = entries_of(self.plan.read_text())[0]
+        self.assertEqual(mod.away_lines(entries, "Sam", records=self.records), [line[2:]],
+                         "the report's line is the list's line")
+        short = mod.away_lines(entries, "Sam")[0]
+        self.assertIn("The count: road F1, 2 of 3. Conditions: e2e/owner.spec.ts", short,
+                      "a hook's refusal has the count and the conditions from the page alone")
+        shutil.rmtree(folder)
+        line = mod.away_lines(entries, "Sam", records=self.records)[0]
+        self.assertIn("are not on this machine", line)
+        self.assertIn("The count: road F1, 2 of 3.", line)
+        self.assertIn("Conditions: e2e/owner.spec.ts", line)
+        self.assertIn(folder.name, line)
+
     # ── a question: the class is the stop's, and the wait is real ──
 
     def test_the_class_is_the_one_the_agent_typed(self):
@@ -557,17 +1028,19 @@ class Commands(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("02"), "not started")
 
-    def test_wait_on_a_risk_question_sets_the_row_and_only_he_rules(self):
+    def test_wait_on_a_risk_question_keeps_the_row_and_names_the_panel(self):
         question = "may a manager refund without the owner"
         self.rows(n02=f"stopped: {question}")
         self.typed("02", "money", question)
         code, out = self.command("wait", "--note", "02")
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.row("02"), f"waiting: money: {question}")
+        self.assertEqual(self.row("02"), f"stopped: {question}")
+        self.assertIn("after that the panel rules", out)
+        self.assertIn("rulings.py panel bubble", out)
         self.later(10 * mod.RULING_WAIT_SECONDS)
         code, out = self.record("02", "money", "default")
         self.assertEqual(code, 3, out)
-        self.assertIn("waits for Sam", out)
+        self.assertIn("the `panel` rules a [money] question", out)
         self.assertEqual(self.record("02", "access", "Sam")[0], 3)
 
     def test_the_default_rules_only_after_the_wait(self):
@@ -615,7 +1088,7 @@ class Commands(unittest.TestCase):
             self.later(mod.RULING_WAIT_SECONDS)
             code, out = self.record("02", "none", "default", question=f"question {i}")
             self.assertEqual(code, 0 if i < 3 else 3, out)
-        self.assertIn("took a default already", out)
+        self.assertIn("without Sam already", out)
 
     # ── the final check's question has a home ──
 
@@ -628,7 +1101,7 @@ class Commands(unittest.TestCase):
         self.typed("final", "money", question)
         code, out = self.command("wait", "--note", "final")
         self.assertEqual(code, 0, out)
-        self.assertEqual(self.row("final"), f"waiting: money: {question}")
+        self.assertEqual(self.row("final"), f"stopped: {question}")
         self.later(30)
         self.says("Final: round half up, as the invoices do.")
         code, out = self.record("final", "money", "Sam", "final: round half up, as the invoices do", question)
@@ -854,29 +1327,24 @@ class Commands(unittest.TestCase):
         self.assertIn("answered: 02, 03; 0 ruling(s) still wait", out)
 
     def test_answer_all_confirms_only_the_lines_outside_the_risk_classes(self):
-        mod_seam = mod.ruler_when_unanswered
-        mod.ruler_when_unanswered = lambda kind: "panel" if kind in mod.RISK_CLASSES else "default"
-        try:
-            self.rows(n01="merged abc123456", n02="merged abc123456", n03="not started")
-            self.plan.write_text(PLAN.replace("2026-11-12, Sam,", "2026-11-12, panel,"))
-            self.assertIn("for each line in bold one sentence that names its number", self.listed())
-            self.says("Confirm all. ok")
-            code, out = self.command("answer", "--all", "--words", "confirm all")
-            self.assertEqual(code, 0, out)
-            self.assertIn("answered: 01, 02; 1 ruling(s) still wait: 03", out)
-            # Review 2, N2: the risk line closed on "ok", a word about nothing in particular.
-            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "ok")
-            self.assertEqual(code, 3, out)
-            self.assertIn("does not name line 03", out)
-            self.says("yes, no price")
-            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "yes, no price")
-            self.assertEqual(code, 3, out)
-            self.says("03: yes, no price")
-            code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "03: yes, no price")
-            self.assertEqual(code, 0, out)
-            self.assertIn("0 ruling(s) still wait", out)
-        finally:
-            mod.ruler_when_unanswered = mod_seam
+        self.rows(n01="merged abc123456", n02="merged abc123456", n03="not started")
+        self.plan.write_text(Gate.BY_PANEL)
+        self.assertIn("for each line in bold one sentence that names its number", self.listed())
+        self.says("Confirm all. ok")
+        code, out = self.command("answer", "--all", "--words", "confirm all")
+        self.assertEqual(code, 0, out)
+        self.assertIn("answered: 01, 02; 1 ruling(s) still wait: 03", out)
+        # Review 2, N2: the risk line closed on "ok", a word about nothing in particular.
+        code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "ok")
+        self.assertEqual(code, 3, out)
+        self.assertIn("does not name line 03", out)
+        self.says("yes, no price")
+        code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "yes, no price")
+        self.assertEqual(code, 3, out)
+        self.says("03: yes, no price")
+        code, out = self.command("answer", "--note", "03", "--confirmed", "--words", "03: yes, no price")
+        self.assertEqual(code, 0, out)
+        self.assertIn("0 ruling(s) still wait", out)
 
     def test_an_overturned_line_closes_only_on_a_new_fix_note(self):
         # Review finding 7: `--fix 01` named an old merged note and closed the gate.
