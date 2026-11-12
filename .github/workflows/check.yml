@@ -24,7 +24,12 @@ jobs:
       - name: Budget
         run: python3 lib/check_budget.py
       - name: Private text
+        # The check reads the machine's login as the owner's name. Here that
+        # login is `runner`, a word the hunt files use for a role, so the step
+        # takes the login of the repository's owner instead.
         run: python3 .githooks/commit-msg --tree
+        env:
+          LOGNAME: ${{ github.repository_owner }}
       - name: Hook and library drills
         run: |
           python3 lib/run_python_suites.py hooks
