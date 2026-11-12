@@ -527,6 +527,43 @@ class Rulings(Product):
         self.assertEqual(code, 0, out)
         self.assertIn("1 to confirm before the merge", out)
 
+    def test_the_whole_road_through_the_commands_the_skill_names(self):
+        """A failed note, its ruling by default, the restart, the held run, the
+        answer and the open merge, each through the command a session types."""
+        import rulings
+
+        def command(*args):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = rulings.main([args[0], "bubble", "--tree", str(self.tree), *args[1:]])
+            return code, out.getvalue()
+
+        self.write("changes/bubble/report.md", report(state="stopped", s02="failed"))
+        self.commit_all("report: note 02 failed")
+        self.assertEqual(self.run_check("plan", "bubble")[0], 2)
+        self.change_02()
+        code, out = command("record", "--note", "02", "--kind", "re-arm", "--who", "default",
+                            "--question", "note 02 failed three strikes", "--words", "hide the count at zero",
+                            "--touches", "Touches: none", "--undo", "one line in the order page")
+        self.assertEqual(code, 0, out)
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 to confirm before the merge", out)
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(state="held", s02=f"merged {merge}"))
+        self.commit_all("report: bubble held")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 2, out)
+        self.assertIn("GATE: 1 ruling(s)", out)
+        self.assertIn("02: note 02 failed three strikes", command("list")[1])
+        code, out = command("answer", "--all")
+        self.assertEqual(code, 0, out)
+        self.commit_all("rulings: answered")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("to confirm", out)
+
     # ── the session's folder ──
 
     def test_a_session_in_its_own_worktree_of_the_repo_refuses(self):
