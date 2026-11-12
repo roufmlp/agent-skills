@@ -20,7 +20,11 @@ rule allows without asking:
   pages/<1st>-audit.md   the table for the next 1st of the month: one row per
                          measure, columns this month, last month and version 1
                          (from audit/v1-baseline.json, written once by
-                         `measure_v1.py`), then the proposals. The brainstorm
+                         `measure_v1.py`), then the proposals. The Tooling
+                         stops row counts, by family, the tool faults that
+                         stopped a build-feature run: the lines under
+                         `## Tooling stops` in each feature report of every
+                         repo a session ran in. The brainstorm
                          page on the 1st links this file by that name. Every
                          Sunday rewrites it, so the 1st reads the newest.
 
@@ -37,6 +41,7 @@ import datetime as dt
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -45,7 +50,12 @@ sys.path.insert(0, HERE)
 
 import audit_transcripts as at  # noqa: E402
 
-ROWS = ("Cost", "Tokens", "Speed", "Decisions", "Interruptions", "Bugs", "Parallel", "Drift", "Not used", "Growth")
+ROWS = ("Cost", "Tokens", "Speed", "Decisions", "Interruptions", "Tooling stops", "Bugs", "Parallel", "Drift",
+        "Not used", "Growth")
+# A line of a feature report's `## Tooling stops` part, as build-feature-run.js
+# writes it: `<date> <note>: <tool family>: <the refusal line>`.
+TOOLING_PART = "## Tooling stops"
+TOOLING_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}) (\S+): ([^:]+): (.+)$")
 
 
 def load_jsonl(path):
@@ -157,6 +167,51 @@ def mvp_speeds(ideas_dir):
     return out
 
 
+def repo_roots(sessions):
+    """The product repos the sessions ran in: each session folder, cut back to
+    the main checkout when it is a worktree, that holds a `changes/` folder."""
+    roots = set()
+    for s in sessions:
+        root = (s.get("cwd") or "").split("/.claude/worktrees/")[0]
+        if root and os.path.isdir(os.path.join(root, "changes")):
+            roots.add(root)
+    return sorted(roots)
+
+
+def tooling_stops(roots, month):
+    """Tool faults that stopped a build-feature run in `month`, by family.
+
+    A run that a hook, a check script or the desktop app stops writes one line
+    under `## Tooling stops` in the feature's report and keeps it across
+    restarts. This reads every report on a repo's main checkout and in its
+    feature trees; a line that both copies carry counts once."""
+    seen, counts = set(), collections.Counter()
+    for root in roots:
+        reports = glob.glob(os.path.join(root, "changes", "*", "report.md"))
+        reports += glob.glob(os.path.join(root, ".claude", "worktrees", "feature-*", "changes", "*", "report.md"))
+        for path in sorted(reports):
+            feature = os.path.basename(os.path.dirname(path))
+            inside = False
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                for raw in fh:
+                    line = raw.strip()
+                    if line.startswith("## "):
+                        inside = line == TOOLING_PART
+                        continue
+                    match = TOOLING_LINE.match(line) if inside else None
+                    if not match or not match.group(1).startswith(month) or (root, feature, line) in seen:
+                        continue
+                    seen.add((root, feature, line))
+                    counts[match.group(3).strip()] += 1
+    return counts
+
+
+def tooling_cell(counts):
+    if not counts:
+        return "none"
+    return f"{sum(counts.values())}: " + ", ".join(f"{n} {family}" for family, n in counts.most_common())
+
+
 def used_names(sessions):
     skills = collections.Counter()
     agents = collections.Counter()
@@ -171,11 +226,11 @@ def fmt_k(n):
     return f"{round((n or 0) / 1000)}k"
 
 
-def month_cells(sessions, month, snapshot, previous, speeds):
+def month_cells(sessions, month, snapshot, previous, speeds, stops=None):
     """One dict row -> text for the sessions that started in `month`."""
     group = [s for s in sessions if at.month_of(s.get("start")) == month]
     if not group:
-        return {row: "no sessions" for row in ROWS}, group
+        return {**{row: "no sessions" for row in ROWS}, "Tooling stops": tooling_cell(stops)}, group
     hours = sum(s["hours"] for s in group)
     kinds = collections.Counter(s["kind"] for s in group)
     kind_text = ""
@@ -232,6 +287,7 @@ def month_cells(sessions, month, snapshot, previous, speeds):
             f"{len(interruptions)} in {sum(1 for s in group if s['interruptions'])} sessions, {lost:.1f} h: "
             + (", ".join(f"{v} {k}" for k, v in causes.most_common(4)) or "none")
         ),
+        "Tooling stops": tooling_cell(stops),
         "Bugs": "not measured until stage two (fix commits per note, hunt rows)",
         "Parallel": f"most sessions at once {at.max_concurrent(intervals)}",
         "Drift": f"{drift} DRIFT lines",
@@ -339,8 +395,10 @@ def run(projects_dir, ideas_dir, home, today, push=True):
         with open(baseline_path, encoding="utf-8") as fh:
             v1_column = json.load(fh).get("column") or {}
     speeds = mvp_speeds(ideas_dir)
-    this_cells, _ = month_cells(sessions, this_month, snapshot, previous, speeds)
-    last_cells, _ = month_cells(sessions, last_month, last_month_snapshot or snapshot, None, speeds)
+    roots = repo_roots(sessions)
+    this_cells, _ = month_cells(sessions, this_month, snapshot, previous, speeds, tooling_stops(roots, this_month))
+    last_cells, _ = month_cells(sessions, last_month, last_month_snapshot or snapshot, None, speeds,
+                                tooling_stops(roots, last_month))
     props = proposals(sessions, this_month, last_month, snapshot, previous)
     page_path = os.path.join(ideas_dir, "pages", f"{next_first}-audit.md")
     os.makedirs(os.path.dirname(page_path), exist_ok=True)
