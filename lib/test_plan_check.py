@@ -262,6 +262,43 @@ class PlanRoad(Product):
         code, out = self.run_check("plan", "bubble")
         self.assertEqual(code, 0, out)
 
+    def merge_note(self, number, path, text):
+        """The merger's first step alone: the note's branch is in the feature, and nobody wrote the row."""
+        self.git("checkout", "-qb", f"note/bubble/{number}")
+        self.write(path, text)
+        self.commit_all(f"note {number}")
+        self.git("checkout", "-q", "feature/bubble")
+        self.git("merge", "--no-ff", "-qm", f"merge note {number}", f"note/bubble/{number}")
+        return self.git("rev-parse", "HEAD")
+
+    def test_a_note_merged_in_git_is_merged_whatever_its_row_says(self):
+        # The rehearsal of 2026-11-12: the merger merged the note and its edit of the row failed.
+        self.write("changes/bubble/report.md", report(s02="not started"))
+        self.commit_all("report: bubble running")
+        self.merge_note("02", "e2e/order.spec.ts", "// the implementer renamed a label\n")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+
+    def test_git_changes_no_row_that_asks_waits_or_was_cut(self):
+        merge = self.merge_note("02", "src/a.ts", "export const a = 1;\n")
+        for state in ("not started", "running", "merged", "", "stopped: tooling: hook: the note check refused",
+                      "stopped: worktree: the merge did not go through, and the note starts again in a new tree"):
+            self.assertEqual(mod.with_merges(self.tree, "bubble", {"02": state}), {"02": f"merged {merge[:9]}"}, state)
+        for state in ("merged abc1234", "cut 2026-11-12", "failed", "waiting: money: a question",
+                      "stopped: may the count read every user's reports"):
+            self.assertEqual(mod.with_merges(self.tree, "bubble", {"02": state}), {"02": state})
+        self.assertEqual(mod.with_merges(self.tree, "bubble", {"01": "not started"}), {"01": "not started", "02": f"merged {merge[:9]}"},
+                         "a note with no merge commit keeps its row, and a merged one with no row gets one")
+
+    def test_a_merge_of_main_into_the_feature_is_no_note(self):
+        self.git("checkout", "-q", "main")
+        self.write("src/main.ts", "export const m = 1;\n")
+        self.commit_all("a change on main")
+        self.git("branch", "note/bubble/01", "feature/bubble")
+        self.git("checkout", "-q", "feature/bubble")
+        self.git("merge", "--no-ff", "-qm", "main-in", "main")
+        self.assertEqual(mod.merged_in_git(self.tree, "bubble"), {})
+
     def test_note_added_after_approval_refuses(self):
         self.write("changes/bubble/03-extra.md", NOTE_02.replace("# 02", "# 03"))
         code, out = self.run_check("plan", "bubble")
@@ -942,6 +979,20 @@ class NotesRoad(Product):
         self.assertIn("note 02: REFUSED changes/bubble/02-order.md\n  `sh e2e/order.sh` passes on "
                       "today's code, so it proves nothing about the work (the count shows on Order).", out)
         self.assertIn("REFUSED: 1 of 2 note(s)", out)
+
+    def test_no_done_check_runs_before_work_that_git_shows_merged(self):
+        # The same rehearsal: the row read `not started`, so the session named the merged note in
+        # `--only`, its done check passed, and the note stopped as "done check passes before the work".
+        self.git("checkout", "-qb", "note/bubble/02")
+        self.write("e2e/order.sh", "exit 0\n")
+        self.commit_all("note 02")
+        self.git("checkout", "-q", "feature/bubble")
+        self.git("merge", "--no-ff", "-qm", "merge note 02", "note/bubble/02")
+        merge = self.git("rev-parse", "HEAD")
+        code, out = self.run_check("notes", "bubble", "--only", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"note 02: merged into feature/bubble at {merge[:9]}", out)
+        self.assertNotIn("passes on today's code", out)
 
     def test_static_skips_running(self):
         self.write("e2e/order.sh", "exit 0\n")

@@ -516,6 +516,16 @@ class Script(unittest.TestCase):
         self.assertEqual(result["stops"], [{"number": "final", "role": "final-reviewer", "kind": "tooling",
                                             "tool": "desktop app", "line": line}])
 
+    def test_a_final_role_that_returns_nothing_twice_spends_no_fix_round(self):
+        # The rehearsal of 2026-11-12: the runtime stopped the final reviewer, which ended with no typed answer.
+        result, calls = self.run_script(args([note("01")]), [(r"^final reviewer", [None])])
+        self.assertEqual(result["state"], "stopped")
+        self.assertEqual(self.labels(calls, r"^final reviewer"), ["final reviewer 1", "final reviewer 1 (retry)"])
+        self.assertEqual(self.labels(calls, r"^fix round"), [])
+        self.assertIn("Final reviewer 1: no result", "\n".join(result["finalLines"]))
+        self.assertFalse(result["final"], "no row stops or waits, so the next start runs the final check again")
+        self.assertEqual(self.labels(calls, r"^report: stopped$"), ["report: stopped"])
+
     def test_main_moved_runs_the_final_check_again_with_no_further_fix_round(self):
         moved = {"outcome": "main moved", "commit": "", "line": "main moved"}
         result, calls = self.run_script(

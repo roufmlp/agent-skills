@@ -193,9 +193,12 @@ RULERS = ("default", PANEL)
 # so has the cycle of fix notes a final check asks for.
 MAX_DEFAULT_RULINGS = 2
 FINAL = "final"
-# A stop whose class the row itself fixes as `none`: the session's pre-run
-# stop, and a final-check finding that needs a fix note.
-PLAIN_STOPS = ("done check passes before the work", "fix note needed:")
+# A stop no agent typed, so no transcript holds it. The row itself fixes its
+# class as `none`, and this table its written default: the session's pre-run
+# stop has none, so it waits for Abdul; the script gives a final-check finding
+# that needs a fix note the default below (`build-feature-run.js`).
+PLAIN_STOPS = {"done check passes before the work": "",
+               "fix note needed:": "write a fix note with the test each finding names"}
 # Rows a run starts again by itself; none is a question (`plan_check.RESTART_STATES`).
 NOT_A_QUESTION = re.compile(r"^stopped: (API errors|[a-z-]+ returned no result|worktree:|tooling:)")
 STOPS = "stops.jsonl"  # the run's own record of each typed stop, written from the agents' transcripts
@@ -994,8 +997,9 @@ class Feature:
         written default. The run's record holds it (`feature_run.py roles`
         writes it from the transcripts); a stop with no record, or with a
         class nobody knows, is `unclassified`."""
-        if question.startswith(PLAIN_STOPS):
-            return {"class": "none", "default": ""}
+        for start, default in PLAIN_STOPS.items():
+            if question.startswith(start):
+                return {"class": "none", "default": default}
         found = {"class": "unclassified", "default": ""}
         path = self.records() / STOPS
         if path.is_file():
@@ -1239,20 +1243,20 @@ def record(opts) -> int:
 
 
 def notice(feature: str, number: str, cls: str, question: str, default: str) -> str:
-    """The question as it goes to his phone. A risk-class question shows the
-    form its answer must have (`names_line`), with the note's own number."""
+    """The question as it goes to his phone, with its written default. A
+    risk-class question shows the form its answer must have (`names_line`),
+    with the note's own number."""
     if cls not in RISK_CLASSES:
-        return f"{feature} {number}: {closed(question)} Default: {closed(default or 'none written')}"
-    return (f"{feature} {number}: [{cls}] {closed(question)} "
-            + (f"Default (A): {closed(default)}" if default else "No default is written.")
-            + f" To answer, start your message with \"{number}:\", for example "
-            + (f"\"{number}: A\" or " if default else "") + f"\"{number}: <your own road>\".")
+        return f"{feature} {number}: {closed(question)} Default: {closed(default)}"
+    return (f"{feature} {number}: [{cls}] {closed(question)} Default (A): {closed(default)} To answer, start your "
+            f"message with \"{number}:\", for example \"{number}: A\" or \"{number}: <your own road>\".")
 
 
 def wait(opts) -> int:
     """The question goes to Abdul now. A class a default or a panel rules
     keeps its row, and that one rules after the wait; any other row waits for
-    him."""
+    him, and so does a stop with no written default: a default that nobody
+    wrote rules nothing, and the session writes no answer of its own."""
     feature = Feature(opts.tree, opts.feature)
     state = report_rows(feature.report_text()).get(opts.note)
     why = (opts.why or "").strip()
@@ -1270,6 +1274,9 @@ def wait(opts) -> int:
         cls = stop["class"]
         sent = feature.mark_sent(opts.note, question)
         road = ruler_when_unanswered(cls)
+        if road in RULERS and not stop["default"]:
+            return to_him(feature, opts.note, cls, question, f"The stop carries no written default, so neither a "
+                          f"default nor a panel rules it: it waits for {feature.who}.")
         if road in RULERS:
             print(f"note {opts.note}: [{cls}] sent at {clock(sent)}. His answer rules until "
                   f"{clock(sent + RULING_WAIT_SECONDS)}; after that the {road} rules ("
@@ -1466,7 +1473,7 @@ def stop_lines(feature: Feature, number: str, cls: str, question: str, default: 
 
 
 def to_him(feature: Feature, number: str, cls: str, question: str, why: str) -> int:
-    """A risk question no panel rules: its row waits for Abdul."""
+    """A question nobody rules for him: its row waits for Abdul."""
     feature.set_row(number, f"waiting: {cls}: {question}")
     print(f"note {number}: waiting: {cls}: {question}")
     print(f"  {why}")
@@ -1496,9 +1503,6 @@ def panel(opts) -> int:
     if without >= MAX_DEFAULT_RULINGS:
         return to_him(feature, number, cls, question, f"{MAX_DEFAULT_RULINGS} questions of {number} took a ruling "
                       f"without {feature.who} already, so no panel runs: this one waits for him.")
-    if not default:
-        return to_him(feature, number, cls, question, "The stop carries no written default, so no road is on "
-                      f"record for a panel to fall back on: it waits for {feature.who}.")
     folder = panel_dir(feature, number, question)
     folder.mkdir(parents=True, exist_ok=True)
     roads, votes, slips = panel_files(folder, default)

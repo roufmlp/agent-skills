@@ -273,6 +273,36 @@ def read_report(text: str | None) -> dict:
     return {"merged": merged, "state": state, "states": rows}
 
 
+def merged_in_git(tree: pathlib.Path, feature: str) -> dict[str, str]:
+    """Each note a merge commit on the feature branch brought in, with that
+    commit: the second parent of the merge is the tip of `note/<feature>/<nn>`."""
+    tips = dict(line.split() for line in git(
+        tree, "for-each-ref", "--format=%(objectname) %(refname:lstrip=4)", f"refs/heads/note/{feature}/",
+        check=False).splitlines())
+    main = main_branch(tree)
+    found = {}
+    for line in git(tree, "rev-list", "--first-parent", "--merges", "--parents", f"feature/{feature}",
+                    *([f"^{main}"] if main else []), check=False).splitlines():
+        commit, *parents = line.split()
+        if len(parents) == 2 and parents[1] in tips:
+            found.setdefault(tips[parents[1]], commit)
+    return found
+
+
+def with_merges(tree: pathlib.Path, feature: str, states: dict[str, str]) -> dict[str, str]:
+    """The rows, with git's word on each merge. The merger makes the merge
+    commit and then writes the row, so a run that ends between the two leaves
+    a merged note whose row says `not started` (the rehearsal of 2026-11-12:
+    the pre-run check then stopped the merged note, and no restart went
+    through). Git is the record of a merge. A row that asks for a ruling, or
+    waits for Abdul, or was cut, keeps its state."""
+    for number, commit in merged_in_git(tree, feature).items():
+        state = states.get(number, "").strip()
+        if state in ("", "not started", "running", "merged") or RESTART_STATES.match(state):
+            states[number] = f"merged {commit[:9]}"
+    return states
+
+
 def pruning_notice(tree: pathlib.Path) -> str | None:
     row = suite.last_full_run(tree)
     if row and row.get("over_budget"):
@@ -511,6 +541,7 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                       f"commit of the plan and the notes together.")
     here = tree / folder / REPORT
     report = read_report(here.read_text(encoding="utf-8") if here.is_file() else None)
+    with_merges(tree, feature, report["states"])
     merged = {n for n, state in report["states"].items() if state.startswith("merged")}
     cut = {n for n, state in report["states"].items() if state.startswith("cut")}
     entries, found = ruling_faults(tree, folder, text, merged, cut)
@@ -640,7 +671,13 @@ def check_notes(tree: pathlib.Path, target: str, only: list[str], static: bool) 
             notes = [(n, p) for n, p in notes if n in only]
     stamp = f"{now():%Y%m%dT%H%M%S.%fZ}"
     refused = 0
+    merged = merged_in_git(tree, target) if numbers is not None else {}
     for number, path in notes:
+        if number in merged:
+            # Its done checks pass because its work is in: that is no stop.
+            print(f"note {number}: merged into feature/{target} at {merged[number][:9]}; no done check runs "
+                  f"before work that is in")
+            continue
         note = read_note((tree / path).read_text(encoding="utf-8"))
         why = static_refusals(tree, path, note, numbers)
         if not why and not static:

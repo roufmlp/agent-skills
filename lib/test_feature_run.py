@@ -288,6 +288,22 @@ class Feature(unittest.TestCase):
         self.git(self.tree, "add", "-A")
         self.git(self.tree, "commit", "-qm", message)
 
+    def test_a_note_merged_in_git_starts_as_merged_whatever_its_row_says(self):
+        # The rehearsal of 2026-11-12: a run ended between the merge of a note and its row.
+        self.write(self.tree, "changes/bubble/report.md", fixture.report(s01="running", s02="not started"))
+        self.commit("report: bubble running")
+        self.git(self.repo, "branch", "note/bubble/01", "feature/bubble")
+        self.git(self.repo, "checkout", "-q", "note/bubble/01")
+        self.write(self.repo, "src/a.ts", "export const a = 1;\n")
+        self.git(self.repo, "add", "src/a.ts")
+        self.git(self.repo, "commit", "-qm", "note 01")
+        self.git(self.repo, "checkout", "-q", "main")
+        self.git(self.tree, "merge", "--no-ff", "-qm", "merge note 01", "note/bubble/01")
+        merge = self.git(self.tree, "rev-parse", "HEAD")
+        one, two = self.args()["notes"]
+        self.assertEqual((one["state"], one["fresh"]), (f"merged {merge[:9]}", False))
+        self.assertEqual(two["state"], "not started")
+
     def test_args_carries_the_wait_from_its_one_place(self):
         import rulings
         self.assertEqual(self.args()["ruling_wait_seconds"], rulings.RULING_WAIT_SECONDS)

@@ -592,6 +592,11 @@ if (merged.length + cut.length === notes.length && !halted && !finalRow) {
         const rOk = fr !== null && fr.verdict === 'PASS'
         finalLines.push(`Final verifier ${round}: ${fv === null ? 'no result' : fv.line} (${verifyPath})`)
         finalLines.push(`Final reviewer ${round}: ${fr === null ? 'no result' : fr.line} (${reviewPath})`)
+        // A final role that returned nothing twice found no fault, so no fix
+        // round is spent on it: the next start runs the final check again, and
+        // `feature_run.py args` bounds those starts. Before this line a
+        // reviewer the runtime stopped cost the feature one of its three rounds.
+        if (fv === null || fr === null) break
         // A tool that refused a final role is not a finding: no fix round can
         // clear it, so none is spent on it.
         const faults = [['final-verifier', stopOf(fv)], ['final-reviewer', stopOf(fr)]].filter(f => f[1] !== null)

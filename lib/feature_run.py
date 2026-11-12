@@ -264,6 +264,10 @@ def report_rows(tree: pathlib.Path, folder: str) -> dict:
             continue
         if columns and len(cells) >= 2 and cells[0] and not set(cells[0]) <= set("-: "):
             rows[cells[0]] = dict(zip(columns, cells))
+    # A run that ended between a note's merge and its row: git has the merge.
+    states = {number: row.get("State", "") for number, row in rows.items()}
+    for number, state in plan_check.with_merges(tree, folder.rpartition("/")[2], states).items():
+        rows.setdefault(number, {})["State"] = state
     return rows
 
 

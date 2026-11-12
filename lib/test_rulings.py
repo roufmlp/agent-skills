@@ -594,7 +594,7 @@ class Commands(unittest.TestCase):
     def row(self, number):
         return mod.report_rows(self.report.read_text())[number]
 
-    def typed(self, note, cls, question, default=""):
+    def typed(self, note, cls, question, default="the road the agent wrote"):
         """A stop as `feature_run.py roles` records it from the agent's transcript."""
         self.records.mkdir(parents=True, exist_ok=True)
         with open(self.records / mod.STOPS, "a") as fh:
@@ -1107,11 +1107,22 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.by_panel(DEFAULT)[0], 0)
 
     def test_a_stop_with_no_written_default_or_a_third_ruling_without_him_waits(self):
-        self.risk_stop(default="")
-        code, out = self.command("panel", "--note", "02")
-        self.assertEqual(code, 0, out)
-        self.assertIn("no written default", out)
-        self.assertEqual(self.row("02"), f"waiting: migration: {self.QUESTION}")
+        # One rule for every class: a default nobody wrote rules nothing, so the row waits for him at once.
+        for cls in ("migration", "none"):
+            self.rows(n02=f"stopped: {self.QUESTION}")
+            self.typed("02", cls, self.QUESTION, "")
+            code, out = self.command("wait", "--note", "02")
+            self.assertEqual(code, 0, out)
+            self.assertIn("The stop carries no written default, so neither a default nor a panel rules it: it waits "
+                          "for Sam.", out)
+            self.assertNotIn("notice:", out)
+            self.assertEqual(self.row("02"), f"waiting: {cls}: {self.QUESTION}")
+            self.later(mod.RULING_WAIT_SECONDS)
+            for who in ("default", "panel"):
+                code, out = self.record("02", cls, who)
+                self.assertEqual(code, 3, out)
+                self.assertIn("No default and no panel rules it", out)
+            (self.records / mod.STOPS).unlink()
         two = "".join(f'- [none] 02: question {i}\n  Ruled: 2026-11-12, default, "w"\n  Touches: none\n  Undo: one line\n'
                       for i in (1, 2))
         self.plan.write_text(PLAN.split("## Rulings")[0] + "## Rulings\n\n" + two + "\nApproved: 2026-11-03\n")
@@ -1225,8 +1236,9 @@ class Commands(unittest.TestCase):
         self.assertIn("after that the panel rules", out)
         self.assertIn("rulings.py panel bubble", out)
         # Review 3, fault 5: he sees the form of the answer in the question he gets.
-        self.assertIn('notice: bubble 02: [money] may a manager refund without the owner. No default is written. To answer, '
-                      'start your message with "02:", for example "02: <your own road>".', out)
+        self.assertIn('notice: bubble 02: [money] may a manager refund without the owner. Default (A): the road the '
+                      'agent wrote. To answer, start your message with "02:", for example "02: A" or "02: <your own '
+                      'road>".', out)
         self.rows(n01=f"stopped: {self.QUESTION}")
         self.typed("01", "migration", self.QUESTION, DEFAULT)
         self.assertIn(f'notice: bubble 01: [migration] {self.QUESTION}. Default (A): {DEFAULT}. To answer, start your '
@@ -1248,7 +1260,7 @@ class Commands(unittest.TestCase):
         code, out = self.command("wait", "--note", "02")
         self.assertEqual(code, 0, out)
         self.assertIn("the default rules", out)
-        self.assertIn("notice: bubble 02: zero or hidden. Default: none written.\n", out)
+        self.assertIn("notice: bubble 02: zero or hidden. Default: the road the agent wrote.\n", out)
         self.assertEqual(self.row("02"), "stopped: zero or hidden")
         self.later(mod.RULING_WAIT_SECONDS - 1)
         code, out = self.record("02", "none", "default")
@@ -1260,11 +1272,23 @@ class Commands(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.row("02"), "not started")
 
-    def test_the_pre_run_stop_is_class_none_with_no_record(self):
-        self.rows(n02="stopped: done check passes before the work")
-        self.assertEqual(self.command("wait", "--note", "02")[0], 0)
+    def test_the_pre_run_stop_has_no_written_default_and_waits_for_him(self):
+        # The rehearsal of 2026-11-12: `wait` printed "Default: none written", and after the wait
+        # `record --who default` ruled with the words the session wrote under Decide.
+        self.rows(["02: [none] the done check passes before the work: is it built already? Default: yes, set the "
+                   "row to merged"], n02="stopped: done check passes before the work")
+        code, out = self.command("wait", "--note", "02")
+        self.assertEqual(code, 0, out)
+        self.assertIn("it waits for Sam", out)
+        self.assertEqual(self.row("02"), "waiting: none: done check passes before the work")
         self.later(mod.RULING_WAIT_SECONDS)
-        self.assertEqual(self.record("02", "none", "default")[0], 0)
+        code, out = self.record("02", "none", "default", "yes, set the row to merged")
+        self.assertEqual(code, 3, out)
+        self.assertIn("note 02 waits for Sam", out)
+        self.says("The test is wrong: it must read the new column.")
+        code, out = self.record("02", "none", "Sam", "the test is wrong: it must read the new column")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.row("02"), "not started")
 
     def test_a_tool_fault_is_no_question(self):
         self.rows(n02="stopped: tooling: hook: REFUSED")
@@ -1318,7 +1342,13 @@ class Commands(unittest.TestCase):
 
     def test_a_finding_that_needs_a_fix_note_is_a_question_of_class_none(self):
         self.rows(n01="merged abc123456", final="stopped: fix note needed: the refund guard has no test")
-        self.assertEqual(self.command("wait", "--note", "final")[0], 0)
+        code, out = self.command("wait", "--note", "final")
+        self.assertEqual(code, 0, out)
+        # The script wrote this stop, so its default is the script's, in one place for both.
+        default = mod.PLAIN_STOPS["fix note needed:"]
+        self.assertIn(f"Default: {default}.\n", out)
+        script = (pathlib.Path(__file__).resolve().parents[1] / "workflows" / "build-feature-run.js").read_text()
+        self.assertIn(f"default: '{default}'", script)
         self.later(mod.RULING_WAIT_SECONDS)
         self.assertEqual(self.record("final", "none", "default", touches="none")[0], 0)
 
