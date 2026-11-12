@@ -183,7 +183,8 @@ def grade(path, defined, has_entry, returncode, stdout, stderr):
     if returncode != 0:
         return Verdict(path, False, defined=defined, executed=executed, reason=(
             f"REFUSED silent-suite: {path} exited {returncode}.\n"
-            f"  This is a red suite, not a silent one. Its own output is below."))
+            f"  This is a red suite, not a silent one. Its own output is below.\n"
+            + (stdout + stderr).rstrip()[-8000:]))
 
     if not defined:
         return Verdict(path, True, defined=0, executed=executed)

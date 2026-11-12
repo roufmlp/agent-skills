@@ -186,6 +186,12 @@ class Grade(unittest.TestCase):
         self.assertFalse(verdict.ok)
         self.assertIn("exited 1", verdict.reason)
 
+    def test_a_red_suite_shows_its_own_output(self):
+        # The reason said "Its own output is below" and printed none: on GitHub's
+        # machine a suite went red on 2026-11-12 and the log held no cause.
+        verdict = self.grade(defined=2, code=1, out="1 passed, 1 failed in 0.01s\n")
+        self.assertIn("1 passed, 1 failed", verdict.reason)
+
     def test_a_suite_that_reached_fewer_checks_than_it_defines_is_refused(self):
         # The dead-runner-block shape: 135 defined, 79 reached, exit zero.
         verdict = self.grade(defined=135, out="79 passed in 0.1s\n")
