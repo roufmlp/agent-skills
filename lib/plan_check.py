@@ -546,11 +546,11 @@ def check_plan(tree: pathlib.Path, feature: str) -> int:
                      f"{who}'s answer, or the written default once the wait is over; then the run "
                      f"starts again." + (f" Note {', '.join(again)} failed again after its one "
                                          f"re-arm: it waits for {who} (`rulings.py wait`)." if again else ""))
-    waiting = rulings.open_entries(entries, person)
+    waiting = rulings.open_entries(entries, person, cut)
     if report["state"] == HELD and waiting:
         raise Gate(f"{len(waiting)} ruling(s) {who} did not make wait for him before the merge "
                    f"into local main:\n  " + "\n  ".join(rulings.away_lines(
-                       entries, person, open_only=True, records=records_of(tree, feature))) +
+                       entries, person, open_only=True, records=records_of(tree, feature), cut=cut)) +
                    "\nHe confirms or overturns each one (`rulings.py answer`).")
     count = len(note_files(tree, folder))
     waits = sorted(n for n, state in report["states"].items() if state.startswith(WAITING))

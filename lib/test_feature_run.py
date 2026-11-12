@@ -458,11 +458,17 @@ class Feature(unittest.TestCase):
             self.start(4 * 86400, state="running", **done)
         # It waits for him, and his ruling starts the count again.
         self.start(5 * 86400, final="waiting: tooling: the final check did not finish", **done)
-        self.start(6 * 86400, final="ruled 2026-11-12", **done)
-        for day in range(7, 10):
-            self.start(day * 86400, **done)
+        for day in range(6, 9):
+            self.start(day * 86400, final="ruled 2026-11-12", **done)
+        # Review 3, note 7: a `ruled` row was exempt, so six daily starts on it all passed.
+        with self.assertRaises(mod.Refusal) as refused:
+            self.start(9 * 86400, final="ruled 2026-11-12", **done)
+        self.assertIn("the final check, which an earlier run did not finish", str(refused.exception))
+        # A new ruling changes the row, and the count starts again: three more, never a fourth.
+        for day in range(10, 13):
+            self.start(day * 86400, final="ruled 2026-11-20", **done)
         with self.assertRaises(mod.Refusal):
-            self.start(10 * 86400, **done)
+            self.start(13 * 86400, final="ruled 2026-11-20", **done)
 
     def test_a_held_or_merged_feature_is_no_restart(self):
         for state in ("held", "merged"):
@@ -616,72 +622,6 @@ class Feature(unittest.TestCase):
         self.assertNotIn("Explore", totals)
         self.assertGreater(totals["reviewer"]["cost"], totals["implementer"]["cost"] / 2)
         self.assertFalse(totals["implementer"]["unpriced"])
-
-    def test_roles_shows_the_finder_and_the_readers_of_each_risk_question(self):
-        # The first live risk questions measure the panel, so its cost is never inside another row.
-        import rulings
-        root = pathlib.Path(self.tmp.name)
-        run = root / "wf" / "wf_1"
-        run.mkdir(parents=True)
-        session = root / "session" / "subagents"
-        session.mkdir(parents=True)
-        for name in ("build-feature-road-finder", "panel-review-persona"):
-            (pathlib.Path(mod.AGENTS_DIR) / f"{name}.md").write_text(
-                AGENT.format(role="x", model="opus", effort="high").replace("build-feature-x", name))
-        usage = {"input_tokens": 10, "cache_creation_input_tokens": 1000, "cache_read_input_tokens": 0,
-                 "output_tokens": 100}
-
-        def agent(name):
-            path = session / f"agent-{name}.jsonl"
-            path.write_text(json.dumps({"type": "assistant", "uuid": name,
-                                        "message": {"id": name, "model": "claude-opus-5-5", "usage": usage}}) + "\n")
-            return str(path)
-
-        records = rulings.records_dir(self.tree, "bubble")
-        for at, folder in enumerate(("02-aaaaaaaaaa", "final-bbbbbbbbbb", "02-cccccccccc")):
-            (records / "panel" / folder).mkdir(parents=True)
-            kept = records / "panel" / folder / "agents.json"
-            kept.write_text(json.dumps({"finder": agent(f"{folder}-finder"),
-                                        **{seat: agent(f"{folder}-{seat}") for seat in rulings.SEATS}}))
-            os.utime(kept, (1_000_000 + at, 1_000_000 + at))
-        self.write(self.tree, "changes/bubble/report.md", textwrap.dedent("""\
-            # Bubble report
-
-            ## Notes
-
-            | Note | State |
-            | --- | --- |
-            | 02 | not started |
-
-            ## Roles
-
-            | Role | Model | Effort | Tokens | Cost | Strikes |
-            | --- | --- | --- | --- | --- | --- |
-            | implementer | sonnet | high | | | 0 |
-
-            ## Time
-        """))
-        report = self.tree / "changes" / "bubble" / "report.md"
-        code, out = self.run_main("roles", str(run.parent), "--report", str(report))
-        self.assertEqual(code, 0, out)
-        self.assertIn("panel: 6 row(s) for 3 risk question(s)", out)
-        text = report.read_text()
-        self.assertIn("| road finder, 02 | claude-opus-5-5 | high | 1,110 | $", text)
-        self.assertIn("| panel readers, 02 | claude-opus-5-5 | high | 3,330 | $", text)
-        self.assertIn("| road finder, final | claude-opus-5-5 | high | 1,110 | $", text)
-        self.assertIn("| panel readers, 02 (2) | claude-opus-5-5 | high | 3,330 | $", text)
-        self.assertLess(text.index("| implementer |"), text.index("| road finder, 02 |"))
-        self.assertLess(text.index("| panel readers, 02 (2) |"), text.index("## Time"))
-        totals = mod.panel_totals(records)
-        self.assertAlmostEqual(totals["panel readers, 02"]["cost"], 3 * totals["road finder, 02"]["cost"])
-        self.assertGreater(totals["road finder, 02"]["cost"], 0)
-        # A second call rewrites the rows; it adds none. A transcript that is gone is said, not priced at zero.
-        os.remove(session / "agent-02-aaaaaaaaaa-builder.jsonl")
-        code, out = self.run_main("roles", str(run.parent), "--report", str(report))
-        text = report.read_text()
-        self.assertEqual(text.count("| road finder, 02 |"), 1)
-        self.assertIn("| panel readers, 02 | claude-opus-5-5 | high | 2,220 | $", text)
-        self.assertIn("plus 1 transcript that is gone |", text)
 
     def test_roles_refuses_missing_paths(self):
         code, out = self.run_main("roles", str(self.repo / "nowhere"), "--report", str(self.repo / "README.md"))

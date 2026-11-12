@@ -55,15 +55,29 @@ prints one step per call and refuses before the wait is over:
    what it costs to undo, and `needs_owner_fact`;
 2. three readers, one per seat of SEATS, each a `panel-review-persona` agent
    on PANEL_MODEL, judge every road and write `<seat>.md`: line 1 is
-   `Rule: <road id>` or `Hold: <the one fact to measure first>`;
+   `Rule: <road id>` or `Hold: <the one fact to measure first>`. The brief
+   `panel` writes gives the whole form of that file, and says that it
+   replaces the report form of the agent file;
 3. `count` decides. No agent is the judge.
 
 The files of one stop are in `<git dir>/build-feature/<feature>/panel/<nn>-<key>/`,
-where the key is made from the question, so a note's next question never
-reads them. Road `A` is the written default, `B` onwards the other offered
-roads, `F1` and `F2` the found ones. Two or three holds make the row
-`waiting:`; so do a stop with no written default and a note that took
-MAX_DEFAULT_RULINGS rulings without him.
+where the key is made from the feature and the question, so a note's next
+question never reads them. Each agent's label carries that folder's name.
+Road `A` is the written default, `B` onwards the other offered roads, `F1`
+and `F2` the found ones.
+
+Two or three readers on one road: it rules. A vote for a road that needs a
+fact only Abdul can get is a hold on that fact. No two on one road and fewer
+than two holds: the written default rules, and only when a reader chose it.
+Every other count makes the row `waiting:`; so do a stop with no written
+default and a note that took MAX_DEFAULT_RULINGS rulings without him.
+
+A reader's file with no vote, a missing file, an agent with no transcript
+under its label or not on PANEL_MODEL, and a reader's transcript that names
+another seat's answer file each send the readers back once: `panel` removes
+the three answers (and the finder's, when the fault is the finder's), writes
+the reason to `second-round` and prints the spawns again. A second fault
+makes the row `waiting:`.
 
 ## What a command refuses
 
@@ -77,11 +91,13 @@ roles` writes from the agents' transcripts:
   out, and none by `default` or `panel` before that time plus
   RULING_WAIT_SECONDS; each of the two rules only the classes
   `ruler_when_unanswered` gives it;
+- a note that stopped on a question takes an entry with that question,
+  word for word: `--question` is compared with the row;
 - `--who panel` needs the panel's files for that stop (the finder's answer
-  and the three readers' files), words equal to the road `count` gives, and,
-  among this session's subagent transcripts, the finder and one reader per
-  seat under the labels `panel` printed, each reader on PANEL_MODEL. A road
-  that needs a fact only Abdul can get never rules: a vote for it is no vote;
+  and the three readers' files, each with a vote), words equal to the road
+  `count` gives, and, among this session's subagent transcripts, the finder
+  and one reader per seat under the labels `panel` printed, all four on
+  PANEL_MODEL, and no reader's naming another seat's answer file;
 - a `failed` row takes `re-arm` from a default, a `waiting:` row and a cut
   take a ruling from Abdul alone, a `merged` row takes none (a merged note
   takes a fix note), and a row that did not stop takes none;
@@ -102,12 +118,14 @@ roles` writes from the agents' transcripts:
   4. one sentence answers once (`sent.json` keeps what it answered).
      `answer --all` is the one call that takes several entries;
   5. a risk-class entry, in `record` and in `answer`, takes only a sentence
-     that names the note's number and says something more.
+     that starts with the note's number and a colon, as in `02: A` or `03:
+     confirm`. `wait` prints the notice with that form, and `list` states it.
   A follow-on in his name carries the words of the ruling it follows.
 
 The check stops a session that writes an answer itself. It does not stop one
-that forges a transcript, names another session's id, or writes a reader's
-file after the reader ran: the limit is stated in
+that forges a transcript, names another session's id, writes a reader's
+file after the reader ran, or lets a reader open another's file by a path
+its transcript does not spell out: the limit is stated in
 `skills/build-feature/when-a-run-stops.md`.
 
 ## What the page refuses
@@ -131,6 +149,7 @@ file after the reader ran: the limit is stated in
 `open_entries` is the gate before local main: each ruling Abdul did not make
 that has no answer, and each follow-on, whoever made the ruling it follows:
 a follow-on changes a note no question was asked about, so he sees it once.
+A follow-on on a note he cut since does not wait.
 A risk-class line counts as confirmed only when the line carries his words. An overturned line closes on a fix note that was not merged when
 he answered. A panel ruling's line has the full form (`panel_part`): the
 count, each reader's vote and reason, the conditions, each found road with
@@ -184,11 +203,12 @@ USED = "used"          # its key for the sentences of his that answered somethin
 PROJECTS = pathlib.Path.home() / ".claude" / "projects"
 SESSION = "CLAUDE_CODE_SESSION_ID"
 FINDER = "finder.json"  # the road finder's typed answer, in the panel's folder for one stop
-AGENTS = "agents.json"  # the transcripts of that panel's agents, which `feature_run.py roles` prices
+AGENTS = "agents.json"  # the transcripts of that panel's four agents: what a panel cost is read from them
+SECOND = "second-round"  # in a panel's folder once its readers were sent back; its text says why. They run no third time
 MAX_OFFERED = 4         # the roads a question's own words offer besides the default: ids B to E
 MAX_FOUND = 2           # the roads a finder may add: ids F1 and F2
 MAX_CONDITIONS = 2      # the named tests one reader may attach to its vote
-PANEL_MODEL = "opus"    # the model each reader runs on, by an override at its spawn
+PANEL_MODEL = "opus"    # the model the finder and each reader run on; a reader by an override at its spawn
 DISAGREED = "the readers disagreed"
 # The three seats of a panel. They are fixed here, and nobody derives a seat at
 # run time: each is the party that pays when a road is wrong in one way. `{who}`
@@ -469,11 +489,15 @@ def faults(entries: list[dict], numbers: set[str], who: str | None, merged=froze
     return found
 
 
-def needs_answer(entry: dict, entries: list[dict], who: str | None) -> bool:
+def needs_answer(entry: dict, entries: list[dict], who: str | None, cut=frozenset()) -> bool:
     """Abdul answers everything he did not rule himself. A follow-on is an
     edit a reader and a session wrote, on a note the question was not about,
-    so it always waits for him, whoever made the ruling it follows."""
-    return bool(entry["follows"]) or not by_person(entry, who)
+    so it waits for him, whoever made the ruling it follows. A follow-on on a
+    note he cut since asks nothing: no line of that note reaches main (review
+    3, note 8: he confirmed a line about a note that was gone)."""
+    if entry["follows"]:
+        return entry["number"] not in cut
+    return not by_person(entry, who)
 
 
 def answered(entry: dict, entries: list[dict]) -> bool:
@@ -485,10 +509,11 @@ def answered(entry: dict, entries: list[dict]) -> bool:
     return bool(entry["confirmed"]["words"]) or not is_risk(entry, entries)
 
 
-def open_entries(entries: list[dict], who: str | None = None) -> list[dict]:
+def open_entries(entries: list[dict], who: str | None = None, cut=frozenset()) -> list[dict]:
     """The gate before local main: each ruling that still waits for his answer.
-    With no `who`, nobody is the person and every ruling waits."""
-    return [e for e in entries if needs_answer(e, entries, who) and not answered(e, entries)]
+    With no `who`, nobody is the person and every ruling waits. `cut` are the
+    notes the report shows as cut."""
+    return [e for e in entries if needs_answer(e, entries, who, cut) and not answered(e, entries)]
 
 
 def rearmed(entries: list[dict]) -> set[str]:
@@ -532,9 +557,7 @@ def panel_part(entry: dict, who: str | None, records: pathlib.Path | None) -> st
     if roads is None and records is not None:
         parts.append(f"The readers' reasons and the roads are not on this machine (panel files {name}).")
     for seat, vote in (votes or {}).items():
-        parts.append(closed(f"{seat}: {vote['first'] or 'no first line'}"
-                            + (f" (no vote: {vote['why']})" if vote["kind"] is None else ""))
-                     + (f" {closed(brief(vote['reason']))}" if vote["reason"] else ""))
+        parts.append(closed(f"{seat}: {vote['first']}") + (f" {closed(brief(vote['reason']))}" if vote["reason"] else ""))
     parts.append(closed("Conditions: " + ("; ".join(entry["conditions"]) or "none")))
     taken = re.match(r"^road (\S+),", mark)
     for road in roads or []:
@@ -561,11 +584,12 @@ def away_line(entry: dict, entries: list[dict], records: pathlib.Path | None = N
             f"Undo: {entry['undo'] or 'not stated'}.")
 
 
-def away_lines(entries: list[dict], who: str | None, open_only=False, records: pathlib.Path | None = None) -> list[str]:
+def away_lines(entries: list[dict], who: str | None, open_only=False, records: pathlib.Path | None = None,
+               cut=frozenset()) -> list[str]:
     """The report's "Ruled while you were away" lines, risk classes first.
     With `records`, the run's folder in the git common dir, a panel ruling's
     line takes its full form from the panel's files."""
-    shown = [e for e in entries if needs_answer(e, entries, who) and not (open_only and answered(e, entries))]
+    shown = [e for e in entries if needs_answer(e, entries, who, cut) and not (open_only and answered(e, entries))]
     return [away_line(e, entries, records, who)
             for e in sorted(shown, key=lambda e: (not is_risk(e, entries), e["line"]))]
 
@@ -618,39 +642,43 @@ def read_roads(default: str, finder) -> list[dict]:
 
 
 def read_vote(text: str, roads: list[dict]) -> dict:
-    """One reader's file. Line 1 is the vote, exactly `Rule: <road id>` or
-    `Hold: <the one fact to measure first>`. Any other first line is no vote,
-    and so is a road that is not on the list or that needs a fact only Abdul
-    can get. Then the reason, and at most MAX_CONDITIONS `Condition:` lines."""
+    """One reader's file. Line 1 is the vote, exactly `Rule: <road id>` for a
+    road on the list or `Hold: <the one fact to measure first>`; a file with
+    any other first line is refused, and its reader runs again. A vote for a
+    road that needs a fact only Abdul can get is a hold on that fact. Then
+    the reason, and at most MAX_CONDITIONS `Condition:` lines."""
     rows = text.splitlines()
     first = rows[0].rstrip() if rows else ""
-    vote = {"first": first, "kind": None, "road": None, "fact": None, "why": "", "reason": "", "conditions": []}
     rule, hold = RULE.match(first), HOLD.match(first)
-    if rule:
-        road = next((r for r in roads if r["id"] == rule.group(1)), None)
-        if road is None:
-            vote["why"] = f"`{rule.group(1)}` is no road of this question"
-        elif road.get("needs_owner_fact"):
-            vote["why"] = f"road {road['id']} needs a fact only he can get, so no reader rules it"
-        else:
-            vote["kind"], vote["road"] = "rule", road["id"]
-    elif hold:
-        vote["kind"], vote["fact"] = "hold", plain(hold.group(1))
-    else:
-        vote["why"] = "the first line is not `Rule: <road id>` or `Hold: <fact>`"
+    if not rule and not hold:
+        raise Refusal(f"line 1 is `{first[:80]}`, which is not `Rule: <road id>` or `Hold: <fact>`")
+    road = next((r for r in roads if rule and r["id"] == rule.group(1)), None)
+    if rule and road is None:
+        raise Refusal(f"line 1 names `{rule.group(1)}`, which is no road of this question")
     body = [row.strip() for row in rows[1:] if row.strip()]
-    vote["reason"] = plain(" ".join(row for row in body if not row.startswith(CONDITION)))
     conditions = [plain(row[len(CONDITION):]) for row in body if row.startswith(CONDITION)]
-    vote["conditions"] = [c for c in conditions if c][:MAX_CONDITIONS]
+    vote = {"first": first, "kind": "hold", "road": None, "fact": None,
+            "reason": plain(" ".join(row for row in body if not row.startswith(CONDITION))),
+            "conditions": [c for c in conditions if c][:MAX_CONDITIONS]}
+    if hold:
+        vote["fact"] = plain(hold.group(1))
+    elif road.get("needs_owner_fact"):
+        vote["fact"] = road["needs_owner_fact"]
+    else:
+        vote["kind"], vote["road"] = "rule", road["id"]
     return vote
 
 
 def count(votes: dict[str, dict]) -> dict:
-    """The counting rule. No agent is the judge: two or three readers on one
-    road, and that road rules, a found road like any other; two or three
-    holds, and no road rules, so the note waits for Abdul; no two agree, and
-    the written default rules with the entry marked. `seats` are the readers
-    behind the outcome; their conditions go with the ruling."""
+    """The counting rule, on the three readers' votes. No agent is the judge.
+
+    Two or three readers on one road, and that road rules, a found road like
+    any other. No two on one road and fewer than two holds, and the written
+    default rules with the entry marked, but only when a reader chose it.
+    Every other count rules nothing: the note waits for Abdul. So the default
+    never rules on a count in which no reader named it (review 3, fault 2).
+    `seats` are the readers behind the outcome; their conditions go with the
+    ruling, and their facts with a hold."""
     named = collections.Counter(vote["road"] for vote in votes.values() if vote["kind"] == "rule")
     holds = [seat for seat, vote in votes.items() if vote["kind"] == "hold"]
     road, most = named.most_common(1)[0] if named else (None, 0)
@@ -658,8 +686,11 @@ def count(votes: dict[str, dict]) -> dict:
         outcome, mark = "road", f"road {road}, {most} of {len(SEATS)}"
     elif len(holds) >= 2:
         return {"outcome": "hold", "road": None, "seats": holds, "mark": f"hold, {len(holds)} of {len(SEATS)}"}
-    else:
+    elif named["A"]:
         outcome, road, mark = "default", "A", f"{DISAGREED}, so the written default rules"
+    else:
+        return {"outcome": "hold", "road": None, "seats": holds,
+                "mark": f"{DISAGREED}, and none chose the written default"}
     return {"outcome": outcome, "road": road, "mark": mark,
             "seats": [seat for seat, vote in votes.items() if vote["kind"] == "rule" and vote["road"] == road]}
 
@@ -861,10 +892,12 @@ def sentences(message: str) -> list[str]:
 
 
 def names_line(sentence: str, number: str) -> bool:
-    """Whether a sentence names a line by its number and says something more."""
+    """Whether a sentence answers one line by name: it starts with the line's
+    number and a colon and says something after them, as in `02: A` or `03:
+    confirm`. A number further inside a sentence names nothing: "Give me 2
+    minutes" closed a [money] question on note 02 (review 3, fault 5)."""
     token = re.escape(number.lstrip("0") or "0") if number.isdigit() else re.escape(number)
-    named = re.compile(rf"(?<!\w)0*{token}(?!\w)")
-    return bool(named.search(sentence)) and len(re.findall(r"\w", named.sub(" ", sentence, count=1))) >= 2
+    return bool(re.match(rf"0*{token}\s*:\s*\S", sentence.strip()))
 
 
 def said(words: str, since: float, who: str | None, used: dict, names: str | None = None) -> tuple[str, list[str]]:
@@ -872,8 +905,9 @@ def said(words: str, since: float, who: str | None, used: dict, names: str | Non
 
     `words` are his answer only when they are one whole message he typed after
     `since`, or one whole sentence of it. A sentence answers once: `used` holds
-    what earlier calls took. With `names`, the sentence must also name that
-    line by its number: a risk-class line takes no answer meant for another."""
+    what earlier calls took. With `names`, the sentence must also start with
+    that line's number and a colon (`names_line`): a risk-class line takes no
+    answer meant for another, and no sentence about something else."""
     want = spoken(words)
     if not want:
         raise Refusal("his words are empty.")
@@ -888,8 +922,9 @@ def said(words: str, since: float, who: str | None, used: dict, names: str | Non
         else:
             continue
         if names and not names_line(want, names):
-            raise Refusal(f"\"{words.strip()}\" does not name line {names}. A risk-class line closes on a sentence "
-                          f"of his that names it by its number and gives the answer, such as \"{names}: yes, <his words>\".")
+            raise Refusal(f"\"{words.strip()}\" does not start with `{names}:`. A risk-class line takes only a "
+                          f"sentence of his that starts with its number and a colon, such as \"{names}: A\" or "
+                          f"\"{names}: confirm\".")
         before = [answered for part in mine for answered in [used.get(when, {}).get(part)] if answered]
         if before:
             taken = before[0]
@@ -1146,6 +1181,15 @@ def record(opts) -> int:
             raise Refusal("a question, the words and the undo cost are one line each, and none is empty.")
     kind = opts.kind.strip()
     reset, since = standing(feature, opts.note, kind, opts.who)
+    state = report_rows(feature.report_text()).get(opts.note, "")
+    if kind != "correction" and state.startswith("stopped:") and not NOT_A_QUESTION.match(state):
+        # The class, the wait and a panel's count are all read from the row's
+        # question, so the page carries that question and no other (review 3,
+        # fault 4: a panel's ruling went on the page under another question).
+        asked = state[len("stopped:"):].strip()
+        if plain(opts.question) != plain(asked):
+            raise Refusal(f"note {opts.note} stopped on the question \"{asked}\", and `--question` is another "
+                          f"text. The page carries the question that was asked, word for word.")
     claim = None
     if opts.who == feature.who and FOLLOWS.match(kind):
         # A follow-on in his name carries the words of the ruling it follows,
@@ -1192,6 +1236,17 @@ def record(opts) -> int:
     return 0
 
 
+def notice(feature: str, number: str, cls: str, question: str, default: str) -> str:
+    """The question as it goes to his phone. A risk-class question shows the
+    form its answer must have (`names_line`), with the note's own number."""
+    if cls not in RISK_CLASSES:
+        return f"{feature} {number}: {closed(question)} Default: {closed(default or 'none written')}"
+    return (f"{feature} {number}: [{cls}] {closed(question)} "
+            + (f"Default (A): {closed(default)}" if default else "No default is written.")
+            + f" To answer, start your message with \"{number}:\", for example "
+            + (f"\"{number}: A\" or " if default else "") + f"\"{number}: <your own road>\".")
+
+
 def wait(opts) -> int:
     """The question goes to Abdul now. A class a default or a panel rules
     keeps its row, and that one rules after the wait; any other row waits for
@@ -1209,7 +1264,8 @@ def wait(opts) -> int:
     state = state or ""
     if state.startswith("stopped:") and not NOT_A_QUESTION.match(state):
         question = state[len("stopped:"):].strip()
-        cls = feature.stop_class(opts.note, question)
+        stop = feature.stop(opts.note, question)
+        cls = stop["class"]
         sent = feature.mark_sent(opts.note, question)
         road = ruler_when_unanswered(cls)
         if road in RULERS:
@@ -1217,6 +1273,7 @@ def wait(opts) -> int:
                   f"{clock(sent + RULING_WAIT_SECONDS)}; after that the {road} rules ("
                   + (f"`rulings.py record --kind {cls} --who default`" if road == "default" else
                      f"`rulings.py panel {feature.name} --tree {feature.tree} --note {opts.note}`") + ").")
+            print(f"notice: {notice(feature.name, opts.note, cls, question, stop['default'])}")
             return 0
         why = f"{cls}: {question}"
     elif not why:
@@ -1226,8 +1283,9 @@ def wait(opts) -> int:
         # A failed row, a waiting row or a note he may cut: he is shown it now,
         # and only a message he types after this answers it.
         at = feature.mark_sent(opts.note, "shown", again=True)
-        print(f"note {opts.note}: `{state}` shown at {clock(at)}. His answer is a message he types after this; "
-              f"to make the row wait for him, say why with --why.")
+        print(f"note {opts.note}: `{state}` shown at {clock(at)}. His answer is a message he types after this, and "
+              f"his answer to a risk-class question starts with \"{opts.note}:\"; to make the row wait for him, say "
+              f"why with --why.")
         return 0
     else:
         feature.mark_sent(opts.note, why)
@@ -1241,48 +1299,65 @@ def wait(opts) -> int:
 # ── The panel's files and its command ───────────────────────────────────────
 
 def panel_dir(feature: Feature, number: str, question: str) -> pathlib.Path:
-    """The folder of one stop's panel. The question names it, so the files of
-    one question are never read as the files of the note's next one."""
+    """The folder of one stop's panel. The feature and the question name it,
+    so the files of one question are never read as the files of the note's
+    next one, and its name is the key each agent's label carries."""
     if not re.fullmatch(NUMBER, number):
         raise Refusal(f"`{number}` is not a note number or `final`.")
-    key = hashlib.sha1(plain(question).encode("utf-8")).hexdigest()[:10]
+    key = hashlib.sha1(f"{feature.name}\n{plain(question)}".encode("utf-8")).hexdigest()[:10]
     return feature.records() / PANEL / f"{number}-{key}"
 
 
-def panel_files(folder: pathlib.Path, default: str) -> tuple[list[dict] | None, dict[str, dict]]:
-    """The roads and the votes a panel's folder holds so far: no roads before
-    the finder wrote its answer, one vote per reader's file."""
+def panel_files(folder: pathlib.Path, default: str) -> tuple[list[dict] | None, dict[str, dict], dict[str, str]]:
+    """What a panel's folder holds so far: the roads (none before the finder
+    wrote its answer), one vote per reader's file, and for each reader's file
+    that holds no vote the reason."""
     path = folder / FINDER
     if not path.is_file():
-        return None, {}
+        return None, {}, {}
     try:
         roads = read_roads(default, json.loads(path.read_text(encoding="utf-8")))
     except ValueError as error:
         raise Refusal(f"{path} is not JSON ({error}). The road finder writes it again.")
     except Refusal as error:
         raise Refusal(f"{path} is not the finder's typed answer: {error} The road finder writes it again.")
-    return roads, {seat: read_vote((folder / f"{seat}.md").read_text(encoding="utf-8"), roads)
-                   for seat in SEATS if (folder / f"{seat}.md").is_file()}
+    votes, slips = {}, {}
+    for seat in SEATS:
+        if not (folder / f"{seat}.md").is_file():
+            continue
+        try:
+            votes[seat] = read_vote((folder / f"{seat}.md").read_text(encoding="utf-8"), roads)
+        except Refusal as error:
+            slips[seat] = f"the file of the reader {seat} holds no vote: {error}"
+    return roads, votes, slips
 
 
-def label(number: str, seat: str | None = None) -> str:
-    """The description an agent of the panel is spawned with; `record` finds its transcript by it."""
-    return f"panel {number}: reader {seat}" if seat else f"panel {number}: finder"
+def label(key: str, seat: str | None = None) -> str:
+    """The description an agent of the panel is spawned with; `panel_agents`
+    finds its transcript by it. `key` is the name of the panel's folder."""
+    return f"panel {key}: reader {seat}" if seat else f"panel {key}: finder"
 
 
-def panel_agents(number: str) -> dict[str, str]:
-    """The transcripts of one panel's agents among this session's subagents:
-    the finder, and one reader per seat, each found by its agent type and its
-    label, the newest when a label ran twice. Refuses when one is missing, and
-    when a reader did not run on PANEL_MODEL: the override is one word at the
-    spawn, and nothing else would show that it was left out."""
+def panel_agents(folder: pathlib.Path) -> tuple[dict[str, str], dict[str, str]]:
+    """The transcripts of one panel's four agents among this session's
+    subagents, and what is wrong with the run of each.
+
+    An agent is found by its agent type and its label. The label carries the
+    name of the panel's folder, so the agents of another question, another
+    note or another feature are never this panel's (review 3, fault 3). The
+    newest wins when a label ran twice. Wrong are: no transcript; a model
+    that is not PANEL_MODEL, for the finder and for each reader, since the
+    override is one word at the spawn and nothing else shows that it was left
+    out; and a reader's transcript that names another seat's answer file by
+    its path, since a reader judges alone (review 3, fault 6)."""
     session = os.environ.get(SESSION, "")
     if not re.fullmatch(r"[0-9A-Za-z-]{8,}", session):
         raise Refusal(f"${SESSION} is not set, so the transcripts of the panel's agents cannot be found. Run the "
                       f"command from the session that spawned them.")
-    wanted = {"finder": ("build-feature-road-finder", label(number)),
-              **{seat: ("panel-review-persona", label(number, seat)) for seat in SEATS}}
-    found = {}
+    key = folder.name
+    wanted = {"finder": ("build-feature-road-finder", label(key)),
+              **{seat: ("panel-review-persona", label(key, seat)) for seat in SEATS}}
+    found, wrong = {}, {}
     metas = sorted(PROJECTS.glob(f"*/{session}/subagents/agent-*.meta.json"), key=lambda path: path.stat().st_mtime)
     for path in metas:
         try:
@@ -1295,51 +1370,60 @@ def panel_agents(number: str) -> dict[str, str]:
         for name, (agent, text) in wanted.items():
             if kind == agent and plain(meta.get("description")) == text:
                 found[name] = str(path)[:-len(".meta.json")] + ".jsonl"
-    missing = [f"`workflow:{wanted[name][0]}` with the description \"{wanted[name][1]}\"" for name in wanted
-               if name not in found]
-    if missing:
-        raise Refusal(f"this session spawned no agent {'; no agent '.join(missing)}. A panel's ruling is recorded "
-                      f"from the session that ran the panel, and each agent carries its label.")
-    for seat in SEATS:
+    for name, (agent, text) in wanted.items():
+        who = "road finder" if name == "finder" else f"reader {name}"
+        if name not in found:
+            wrong[name] = f"this session spawned no agent `workflow:{agent}` with the description \"{text}\""
+            continue
+        try:
+            raw = pathlib.Path(found[name]).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            raw = ""
         model = ""
-        with open(found[seat], encoding="utf-8", errors="replace") as fh:
-            for raw in fh:
-                if '"assistant"' not in raw:
-                    continue
-                try:
-                    rec = json.loads(raw)
-                except ValueError:
-                    continue
-                if isinstance(rec, dict) and rec.get("type") == "assistant":
-                    model = str((rec.get("message") or {}).get("model") or "")
-                    if model:
-                        break
+        for line in raw.splitlines():
+            if '"assistant"' not in line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("type") == "assistant":
+                model = str((rec.get("message") or {}).get("model") or "")
+                if model:
+                    break
+        others = [seat for seat in SEATS if name in SEATS and seat != name and f"{key}/{seat}.md" in raw]
         if PANEL_MODEL not in model:
-            raise Refusal(f"the reader {seat} ran on `{model or 'no model on record'}`, and a panel's readers run on "
-                          f"{PANEL_MODEL}: spawn it again, as step 2 of `rulings.py panel` printed it, with the model "
-                      f"override `{PANEL_MODEL}`.")
-    return found
+            wrong[name] = (f"the {who} ran on `{model or 'no model on record'}`, and a panel's agents run on "
+                           f"{PANEL_MODEL}")
+        elif others:
+            wrong[name] = f"the transcript of the {who} names the answer file of the reader {', '.join(others)}"
+    return found, wrong
 
 
 def panel_ruling(feature: Feature, number: str, words: str) -> tuple[list[str], tuple[pathlib.Path, dict]]:
     """What `record --who panel` adds to the entry, and the transcripts it
-    keeps. Refused unless the panel's files for this stop are all there, the
-    count gives a road, `words` are that road, and the agents ran in this
-    session. `standing` checked the row, the class and the wait before this."""
+    keeps. Refused unless the panel's files for this stop are all there, each
+    reader's file holds a vote, the four agents ran in this session as
+    `panel_agents` asks, the count gives a road, and `words` are that road.
+    `standing` checked the row, the class and the wait before this."""
     name = f"note {number}" if number != FINAL else "the final check"
     question = report_rows(feature.report_text()).get(number, "")[len("stopped:"):].strip()
     folder = panel_dir(feature, number, question)
     again = f"`rulings.py panel {feature.name} --tree {feature.tree} --note {number}` prints the step that is next."
-    roads, votes = panel_files(folder, feature.stop(number, question)["default"])
+    roads, votes, slips = panel_files(folder, feature.stop(number, question)["default"])
     if roads is None:
         raise Refusal(f"the panel of {name} has no files for this question: {folder / FINDER} is missing. {again}")
-    missing = [seat for seat in SEATS if seat not in votes]
+    missing = [seat for seat in SEATS if seat not in votes and seat not in slips]
     if missing:
         raise Refusal(f"the panel of {name} is not complete: {folder} holds no file of the reader "
                       f"{', '.join(missing)}. {again}")
+    found, wrong = panel_agents(folder)
+    wrong.update(slips)
+    if wrong:
+        raise Refusal(f"the panel of {name} is not sound: {'; '.join(wrong.values())}. {again}")
     result = count(votes)
     if result["outcome"] == "hold":
-        raise Refusal(f"the readers hold ({result['mark']}): no road rules, and {name} waits for {feature.who}. {again}")
+        raise Refusal(f"no road rules ({result['mark']}), and {name} waits for {feature.who}. {again}")
     road = next(r for r in roads if r["id"] == result["road"])
     if plain(words).replace('"', "'") != road["road"].replace('"', "'"):
         raise Refusal(f"the count gives road {road['id']}: \"{road['road']}\" ({result['mark']}). `--words` is "
@@ -1348,7 +1432,7 @@ def panel_ruling(feature: Feature, number: str, words: str) -> tuple[list[str], 
     for seat in result["seats"]:
         conditions += [c for c in votes[seat]["conditions"] if c not in conditions]
     return ([f"Panel: {result['mark']}, files {folder.name}", *[f"{CONDITION} {c}" for c in conditions]],
-            (folder / AGENTS, panel_agents(number)))
+            (folder / AGENTS, found))
 
 
 def road_lines(roads: list[dict], who: str | None) -> list[str]:
@@ -1365,7 +1449,7 @@ def road_lines(roads: list[dict], who: str | None) -> list[str]:
                      f"Why it beats the offered roads: {closed(road['beats'])} Where it fails: {closed(road['fails'])} "
                      f"What it costs to undo: {closed(road['undo'])}"
                      + (f" It needs a fact only {who or 'the human'} can get: {closed(road['needs_owner_fact'])} "
-                        f"No reader rules this road; say in your reason when it is worth his look."
+                        f"No reader rules this road: a vote for it counts as a hold on that fact."
                         if road["needs_owner_fact"] else ""))
     return lines
 
@@ -1393,7 +1477,9 @@ def to_him(feature: Feature, number: str, cls: str, question: str, why: str) -> 
 def panel(opts) -> int:
     """The next step of the panel on one stopped risk question: the finder,
     then the three readers, then the count. It writes each agent's brief into
-    the panel's folder and prints the spawn; the agents write their own files."""
+    the panel's folder and prints the spawn; the agents write their own files.
+    A panel that is not sound runs once more, from clean answers; a second
+    fault makes the question wait for Abdul."""
     feature = Feature(opts.tree, opts.feature)
     number = opts.note
     state = report_rows(feature.report_text()).get(number, "")
@@ -1415,9 +1501,35 @@ def panel(opts) -> int:
                       f"record for a panel to fall back on: it waits for {feature.who}.")
     folder = panel_dir(feature, number, question)
     folder.mkdir(parents=True, exist_ok=True)
-    roads, votes = panel_files(folder, default)
+    roads, votes, slips = panel_files(folder, default)
     head = f"panel: note {number} [{cls}]"
     again = "Then run this command again."
+    written = [seat for seat in SEATS if seat in votes or seat in slips]
+    agents, wrong = {}, {}
+    if roads is not None and written:
+        wrong = {seat: f"the reader {seat} wrote no file" for seat in SEATS if seat not in written}
+        wrong.update(slips)
+        if not wrong:
+            # The agents are checked before the count is shown, so no note
+            # changes on a panel whose agents did not run as asked.
+            agents, wrong = panel_agents(folder)
+    if wrong:
+        # No reader runs again beside the answers of the first round: all
+        # three go, and all three run again, once (review 3, faults 2 and 6).
+        why = "; ".join(wrong.values())
+        if (folder / SECOND).exists():
+            return to_him(feature, number, cls, question, f"The panel ran twice and is not sound: {why}. It runs "
+                          f"no third time: the question waits for {feature.who}.")
+        (folder / SECOND).write_text(why + "\n", encoding="utf-8")
+        for seat in SEATS:
+            (folder / f"{seat}.md").unlink(missing_ok=True)
+        if "finder" in wrong:
+            (folder / FINDER).unlink(missing_ok=True)
+            roads = None
+        written = []
+        print(f"{head} is not sound: {why}. The three readers' answers are removed"
+              + (", and the finder's answer" if roads is None else "") + f", and the panel runs once more. After a "
+              f"second fault the question waits for {feature.who}.")
     if roads is None:
         (folder / "finder.brief.md").write_text("\n".join([
             f"# Road finder: {feature.name}, {number}", "",
@@ -1426,53 +1538,62 @@ def panel(opts) -> int:
             f"Write your answer to {folder / FINDER}, in the form your brief gives, and write nothing else."]) + "\n",
             encoding="utf-8")
         print(f"{head}, step 1 of 3: the road finder")
-        print(f"  one agent: subagent_type workflow:build-feature-road-finder, description \"{label(number)}\"")
+        print(f"  one agent: subagent_type workflow:build-feature-road-finder, description \"{label(folder.name)}\"")
         print(f"  prompt: Read {folder / 'finder.brief.md'} and do what it says.")
         print(f"  It writes {folder / FINDER}. {again}")
         return 0
-    missing = [seat for seat in SEATS if seat not in votes]
-    if missing:
+    if not written:
+        who = feature.who or "the human"
         for seat, (title, lens) in SEATS.items():
             (folder / f"{seat}.brief.md").write_text("\n".join([
-                f"# Reader, {title}: {feature.name}, {number}", "", lens.format(who=feature.who or "the human"), "",
-                f"A run stopped on one question, and {feature.who} did not answer in time. You and two other "
+                f"# Reader, {title}: {feature.name}, {number}", "", lens.format(who=who), "",
+                f"A run stopped on one question, and {who} did not answer in time. You and two other "
                 f"readers judge every road below on equal terms: the written default, the roads the question "
-                f"offers and the roads a finder found. You do not see the other readers' answers, and you do not "
-                f"look for them.", "",
+                f"offers and the roads a finder found. You judge alone. You do not see the other readers' answers "
+                f"and you do not look for them: a reader whose transcript names another reader's file is refused, "
+                f"and all three run again.", "",
                 *stop_lines(feature, number, cls, question, default), "", "## The roads", "",
                 *road_lines(roads, feature.who), "",
                 "Read the note, the plan page and the code before you judge. Each claim of yours cites "
                 "`file:line`. State no number you did not read.", "", "## Your answer", "",
-                f"Write it to {folder / f'{seat}.md'}, and write nothing else. Line 1 is exactly one of:", "",
-                "Rule: <road id>", "Hold: <the one fact that must be measured before any road is safe>", "",
-                "Then your reason in a few sentences, as one paragraph. Then at most "
-                f"{MAX_CONDITIONS} lines `Condition: <test file>: <test title, and what it proves>`, each a named "
-                "test that fails on today's code: the note takes it as a done check when your road rules. "
-                "Return the same text as your answer."]) + "\n", encoding="utf-8")
-        print(f"{head}, step 2 of 3: the three readers. Spawn the {len(missing)} below in one message, so they "
-              f"run at the same time, and show no reader another reader's answer.")
+                f"Write one file, {folder / f'{seat}.md'}, and write nothing else. The form below is the whole "
+                f"form of that file. It replaces the report form and the return stub of your agent file: no "
+                f"verdict lines, no list of issues, no cuts, no invariant marks and no scenario walk.", "",
+                "Line 1 is your vote. It is exactly one of these two forms, with no bold, no quotation marks and "
+                "nothing after it:", "",
+                "Rule: <one road id from the list above, such as A or F1>",
+                "Hold: <the one fact that must be measured before any road is safe>", "",
+                "A file whose line 1 is anything else is refused, and all three readers run again. `Rule:` for a "
+                f"road that needs a fact only {who} can get counts as `Hold:` on that fact.", "",
+                "From line 2: your reason, a few sentences in one paragraph.", "",
+                f"After the reason: at most {MAX_CONDITIONS} lines `Condition: <test file>: <test title, and what "
+                "it proves>`. Each is a named test that fails on today's code; the note takes it as a done check "
+                "when your road rules. A file with no condition is complete.", "",
+                "Return line 1 of your file as your answer, and nothing else."]) + "\n", encoding="utf-8")
+        print(f"{head}, step 2 of 3: the three readers. Spawn the three below in one message, so they run at the "
+              f"same time, and show no reader another reader's answer.")
         print(f"  each: subagent_type workflow:panel-review-persona, model {PANEL_MODEL}")
-        for seat in missing:
-            print(f"  description \"{label(number, seat)}\"; prompt: Read {folder / f'{seat}.brief.md'} and do "
+        for seat in SEATS:
+            print(f"  description \"{label(folder.name, seat)}\"; prompt: Read {folder / f'{seat}.brief.md'} and do "
                   f"what it says.")
-        print(f"  Each writes its own file in {folder}. {again}")
+        print(f"  Each writes its own file in {folder}. Run this command again when all three have returned.")
         return 0
-    # The agents are checked before the count is shown, so a reader on the wrong
-    # model is spawned again before a note changes; and their transcripts are
-    # kept whatever the count gives, since a hold cost money too.
-    (folder / AGENTS).write_text(json.dumps(panel_agents(number), indent=1) + "\n", encoding="utf-8")
+    # The transcripts are kept whatever the count gives: a hold cost money too.
+    (folder / AGENTS).write_text(json.dumps(agents, indent=1) + "\n", encoding="utf-8")
     result = count(votes)
     print(f"{head}, step 3 of 3: the count")
     for seat, vote in votes.items():
-        print(f"  {seat}: {vote['first'] or 'no first line'}" + (f" (no vote: {vote['why']})" if vote["kind"] is None else ""))
+        print(f"  {seat}: {vote['first']}" + (" (a hold: that road needs a fact only he can get)"
+                                               if vote["kind"] == "hold" and RULE.match(vote["first"]) else ""))
     for road in roads:
         if road.get("needs_owner_fact"):
             print(f"  candidate road {road['id']}, \"{road['road']}\", needs a fact from {feature.who}: "
                   f"{road['needs_owner_fact']}")
     if result["outcome"] == "hold":
         facts = "; ".join(votes[seat]["fact"] for seat in result["seats"])
-        return to_him(feature, number, cls, question, f"The readers hold ({result['mark']}): no road rules. To "
-                      f"measure first: {facts}. Write the question and these facts under Decide in the pending file.")
+        return to_him(feature, number, cls, question, f"No road rules ({result['mark']})."
+                      + (f" To measure first: {facts}." if facts else "") + " Write the question"
+                      + (" and these facts" if facts else "") + " under Decide in the pending file.")
     road = next(r for r in roads if r["id"] == result["road"])
     conditions = []
     for seat in result["seats"]:
@@ -1492,17 +1613,21 @@ def show(opts) -> int:
     messages he types after he was shown it."""
     feature = Feature(opts.tree, opts.feature)
     entries = feature.checked(feature.plan.read_text(encoding="utf-8"))
-    waiting = open_entries(entries, feature.who)
+    cut = cut_notes(feature.report_text())
+    waiting = open_entries(entries, feature.who, cut)
     print(f"{len(waiting)} ruling(s) to confirm, of "
-          f"{sum(1 for e in entries if needs_answer(e, entries, feature.who))} he did not make himself")
-    for line in away_lines(entries, feature.who, open_only=True, records=feature.records()):
+          f"{sum(1 for e in entries if needs_answer(e, entries, feature.who, cut))} he did not make himself")
+    for line in away_lines(entries, feature.who, open_only=True, records=feature.records(), cut=cut):
         print(f"- {line}")
     if waiting:
         times = feature.sent_times()
         times[GATE] = now()
         feature.keep(times)
-        print(f"shown at {clock(times[GATE])}. An answer is a message he types after this: one sentence for "
-              f"\"confirm all\", and for each line in bold one sentence that names its number.")
+        risk = [e["number"] for e in waiting if is_risk(e, entries)]
+        print(f"shown at {clock(times[GATE])}. An answer is a message he types after this: one sentence such as "
+              f"\"confirm all\" for the lines outside the risk classes"
+              + (f", and for each line in bold one sentence that starts with its number and a colon, as in "
+                 f"\"{risk[0]}: confirm\"" if risk else "") + ".")
     return 0
 
 
@@ -1510,7 +1635,8 @@ def answer(opts) -> int:
     feature = Feature(opts.tree, opts.feature)
     text = feature.plan.read_text(encoding="utf-8")
     entries = feature.checked(text)
-    waiting = open_entries(entries, feature.who)
+    cut = cut_notes(feature.report_text())
+    waiting = open_entries(entries, feature.who, cut)
     words = (opts.words or "").strip()
     if not words:
         raise Refusal(f"an answer carries {feature.who}'s own words: --words \"<what he typed>\".")
@@ -1542,7 +1668,7 @@ def answer(opts) -> int:
              else [f'Confirmed: {opts.date}, "{words}"'])
     for entry in sorted(chosen, key=lambda e: -e["line"]):
         text = with_sub_lines(text, entry, lines)
-    left = open_entries(feature.checked(text), feature.who)
+    left = open_entries(feature.checked(text), feature.who, cut)
     feature.plan.write_text(text, encoding="utf-8")
     feature.mark_used(claim, what)
     print(f"answered: {', '.join(e['number'] for e in chosen) or 'none'}; {len(left)} ruling(s) still wait"

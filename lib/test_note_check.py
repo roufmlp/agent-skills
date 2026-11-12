@@ -746,6 +746,24 @@ class Merges(Product):
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertNotEqual(self.head(), main)
 
+    def test_a_follow_on_on_a_note_he_cut_does_not_hold_the_merge(self):
+        # Review 3, note 8: he was asked to confirm a line about a note that was gone.
+        self.write("changes/bubble/report.md", "# Bubble report\n\nState: held\n\n## Notes\n\n| Note | State |\n"
+                   "| --- | --- |\n| 02 | merged abc123456 |\n| 03 | cut 2026-11-12 |\n")
+        main = self.follow_on()
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertNotEqual(self.head(), main)
+
+    def test_a_refused_plain_merge_prints_the_command_that_puts_the_checkout_back(self):
+        # Review 3, note 9: `pre-merge-commit` printed none, and git's own last line said to commit.
+        main = self.feature_with_plan(self.PLAN)
+        self.edit_nobody_committed()
+        done = self.git("merge", "feature/bubble", check=False)
+        self.assertNotEqual(done.returncode, 0)
+        self.assertEqual(self.put_back(done.stdout + done.stderr), "git merge --abort")
+        self.assert_edit_kept(main)
+
     # ── what puts the checkout back (review 2, N6) ──
 
     def test_a_refused_merge_commit_is_put_back_by_merge_abort_and_his_edit_stays(self):
@@ -792,7 +810,9 @@ class Merges(Product):
         self.git("remote", "add", "origin", str(bare))
         return bare
 
-    def test_a_clone_under_another_name_pulls_a_feature_the_upstream_main_carries(self):
+    def test_a_clone_under_another_name_is_refused_the_pull_and_passes_with_the_hooks_off(self):
+        # The stated limit that replaced the upstream rule (review 3, fault 1): the gate reads every
+        # page the same way, and the clone's person is not the page's.
         self.feature_with_plan(self.PLAN.replace(", default, ", ", Sam, "))
         self.git("merge", "feature/bubble")
         merged = self.head()
@@ -806,16 +826,34 @@ class Merges(Product):
         run("checkout", "-q", "-b", "main", "old")
         run("config", "user.name", "Robin Roe")
         subprocess.run(["sh", ".githooks/prepare"], cwd=other, env=self.env, check=True, capture_output=True)
+        before = run("rev-parse", "HEAD").stdout.strip()
         done = run("pull", "--ff-only", "origin", "main")
+        self.assertNotEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("`Sam` is not `default`, `panel` or `Robin`", done.stdout + done.stderr)
+        self.assertEqual(run("rev-parse", "HEAD").stdout.strip(), before)
+        line = re.search(r"`(git read-tree [^`]+)`", done.stdout + done.stderr).group(1)
+        run(*line.split()[1:])
+        self.assertEqual(run("status", "--porcelain").stdout, "")
+        done = run("-c", "core.hooksPath=/dev/null", "pull", "--ff-only", "origin", "main")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(run("rev-parse", "HEAD").stdout.strip(), merged)
-        # The pass is for the page upstream carries, and for no other: the same page, edited here, is held.
-        plan = other / "changes" / "bubble" / "plan.md"
-        plan.write_text(plan.read_text().replace('"hide it at zero"', '"show a price"'))
-        run("add", "changes")
-        done = run("commit", "-qm", "an edit of the plan on the clone")
-        self.assertNotEqual(done.returncode, 0)
-        self.assertIn("`Sam` is not `default`, `panel` or `Robin`", done.stdout + done.stderr)
+
+    def test_no_upstream_setting_opens_a_merge(self):
+        # Review 3, fault 1: a page the upstream branch carried passed the gate, and the upstream
+        # may be a local branch. One ordinary command opened both merge hooks.
+        main = self.feature_with_plan(self.PLAN)
+        for setting in (("branch", "-u", "feature/bubble", "main"),
+                        ("update-ref", "refs/remotes/origin/main", "feature/bubble"),
+                        ("fetch", "-q", ".", "+feature/bubble:refs/remotes/origin/main")):
+            self.git(*setting)
+            for form in ((), ("--ff-only",)):
+                with self.subTest(setting=setting, form=form):
+                    done = self.git("merge", *form, "feature/bubble", check=False)
+                    text = done.stdout + done.stderr
+                    self.assertNotEqual(done.returncode, 0, text)
+                    self.assertIn("1 ruling(s) Sam did not make", text)
+                    self.assertEqual(self.git("rev-parse", "refs/heads/main").stdout.strip(), main)
+                    self.put_back(text)
 
     def cannot_run(self, env, why):
         self.git("checkout", "-q", "main")
