@@ -82,7 +82,7 @@ The state of a note only Abdul can move: a question with no typed class, a risk-
 _Avoid_: Blocked, paused
 
 **Panel**:
-What rules a question in a risk class (money, access, a migration's direction, data leaving the product) when Abdul has not answered inside the wait: one road finder, then three readers who judge every road at the same time and never see each other's answers, then the count. No agent on it is the judge.
+What rules a question in a risk class (money, access, a migration's direction, data leaving the product) when Abdul has not answered inside the wait: one road finder, then three readers who judge every road at the same time and never see each other's answers, then the count. No agent on it is the judge. A panel that is not sound runs once more, all three readers from no answer, and after a second fault the note waits for Abdul.
 _Avoid_: Committee, jury, vote of agents
 
 **Road finder**:
@@ -94,7 +94,7 @@ The party a panel reader judges for, fixed in `lib/rulings.py` and never derived
 _Avoid_: Persona, lens, role (a role is a build agent)
 
 **The count**:
-The rule in code that decides a panel from the three readers' first lines. Two or three on one road, and that road rules, a found road like any other. Two or three `Hold`, and no road rules: the note waits for Abdul. No two agree, and the written default rules, with the entry marked. A first line outside the form is no vote. The conditions of the readers who chose the road become done checks of the note.
+The rule in code that decides a panel from the three readers' first lines. Two or three on one road, and that road rules, a found road like any other. A vote for a road that needs a fact only Abdul can get is a `Hold` on that fact. With no two on one road and fewer than two `Hold`, the written default rules, with the entry marked, and only when a reader chose it. Every other count rules nothing, and the note waits for Abdul. A first line outside the form is never counted: the readers run again. The conditions of the readers who chose the road become done checks of the note.
 _Avoid_: Verdict, consensus, the gate agent
 
 **Tooling stop**:

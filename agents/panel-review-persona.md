@@ -61,7 +61,10 @@ produce it. A figure you estimated reads to the human as a figure you measured.
 
 ## What you return
 
-Write your full report to the path this spawn names. Then return **only this stub**:
+Where this spawn's prompt, or the brief it names, gives the form of your file and of
+what you return, that form replaces this section, whole.
+
+Otherwise, write your full report to the path this spawn names. Then return **only this stub**:
 
 ```
 verdict: <one line>
