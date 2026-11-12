@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks for check_build_agents.py: a fixture set of eight files that passes, and one edit per refusal.
+"""Checks for check_build_agents.py: a fixture set of nine files that passes, and one edit per refusal.
 
     python3 test_check_build_agents.py
 """
@@ -29,6 +29,7 @@ BODIES = {
     ),
     "final-reviewer": "Invoke the code-review skill. Money. Access. Secrets. A `Ruled:` line by `default` is legitimate; read it and its `Touches:` line against the diff. A refused step is a tooling stop.",
     "ruling-reader": "Per note: `no change`, or the exact edit. A merged note takes a fix note. End on `Touches:`.",
+    "road-finder": "Find a road the question does not offer. No better road is a full answer. You do not choose among the offered roads. At most two roads, each with `file:line` evidence and `needs_owner_fact`. Try to break each road. State no number you did not read.",
 }
 
 
@@ -133,13 +134,21 @@ class Lint(unittest.TestCase):
         os.remove(os.path.join(self.dir, "build-feature-ruling-reader.md"))
         self.assertEqual(self.refusals(), ["build-feature-ruling-reader.md: missing"])
 
+    def test_the_road_finder_is_linted_and_is_not_a_workflow_role(self):
+        self.assertNotIn("road-finder", mod.ROLES)
+        self.assertIn("road-finder", mod.SESSION_ROLES)
+        os.remove(os.path.join(self.dir, "build-feature-road-finder.md"))
+        self.assertEqual(self.refusals(), ["build-feature-road-finder.md: missing"])
+        write(self.dir, "road-finder", body=BODIES["road-finder"].replace("No better road is a full answer. ", ""))
+        self.assertEqual(self.refusals(), ["build-feature-road-finder.md: body lacks `no better road`"])
+
     def test_gate_steps_counted(self):
         body = BODIES["final-verifier"].replace("   7. the last call answers 429.\n", "   the last call answers 429.\n")
         write(self.dir, "final-verifier", body=body)
         self.assertIn("build-feature-final-verifier.md: body lacks gate step 7", self.refusals())
 
     def test_real_files(self):
-        """The eight files on this machine pass, where they exist."""
+        """The nine files on this machine pass, where they exist."""
         real = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "agents")
         if not all(os.path.isfile(os.path.join(real, f"build-feature-{r}.md")) for r in mod.ALL_ROLES):
             self.skipTest("the real agent files are not all present")

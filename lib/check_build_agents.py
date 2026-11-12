@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""The lint over the eight build-feature agent files.
+"""The lint over the nine build-feature agent files.
 
     python3 check_build_agents.py [--dir ~/.claude/agents]
 
 The `build-feature-run` workflow spawns seven roles, one agent file each in
 `~/.claude/skills/workflow/agents/`: implementer, verifier, reviewer, note-checker, merger,
-final-verifier and final-reviewer. The session spawns an eighth itself, the
-ruling-reader, after each ruling. Each file's frontmatter sets the role's
+final-verifier and final-reviewer. The session spawns two more itself: the
+ruling-reader after each ruling, and the road-finder before the three readers
+of a panel judge a risk-class question. Each file's frontmatter sets the role's
 model and effort, so Abdul changes a role in one line; this lint refuses a
 file that lost the line, spelled a value the docs do not list, or dropped a
 rule the design hangs on.
@@ -29,7 +30,8 @@ What it reads, per file:
                verifier; the seven gate steps and the baseline retake for
                the final verifier; renumbering and the report table header
                for the merger; the money, access and secrets rubric for the
-               final reviewer.
+               final reviewer; "no better road", the typed fields and the
+               evidence rule for the road finder.
 
 Model and effort VALUES are not pinned here: the file is the one place a
 role's model lives, and the lint checks the spelling, not the choice.
@@ -43,8 +45,9 @@ import re
 import sys
 
 ROLES = ("implementer", "verifier", "reviewer", "note-checker", "merger", "final-verifier", "final-reviewer")
-# The session spawns this one itself, after each ruling; the workflow never does.
-SESSION_ROLES = ("ruling-reader",)
+# The session spawns these itself, and the workflow never does: the reader
+# after each ruling, the finder before a panel's three readers.
+SESSION_ROLES = ("ruling-reader", "road-finder")
 ALL_ROLES = ROLES + SESSION_ROLES
 MODELS = {"sonnet", "opus", "haiku", "fable", "inherit"}
 MODEL_ID = re.compile(r"^claude-[a-z0-9-]+$")
@@ -63,6 +66,8 @@ PHRASES = {
     "final-verifier": ["retake", "pre-launch gate", "rls", "service_role", "npm audit", "429", "on_main.py", "three fix rounds", "tooling"],
     "final-reviewer": ["money", "access", "secrets", "code-review", "`ruled:`", "`touches:`", "tooling"],
     "ruling-reader": ["no change", "exact edit", "merged", "touches:"],
+    "road-finder": ["no better road", "do not choose among the offered roads", "at most two", "file:line",
+                    "needs_owner_fact", "break", "no number you did not read"],
 }
 GATE_STEPS = 7
 # Every role answers the workflow in a typed form (the script's schemas), never
@@ -144,7 +149,7 @@ def check_file(path, role):
 
 
 def check_dir(directory):
-    """Every refusal across the seven files, as `<file>: <what>` lines."""
+    """Every refusal across the nine files, as `<file>: <what>` lines."""
     lines = []
     for role in ALL_ROLES:
         name = f"build-feature-{role}.md"
