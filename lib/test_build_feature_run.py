@@ -126,6 +126,11 @@ class Script(unittest.TestCase):
     def state_of(self, result, number):
         return next(n["state"] for n in result["notes"] if n["number"] == number)
 
+    def decide(self, calls, pattern=r"^report: "):
+        """The lines the last report job got under Decide."""
+        lines = self.prompt(calls, pattern).split("Decide, one line per question")[1].split("\n\n")[0]
+        return [line for line in lines.splitlines()[1:] if line.strip()]
+
     # ── the road with no ruling ──
 
     def test_a_run_with_no_ruling_merges_as_before(self):
@@ -172,6 +177,80 @@ class Script(unittest.TestCase):
              (r"note checker", [{"outcome": "stopped", "line": "Stopped: a new rule", "stop": NO_STOP}])])
         self.assertEqual(result["stops"][0]["class"], "unclassified")
         self.assertEqual(result["stops"][0]["question"], "Stopped: a new rule")
+
+    def test_an_implementers_question_with_no_class_the_script_knows_is_unclassified(self):
+        # Review finding 4: an absent, empty or unknown class came out as written, and the session chose one.
+        for cls in ({}, {"class": ""}, {"class": None}, {"class": "payments"}, {"class": "Money"}):
+            with self.subTest(cls=cls):
+                stop = {"kind": "question", "question": "may a manager refund without the owner",
+                        "default": "yes", "tool": "", **cls}
+                result, calls = self.run_script(
+                    args([note("01")]), [(r"^note 01: implementer", [{**BUILT, "stop": stop}])])
+                self.assertEqual(result["stops"][0]["class"], "unclassified")
+                self.assertEqual(self.decide(calls),
+                                 ["01: [unclassified] may a manager refund without the owner Default: yes"])
+
+    def test_a_verifier_or_reviewer_that_asks_a_question_stops_the_note(self):
+        # New in the repair round: the question of a role that passed was dropped, and the note merged.
+        stop = {"kind": "question", "class": "money", "question": "is this refund rule right",
+                "default": "yes", "tool": ""}
+        for role in ("verifier", "reviewer"):
+            with self.subTest(role=role):
+                result, calls = self.run_script(
+                    args([note("01")]), [(rf"^note 01: {role}", [{**PASS, "stop": stop}])])
+                self.assertEqual(self.state_of(result, "01"), "stopped: is this refund rule right")
+                self.assertEqual(result["stops"][0]["role"], role)
+                self.assertEqual(result["stops"][0]["class"], "money")
+                self.assertEqual(self.labels(calls, r"^note 01: merger"), [])
+                self.assertEqual(result["notes"][0]["strikes"], 0)
+
+    def test_an_error_in_the_script_is_a_tooling_stop_not_a_question(self):
+        # Review finding 11: the row read `stopped: <error text>`, and the plan check took it for a question.
+        result, _ = self.run_script(args([note("01"), note("02")]), [(r"^note 01: implementer", [{**BUILT, "edits": None}])])
+        self.assertRegex(self.state_of(result, "01"), r"^stopped: tooling: other: script error: ")
+        self.assertEqual(result["stops"][0]["kind"], "tooling")
+        self.assertTrue(self.state_of(result, "02").startswith("merged"))
+
+    # ── a correction by the note checker ──
+
+    def test_a_note_the_note_checker_corrected_holds_the_merge(self):
+        # Review finding 1: the corrected note passed, and the run merged into local main with no ruling.
+        corrected = {"outcome": "corrected", "line": "Corrected: the rights test now grants the defaults back",
+                     "stop": NO_STOP}
+        result, calls = self.run_script(
+            args([note("01")]),
+            [(r"^note 01: verifier", [REJECT, REJECT, PASS]), (r"note checker", [corrected])])
+        self.assertTrue(self.state_of(result, "01").startswith("merged"))
+        self.assertEqual(result["state"], "held")
+        self.assertEqual(result["gate_open"], ["01"])
+        self.assertEqual(self.labels(calls, r"^main-out$"), [])
+        self.assertEqual(self.decide(calls, r"^report: held$"),
+                         ["01: [correction] Corrected: the rights test now grants the defaults back"])
+
+    def test_a_correction_line_stays_in_the_report_after_its_note_merged(self):
+        earlier = {"defaults": [], "edits": [], "final": [], "tooling": [], "strikes": {},
+                   "decide": ["01: [correction] Corrected: the rights test", "01: [none] an old question Default: x"]}
+        _, calls = self.run_script(args([note("01", state="merged abc123456"), note("02")], earlier=earlier))
+        self.assertEqual(self.decide(calls, r"^report: start$"), ["01: [correction] Corrected: the rights test"])
+
+    # ── a waiting note keeps its line ──
+
+    def test_a_waiting_note_keeps_its_decide_line_across_a_restart(self):
+        # Review finding 11: Decide read `none` at the next start, and the default was only in the pending file.
+        line = "02: [money] may a manager refund without the owner Default: no refund without the owner"
+        earlier = {"defaults": [], "edits": [], "final": [], "tooling": [], "strikes": {}, "decide": [line]}
+        waits = note("02", state="waiting: money: may a manager refund without the owner")
+        _, calls = self.run_script(args([note("01"), waits], earlier=earlier))
+        self.assertEqual(self.decide(calls, r"^report: start$"), [line])
+        self.assertEqual(self.decide(calls, r"^report: stopped$"), [line])
+
+    def test_a_waiting_row_with_no_earlier_line_writes_its_own(self):
+        waits = note("02", state="waiting: money: may a manager refund without the owner")
+        again = note("03", state="waiting: failed again after its re-arm")
+        _, calls = self.run_script(args([note("01"), waits, again]))
+        self.assertEqual(self.decide(calls, r"^report: stopped$"),
+                         ["02: [money] may a manager refund without the owner",
+                          "03: [unclassified] failed again after its re-arm"])
 
     # ── tool faults ──
 
@@ -221,11 +300,18 @@ class Script(unittest.TestCase):
 
     # ── the fresh tree ──
 
-    def test_a_fresh_note_refuses_to_reuse_its_old_tree(self):
-        _, calls = self.run_script(args([note("01", fresh=True)]))
-        prompt = self.prompt(calls, r"^note 01: worktree$")
-        self.assertIn("Fresh: yes", prompt)
-        self.assertIn("If Fresh is yes and the worktree exists, stop: answer outcome error", prompt)
+    def test_a_fresh_note_whose_old_tree_the_merger_refuses_stops_with_no_build_and_no_strike(self):
+        # The script cannot see a folder. What it does hold: the merger's refusal ends the note
+        # before any build. This replaces a test that read two sentences of the prompt.
+        refused = {"outcome": "error", "commit": "", "line": "worktree /repo/.claude/worktrees/note-bubble-01 still exists"}
+        result, calls = self.run_script(
+            args([note("01", fresh=True), note("02")]), [(r"^note 01: worktree$", [refused])])
+        self.assertEqual(self.state_of(result, "01"),
+                         "stopped: worktree: worktree /repo/.claude/worktrees/note-bubble-01 still exists")
+        self.assertEqual(self.labels(calls, r"^note 01: implementer"), [])
+        self.assertEqual(result["notes"][0]["strikes"], 0)
+        self.assertEqual(self.decide(calls, r"^report: stopped$"), ["none"])
+        self.assertTrue(self.state_of(result, "02").startswith("merged"))
 
     # ── the gate before local main ──
 
@@ -253,6 +339,14 @@ class Script(unittest.TestCase):
         self.assertEqual(self.labels(calls, r"^final (verifier|reviewer)|^main-in$"), [])
         self.assertEqual(len(self.labels(calls, r"^main-out$")), 1)
 
+    def test_a_held_run_that_builds_a_note_runs_the_final_check_again(self):
+        # Review finding 3: a note built after the held final check went to local main with no check.
+        result, calls = self.run_script(args([note("01", state="merged abc123456"), note("02")], held=True))
+        self.assertEqual(result["state"], "merged")
+        order = self.labels(calls, r"^note 02: merger$|^main-in$|^final verifier|^main-out$")
+        self.assertEqual(order, ["note 02: merger", "main-in", "final verifier 1", "main-out"])
+        self.assertEqual(len(self.labels(calls, r"^final reviewer")), 1)
+
     def test_a_held_run_whose_gate_is_still_open_stays_held(self):
         result, calls = self.run_script(args([note("01", state="merged abc123456")], held=True, gate_open=["02"]))
         self.assertEqual(result["state"], "held")
@@ -270,6 +364,13 @@ class Script(unittest.TestCase):
 
     def test_the_fix_rounds_are_one_named_constant(self):
         self.assertRegex(SCRIPT.read_text(), r"(?m)^const FIX_ROUNDS = 3\b")
+
+    def test_main_moving_every_time_ends_the_run_at_a_named_bound(self):
+        self.assertRegex(SCRIPT.read_text(), r"(?m)^const MAIN_MOVES = 2\b")
+        moved = {"outcome": "main moved", "commit": "", "line": "main moved"}
+        result, calls = self.run_script(args([note("01")]), [(r"^main-out$", [moved])])
+        self.assertEqual(result["state"], "stopped")
+        self.assertEqual(len(self.labels(calls, r"^main-out$")), 3)
 
     def test_the_final_check_gets_three_fix_rounds_and_then_stops(self):
         result, calls = self.run_script(args([note("01")]), [(r"^final verifier", [FINDINGS])])
@@ -309,6 +410,58 @@ class Script(unittest.TestCase):
         self.assertEqual(len(self.labels(calls, r"^final verifier")), 1)
         self.assertIn("Fix note needed: the tracking page draws the card and no test covers it",
                       result["finalLines"])
+
+    def test_a_question_of_a_fix_round_is_the_row_final_with_its_class_and_default(self):
+        # Review finding 11: the class and the default were lost, no row changed, and the next run began again.
+        stop = {"kind": "question", "class": "money", "question": "may the fix change the price rounding",
+                "default": "round half up", "tool": ""}
+        result, calls = self.run_script(
+            args([note("01", state="merged abc123456")]),
+            [(r"^final reviewer", [FINDINGS]), (r"^fix round 1: implementer", [{**BUILT, "stop": stop}])])
+        self.assertEqual(result["state"], "stopped")
+        self.assertEqual(result["final"], "stopped: may the fix change the price rounding")
+        self.assertEqual(result["stops"], [{"number": "final", "role": "implementer", "kind": "question",
+                                            "class": "money", "question": "may the fix change the price rounding",
+                                            "default": "round half up"}])
+        report = self.prompt(calls, r"^report: stopped$")
+        self.assertIn("| final | stopped: may the fix change the price rounding | | | |", report)
+        self.assertEqual(self.decide(calls, r"^report: stopped$"),
+                         ["final: [money] may the fix change the price rounding Default: round half up"])
+        self.assertEqual(len(self.labels(calls, r"^fix round")), 1)
+
+    def test_no_final_check_runs_while_the_row_final_waits_or_stops(self):
+        line = "final: [money] may the fix change the price rounding Default: round half up"
+        earlier = {"defaults": [], "edits": [], "final": [], "tooling": [], "strikes": {}, "decide": [line]}
+        for row in ("stopped: may the fix change the price rounding",
+                    "waiting: money: may the fix change the price rounding"):
+            with self.subTest(row=row):
+                result, calls = self.run_script(
+                    args([note("01", state="merged abc123456")], final=row, earlier=earlier))
+                self.assertEqual(result["state"], "stopped")
+                self.assertEqual(self.labels(calls, r"^final (verifier|reviewer)|^main-in$|^main-out$|^fix round"), [])
+                self.assertIn(f"| final | {row} | | | |", self.prompt(calls, r"^report: stopped$"))
+                self.assertEqual(self.decide(calls, r"^report: stopped$"), [line])
+
+    def test_a_fix_note_the_final_check_needs_is_a_question_on_the_row_final(self):
+        needs = {**BUILT, "needs_note": ["the tracking page draws the card and no test covers it"]}
+        result, calls = self.run_script(
+            args([note("01")]), [(r"^final verifier", [FINDINGS]), (r"^fix round", [needs])])
+        question = "fix note needed: the tracking page draws the card and no test covers it"
+        self.assertEqual(result["final"], f"stopped: {question}")
+        self.assertEqual(self.decide(calls, r"^report: stopped$"),
+                         [f"final: [none] {question} Default: write a fix note with the test each finding names"])
+
+    def test_with_no_fix_round_left_the_final_check_waits_for_the_human(self):
+        # Review finding 12: each restart gave the final check three new fix rounds.
+        result, calls = self.run_script(args([note("01")]), [(r"^final verifier", [FINDINGS])])
+        self.assertEqual(result["state"], "stopped")
+        self.assertRegex(result["final"], r"^waiting: the final check found faults and has no fix round left")
+        self.assertEqual(len(self.labels(calls, r"^fix round")), 3)
+        self.assertRegex(self.decide(calls, r"^report: stopped$")[0],
+                         r"^final: \[unclassified\] the final check found faults and has no fix round left")
+        again, calls = self.run_script(args([note("01", state="merged abc123456")], final=result["final"]))
+        self.assertEqual(self.labels(calls, r"^final (verifier|reviewer)|^fix round|^main-out$"), [])
+        self.assertEqual(again["final"], result["final"])
 
     def test_a_tool_fault_in_the_final_check_spends_no_fix_round(self):
         line = "PreToolUse:Write hook error: the report file is in the base repo checkout"
