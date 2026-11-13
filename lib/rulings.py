@@ -38,7 +38,9 @@ make himself is shown to him once, before the merge into local main.
 row in the report is `final`. `<kind>` is `none`, a risk class (`money`,
 `access`, `migration`, `data leaving`), `re-arm` (the one automatic second try
 of a note that failed three strikes), `correction` (the note checker corrected
-the note at strike two) or `follows <nn>` (a note the ruling on `<nn>`
+the note at strike two), `screen` (the commit hook refused a file in the route
+folder of a screen the note did not name, and the session added that screen to
+the note's `Screens:` line) or `follows <nn>` (a note the ruling on `<nn>`
 touched, or the fix note written for it). `<who>` is `default`, `panel`, or
 the first word of `git config user.name`, which is how the page names Abdul.
 Only an entry by `panel` has a `Panel:` line, and it may have several
@@ -105,6 +107,14 @@ roles` writes from the agents' transcripts:
   takes a fix note), and a row that did not stop takes none;
 - `--kind correction` is by `default`, for a correction the report's Decide
   part lists and the plan does not yet carry;
+- `--kind screen` is by `default`, for a row `stopped: tooling:` whose line
+  holds the commit hook's refusal "is in the route folder of screen `<s>`",
+  with that line as `--question`, and only once the note's `Screens:` line
+  names each such screen and the note passes the plan check's static reading
+  (a note that names a screen has an end-to-end done check). The hook still
+  refuses, and the final check still retakes the screen's baselines: the
+  repair adds the screen to what the note must answer for, and loosens
+  nothing (Abdul, 2026-11-13);
 - a ruling or an answer in Abdul's name carries words he typed, read from
   this session's transcript (`CLAUDE_CODE_SESSION_ID` names it). With no
   such session nobody rules in his name. The rule:
@@ -182,9 +192,13 @@ import time
 # `feature_run.py args` passes it on.
 RULING_WAIT_SECONDS = 900
 RISK_CLASSES = ("money", "access", "migration", "data leaving")
-KINDS = ("none", *RISK_CLASSES, "re-arm", "correction")
+SCREEN = "screen"  # the listed repair of a hook's refusal on a screen the note did not name
+KINDS = ("none", *RISK_CLASSES, "re-arm", "correction", SCREEN)
 # The kinds a default rules. Every other class waits, one nobody named included.
-DEFAULT_RULED = ("none", "re-arm", "correction")
+DEFAULT_RULED = ("none", "re-arm", "correction", SCREEN)
+# The commit hook's line for a file in the route folder of a screen no mapped
+# note names (`note_check.py commit`). The screen's name is the one group.
+UNNAMED_SCREEN = re.compile(r"is in the route folder of screen `([^`]+)`")
 PANEL = "panel"  # who rules a risk-class question he did not answer, and the folder its files are in
 RULERS = ("default", PANEL)
 # The rulings one note's questions get without Abdul, by default or by panel,
@@ -1128,6 +1142,9 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
         if number not in uncorrected(entries, feature.report_text()):
             raise Refusal(f"the report's `## Decide` part holds no correction of note {number} that the plan lacks.")
         return False, None
+    if kind == SCREEN:
+        screen_repair(feature, number, state, who)
+        return True, None
     if state.startswith("merged"):
         raise Refusal(f"{name} is merged, and a merged note is never edited or built again. "
                       f"Write a fix note with its own entry `[follows <nn>]`.")
@@ -1180,6 +1197,44 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
                   f"new `Approved:` line.")
 
 
+def screen_repair(feature: Feature, number: str, state: str, who: str) -> None:
+    """Refuse a `screen` ruling the row and the note do not bear out. The row
+    is a tooling stop whose line holds the hook's refusal of a file in the
+    route folder of a screen; the note's `Screens:` line now names each such
+    screen, read as the hook reads it; and the note still passes the plan
+    check's static reading, which asks a note that names a screen for an
+    end-to-end done check. A note that lacks one waits for Abdul."""
+    import note_check  # here, because both import this module
+    import plan_check
+    if who != "default":
+        raise Refusal("a screen the commit hook named is a listed repair, recorded by `default`; he confirms it "
+                      "at the gate.")
+    screens = UNNAMED_SCREEN.findall(state) if state.startswith("stopped: tooling:") else []
+    if not screens:
+        raise Refusal(f"note {number} reads `{state or 'no row'}`. `--kind {SCREEN}` repairs only a tooling stop "
+                      f"whose line holds the commit hook's refusal \"is in the route folder of screen `<s>`\".")
+    found = sorted(feature.folder.glob(f"{number}-*.md"))
+    if len(found) != 1:
+        raise Refusal(f"changes/{feature.name}/{number}-*.md matches {len(found)} file(s), not one.")
+    path = found[0].relative_to(feature.tree).as_posix()
+    text = found[0].read_text(encoding="utf-8")
+    design = feature.tree / note_check.DESIGN
+    rows, _ = note_check.read_screens(design.read_text(encoding="utf-8") if design.is_file() else None)
+    try:
+        named = note_check.named_screens([{"path": path, "screens": note_check.read_note(text)["screens"]}], rows)
+    except note_check.Refusal as error:
+        raise Refusal(str(error))
+    missing = [screen for screen in dict.fromkeys(screens) if screen not in named]
+    if missing:
+        raise Refusal(f"the `Screens:` line of {path} does not name {', '.join('`' + s + '`' for s in missing)}. "
+                      f"Add each screen the hook named to that line first, then record the ruling.")
+    static = plan_check.static_refusals(feature.tree, path, plan_check.read_note(text), None)
+    if static:
+        raise Refusal(f"{path} does not pass with the screen added: {' '.join(static)} This stop has no listed "
+                      f"repair, so it waits for {feature.who}: `rulings.py wait {feature.name} --tree "
+                      f"{feature.tree} --note {number} --why \"tooling: <its line>\"`.")
+
+
 def record(opts) -> int:
     feature = Feature(opts.tree, opts.feature)
     named = opts.touches.strip()
@@ -1192,7 +1247,7 @@ def record(opts) -> int:
     kind = opts.kind.strip()
     reset, since = standing(feature, opts.note, kind, opts.who)
     state = report_rows(feature.report_text()).get(opts.note, "")
-    if kind != "correction" and state.startswith("stopped:") and not NOT_A_QUESTION.match(state):
+    if kind == SCREEN or (kind != "correction" and state.startswith("stopped:") and not NOT_A_QUESTION.match(state)):
         # The class, the wait and a panel's count are all read from the row's
         # question, so the page carries that question and no other (review 3,
         # fault 4: a panel's ruling went on the page under another question).

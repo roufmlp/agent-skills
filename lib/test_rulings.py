@@ -583,7 +583,7 @@ class Commands(unittest.TestCase):
     def record(self, note, kind, who, words="w", question=None, touches="none"):
         if question is None:  # the question the row stopped on, when it stopped on one
             state = mod.report_rows(self.report.read_text()).get(note, "")
-            asks = state.startswith("stopped:") and not mod.NOT_A_QUESTION.match(state)
+            asks = state.startswith("stopped:") and (kind == "screen" or not mod.NOT_A_QUESTION.match(state))
             question = state[len("stopped:"):].strip() if asks else "q"
         return self.command("record", "--note", note, "--kind", kind, "--who", who, "--question", question,
                             "--words", words, "--touches", touches, "--undo", "one line")
@@ -1366,6 +1366,71 @@ class Commands(unittest.TestCase):
         code, out = self.record("01", "correction", "default")
         self.assertEqual(code, 3, out)
         self.assertIn("holds no correction of note 01 that the plan lacks", out)
+
+    # ── a screen the commit hook named: a listed repair ──
+
+    HOOK_LINE = ("tooling: hook: REFUSED: src/app/(signed-in)/jobs/[number]/confirm/moving-files.tsx is in the "
+                 "route folder of screen `Confirm the order` (/jobs/[number]/confirm), and note "
+                 "changes/bubble/02-order.md does not name it.")
+
+    def screen_stop(self, screens="Jobs list", done="- `npx playwright test e2e/order.spec.ts`: the order shows."):
+        """Note 02 stopped on the hook's refusal; the design lists both screens."""
+        (self.tree / "docs").mkdir(exist_ok=True)
+        (self.tree / "docs" / "design.md").write_text(
+            "| Screen | Route | Group |\n| --- | --- | --- |\n| Jobs list | /jobs | signed-in |\n"
+            "| Confirm the order | /jobs/[number]/confirm | signed-in |\n")
+        (self.tree / "e2e").mkdir(exist_ok=True)
+        (self.tree / "e2e" / "order.spec.ts").write_text("test('x', () => {});\n")
+        (self.tree / "tests").mkdir(exist_ok=True)
+        (self.tree / "tests" / "order.test.ts").write_text("it('x', () => {});\n")
+        self.note02 = self.plan.parent / "02-order.md"
+        self.note02.write_text(f"# 02 Order\n\nScreens: {screens}\nRisk: none\n\n## Done\n\n{done}\n\n"
+                               f"## Tests\n\n- `e2e/order.spec.ts`\n- `tests/order.test.ts`\n")
+        self.rows(n01="merged abc123456", n02=f"stopped: {self.HOOK_LINE}")
+
+    def name_the_screen(self):
+        self.note02.write_text(self.note02.read_text().replace("Screens: Jobs list",
+                                                               "Screens: Jobs list, Confirm the order"))
+
+    def test_a_screen_the_hook_named_is_ruled_by_default_once_the_note_names_it(self):
+        self.screen_stop()
+        code, out = self.record("02", "screen", "default", "add `Confirm the order` to the Screens line")
+        self.assertEqual(code, 3, out)
+        self.assertIn("does not name `Confirm the order`", out)
+        self.name_the_screen()
+        code, out = self.record("02", "screen", "default", "add `Confirm the order` to the Screens line")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.row("02"), "not started")
+        entries, faults = entries_of(self.plan.read_text())
+        self.assertEqual(faults, [])
+        self.assertEqual((entries[0]["kind"], entries[0]["who"], entries[0]["question"]),
+                         ("screen", "default", self.HOOK_LINE))
+        # He confirms it at the gate, as any ruling by default; it is no risk class.
+        self.assertEqual([e["number"] for e in mod.open_entries(entries, "Sam")], ["02"])
+        self.assertFalse(mod.is_risk(entries[0], entries))
+
+    def test_a_screen_repair_is_by_default_alone_and_for_the_hooks_line_alone(self):
+        self.screen_stop()
+        self.name_the_screen()
+        self.assertEqual(self.record("02", "screen", "panel")[0], 3)
+        self.assertEqual(self.record("02", "screen", "Sam")[0], 3)
+        code, out = self.record("02", "screen", "default", question="another text")
+        self.assertEqual(code, 3, out)
+        self.assertIn("word for word", out)
+        self.rows(n01="merged abc123456", n02="stopped: tooling: hook: REFUSED: the code rules gate")
+        code, out = self.record("02", "screen", "default", question="tooling: hook: REFUSED: the code rules gate")
+        self.assertEqual(code, 3, out)
+        self.assertIn("repairs only a tooling stop", out)
+        self.assertEqual(self.row("02"), "stopped: tooling: hook: REFUSED: the code rules gate")
+
+    def test_a_screen_repair_that_leaves_no_end_to_end_check_waits_for_him(self):
+        self.screen_stop(screens="none", done="- `npm test -- tests/order.test.ts`: the order adds.")
+        self.note02.write_text(self.note02.read_text().replace("Screens: none", "Screens: Confirm the order"))
+        code, out = self.record("02", "screen", "default")
+        self.assertEqual(code, 3, out)
+        self.assertIn("no end-to-end done check", out)
+        self.assertIn("waits for Sam", out)
+        self.assertTrue(self.row("02").startswith("stopped: tooling:"))
 
     # ── his words ──
 

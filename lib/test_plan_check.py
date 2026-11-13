@@ -414,6 +414,21 @@ class Rulings(Product):
         self.assertIn("plan: approved 2026-11-03", out)
         self.assertIn("1 ruling(s)", out)
 
+    def test_a_screen_ruling_covers_the_screen_it_adds_and_waits_for_his_confirmation(self):
+        # The listed repair of a hook's refusal (Abdul, 2026-11-13): the
+        # session adds the screen and records it by default; the run goes on,
+        # and he confirms the line at the gate like any ruling by default.
+        self.write("changes/bubble/02-order.md", NOTE_02.replace("Screens: Order", "Screens: Order, Reports"))
+        self.write("changes/bubble/plan.md", ruled(RULING_02.replace(
+            "[none] 02: the count shows zero or hides at zero",
+            "[screen] 02: tooling: hook: REFUSED: src/app/reports/list.tsx is in the route folder of screen "
+            "`Reports` (/reports), and note changes/bubble/02-order.md does not name it.").replace(
+            '"hide it at zero"', '"add `Reports` to the Screens line"')))
+        self.commit_all("ruling: note 02")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("1 ruling(s), 1 to confirm before the merge", out)
+
     def test_a_changed_note_with_no_ruled_line_still_refuses(self):
         self.change_02()
         self.commit_all()
