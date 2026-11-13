@@ -527,10 +527,13 @@ class TheRedCheck(Product):
 class TheInterviewsTests(Product):
     """The /build-feature interview commits each note with its tests before the
     run, and the run's base is the feature branch, so those titles exist at the
-    base. On the note's branch, `note/<feature>/<nn>`, every title in a vitest
-    file the note's `## Tests` part names is the note's own test and must fail
-    at the base. Measured 2026-11-09 on Orderflow in-house note 01: the old rule
-    refused with "no new test title" and cost the note a strike."""
+    base. On the note's branch, `note/<feature>/<nn>`, a title in a vitest
+    file the note's `## Tests` part names is the note's own test, and must fail
+    at the base, when a commit that touched the note's file added it. Measured
+    2026-11-09 on Orderflow in-house note 01: the rule of new titles alone
+    refused with "no new test title" and cost the note a strike. The older
+    titles of such a file are not asked to fail: measured 2026-11-13 on
+    Orderflow note 05 of a November feature, refused for 56 of them."""
 
     NOTE = textwrap.dedent("""\
         # 01 The thing
@@ -585,6 +588,53 @@ class TheInterviewsTests(Product):
         self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
         self.assertIn("no new test title", done.stdout)
         self.assertEqual(self.calls(), [])
+
+    def commit(self, message):
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", message)
+
+    def cases_in_an_old_file(self):
+        """The road of Orderflow note 05 of a November feature (2026-11-13):
+        the plan commit adds the note; another note's commit adds a case to
+        an old file of passing cases, one of them a template title; then the
+        note's own commit adds two cases to that file and names it."""
+        (self.tree / "tests" / "old.test.ts").write_text(
+            'it("old one", () => {});\nit(`old ${kind}`, () => {});\n')
+        self.commit("older tests")
+        (self.tree / "changes" / "feat").mkdir(parents=True)
+        note = self.NOTE.replace("`tests/n.test.ts`", "`tests/old.test.ts`")
+        (self.tree / "changes" / "feat" / "01-the-thing.md").write_text(note)
+        self.commit("one feature for one note")
+        with (self.tree / "tests" / "old.test.ts").open("a") as handle:
+            handle.write('it("other note", () => {});\n')
+        self.commit("note 02: the other note")
+        with (self.tree / "tests" / "old.test.ts").open("a") as handle:
+            handle.write('it("reopens", () => {});\nit("refuses no issue", () => {});\n')
+        (self.tree / "changes" / "feat" / "01-the-thing.md").write_text(note + "\nTwo new cases.\n")
+        self.commit("note 01: the thing")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+        git(self.tree, "checkout", "-qb", "note/feat/01")
+        (self.tree / "src" / "a.ts").write_text("export const a = 2;\n")
+
+    def test_new_cases_in_an_old_file_count_and_its_older_cases_do_not(self):
+        self.cases_in_an_old_file()
+        done = self.run_suite("red", "--base", self.base,
+                              env={"FAKE_STATUS": "old one=passed,other note=passed"})
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("red check passed", done.stdout)
+        self.assertIn("2 new test(s) in 1 file(s)", done.stdout)
+        self.assertIn("tests/old.test.ts > reopens: failed", done.stdout)
+        self.assertIn("tests/old.test.ts > refuses no issue: failed", done.stdout)
+        for older in ("old one", "old ${kind}", "other note"):
+            self.assertNotIn(f"tests/old.test.ts > {older}:", done.stdout)
+
+    def test_a_new_case_in_an_old_file_that_passes_at_the_base_is_still_refused(self):
+        self.cases_in_an_old_file()
+        done = self.run_suite("red", "--base", self.base,
+                              env={"FAKE_STATUS": "old one=passed,other note=passed,reopens=passed"})
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("tests/old.test.ts > reopens: passed", done.stdout)
+        self.assertNotIn("other note: passed", done.stdout)
 
     def test_a_note_branch_whose_note_is_missing_is_refused(self):
         self.interview(branch="note/feat/02")
