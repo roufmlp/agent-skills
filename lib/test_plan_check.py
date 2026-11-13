@@ -823,6 +823,54 @@ class Rulings(Product):
         self.assertEqual(code, 0, out)
         self.assertIn("2 ruling(s), 2 to confirm before the merge", out)
 
+    def merged_ruling(self):
+        """Note 01 merged; he is shown it, types his ruling, and the session
+        writes fix note 03 and records both entries with the commands the
+        skill names. Returns the commit line the last `record` printed."""
+        merge = self.git("rev-parse", "HEAD")[:9]
+        self.write("changes/bubble/report.md", report(state="stopped", s01=f"merged {merge}", s02="not started"))
+        self.write("e2e/zero.sh", "exit 1\n")  # the done check's command, which no ruling owns
+        self.commit_all("report: note 01 merged")
+        self.assertEqual(self.rule("wait", "--note", "01")[0], 0)
+        self.says("01: A, hide the bubble at zero.")
+        fix = NOTE_02.replace("# 02 Order page", "# 03 The bubble hides at zero").replace("e2e/order", "e2e/zero")
+        self.write("changes/bubble/03-zero.md", fix)
+        self.write("e2e/zero.spec.ts", "// spec\n")
+        words = ("--who", "Sam", "--words", "01: A, hide the bubble at zero", "--undo", "one fix note")
+        code, out = self.rule("record", "--note", "01", "--kind", "none", "--question",
+                              "may the bubble show a zero", "--touches", "03", *words)
+        self.assertEqual(code, 0, out)
+        code, out = self.rule("record", "--note", "03", "--kind", "follows 01", "--question",
+                              "the fix note hides the bubble at zero", "--touches", "none", *words)
+        self.assertEqual(code, 0, out)
+        return [text for text in out.splitlines() if text.startswith("commit it: ")][0][len("commit it: "):]
+
+    def test_his_ruling_on_a_merged_note_carries_its_fix_note_with_no_new_approval(self):
+        # 13 Nov 2026: he typed "03: A, hide Delete" about a merged note, and
+        # only a new `Approved:` line got its fix note through.
+        line = self.merged_ruling()
+        self.assertIn("e2e/zero.spec.ts", line)
+        self.assertNotIn("tests/bubble.test.ts", line, "the merged note's own tests are not the ruling's")
+        subprocess.run(line, shell=True, check=True, capture_output=True)
+        self.assertEqual(self.git("status", "--porcelain"), "", "the one commit took every file of the ruling")
+        self.assertTrue(self.git("log", "-1", "--format=%s").startswith("ruling: note "))
+        self.assertEqual(mod.approved_lines((self.tree / "changes/bubble/plan.md").read_text()),
+                         ["Approved: 2026-11-03"], "no new approval")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 0, out)
+        self.assertIn("plan: approved 2026-11-03", out)
+        self.assertIn("2 ruling(s), 1 to confirm before the merge", out)
+        self.assertIn("| 01 | merged ", (self.tree / "changes/bubble/report.md").read_text())
+
+    def test_an_edit_of_the_merged_note_under_his_ruling_is_refused(self):
+        line = self.merged_ruling()
+        self.write("changes/bubble/01-header.md", NOTE_01.replace("A bubble", "A bubble hidden at zero"))
+        subprocess.run(line, shell=True, check=True, capture_output=True)
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        code, out = self.run_check("plan", "bubble")
+        self.assertEqual(code, 3, out)
+        self.assertIn("changes/bubble/01-header.md (a merged note is never edited: write a fix note)", out)
+
     def test_a_cut_line_for_a_note_he_did_not_rule_on_refuses(self):
         self.write("changes/bubble/plan.md", ruled(RULING_02).replace(
             "Approved: 2026-11-03", "## Cut\n\n02 Order page, cut 2026-11-12: nobody asked\n\nApproved: 2026-11-03"))

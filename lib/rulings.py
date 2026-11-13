@@ -103,8 +103,14 @@ roles` writes from the agents' transcripts:
   and one reader per seat under the labels `panel` printed, all four on
   PANEL_MODEL, and no reader's naming another seat's answer file;
 - a `failed` row takes `re-arm` from a default, a `waiting:` row and a cut
-  take a ruling from Abdul alone, a `merged` row takes none (a merged note
-  takes a fix note), and a row that did not stop takes none;
+  take a ruling from Abdul alone, and a row that did not stop takes none;
+- a `merged` row takes a ruling from Abdul alone, of kind `none` or a risk
+  class, with words that start with the note's number and a colon, after
+  `wait --note <nn>` showed it to him. `--touches` must name a new fix note:
+  a note the approved plan did not hold, not merged or cut, whose `Waits
+  for:` line names the merged note. The row stays `merged`, and the fix note
+  takes its `follows <nn>` entry with his words. A merged note is never
+  edited: the plan check refuses a change to its file;
 - `--kind correction` is by `default`, for a correction the report's Decide
   part lists and the plan does not yet carry;
 - `--kind screen` is by `default`, for a row `stopped: tooling:` whose line
@@ -1080,13 +1086,16 @@ class Feature:
         of the ruled note and of each note that follows the same ruling, as the
         note names them now, named them at the last commit, or names them from
         `cut/`. One commit applies a ruling, so the line `record` prints takes
-        them all (review 2, N7: the tests stayed out and the ruling was stranded)."""
+        them all (review 2, N7: the tests stayed out and the ruling was stranded).
+        A merged note's tests are not the ruling's: what it changes is a fix note."""
         import plan_check  # here, because plan_check imports this module
         folder = f"{CHANGES}/{self.name}"
         paths = [folder]
         entries = read(self.plan.read_text(encoding="utf-8"))[0]
         root = next((e["follows"] or number for e in reversed(entries) if e["number"] == number), number)
-        numbers = {n for n in {number, root, *(e["number"] for e in entries if e["follows"] == root)} if n.isdigit()}
+        merged = merged_notes(self.report_text())
+        numbers = {n for n in {number, root, *(e["number"] for e in entries if e["follows"] == root)}
+                   if n.isdigit() and n not in merged}
         texts = [path.read_text(encoding="utf-8") for where in (self.folder, self.folder / "cut")
                  for n in sorted(numbers) for path in sorted(where.glob(f"{n}-*.md"))]
         listed = subprocess.run(["git", "-C", str(self.tree), "ls-tree", "-r", "--name-only", "HEAD", "--", folder],
@@ -1122,7 +1131,40 @@ def shown_since(feature: Feature, number: str, name: str) -> float:
     return since
 
 
-def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, float | None]:
+def fix_note_faults(feature: Feature, number: str, touches: list[str]) -> list[str]:
+    """Why no note `touches` names is a new fix note for merged note `number`;
+    empty when one is. A fix note was not in the approved plan, is not merged
+    or cut, and its `Waits for:` line names `number`: the merged note stays as
+    it merged, and the change he ruled is built on top of it."""
+    import plan_check  # here, because plan_check imports this module
+    if not touches:
+        return ["--touches names no note."]
+    plan = f"{CHANGES}/{feature.name}/plan.md"
+    approval = plan_check.approval_commit(feature.tree, plan, plan_check.approved_lines(
+        feature.plan.read_text(encoding="utf-8")))
+    if not approval:
+        return [f"The `Approved:` line of {plan} is not committed, so no note is new since the approval."]
+    rows, why = report_rows(feature.report_text()), []
+    for touched in touches:
+        found = sorted(feature.folder.glob(f"{touched}-*.md"))
+        state = rows.get(touched, "")
+        if len(found) != 1:
+            why.append(f"Note {touched}: no file {CHANGES}/{feature.name}/{touched}-*.md, or more than one.")
+            continue
+        path = found[0].relative_to(feature.tree).as_posix()
+        if state.startswith(("merged", "cut")):
+            why.append(f"Note {touched} reads `{state}`.")
+        elif subprocess.run(["git", "-C", str(feature.tree), "cat-file", "-e", f"{approval}:{path}"],
+                            capture_output=True).returncode == 0:
+            why.append(f"Note {touched} was in the approved plan.")
+        elif number not in plan_check.read_note(found[0].read_text(encoding="utf-8"))["waits_for"]:
+            why.append(f"Note {touched}: its `Waits for:` line does not name {number}.")
+        else:
+            return []
+    return why
+
+
+def standing(feature: Feature, number: str, kind: str, who: str, touches=()) -> tuple[bool, float | None]:
     """Refuse a ruling the note's row does not ask for. Returns whether the
     row goes back to `not started`, and since when a message of his answers
     it (None when the ruling is not in his name, or follows another).
@@ -1131,7 +1173,8 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
     the agent typed. A default or a panel rules one question at a time, after
     the wait, each the classes `ruler_when_unanswered` gives it, and a default
     gives one re-arm per note; a waiting row, a cut and a stop with no class
-    are his."""
+    are his. So is a ruling on a merged note, which names its new fix note in
+    `touches` and leaves the row `merged`."""
     state = report_rows(feature.report_text()).get(number, "")
     his = who == feature.who
     name = f"note {number}" if number != FINAL else "the final check"
@@ -1146,8 +1189,16 @@ def standing(feature: Feature, number: str, kind: str, who: str) -> tuple[bool, 
         screen_repair(feature, number, state, who)
         return True, None
     if state.startswith("merged"):
-        raise Refusal(f"{name} is merged, and a merged note is never edited or built again. "
-                      f"Write a fix note with its own entry `[follows <nn>]`.")
+        merged = (f"{name} is merged, and a merged note is never edited or built again. Write a fix note with "
+                  f"its own entry `[follows <nn>]`")
+        if not his or kind not in ("none", *RISK_CLASSES):
+            raise Refusal(f"{merged}. A ruling on a merged note is {feature.who}'s alone, of kind `none` or a "
+                          f"risk class.")
+        why = fix_note_faults(feature, number, touches)
+        if why:
+            raise Refusal(f"{merged}, and name it in --touches: a note that was not in the approved plan, is not "
+                          f"merged or cut, and whose `Waits for:` line names {number}. {' '.join(why)}")
+        return False, shown_since(feature, number, name)
     if FOLLOWS.match(kind):
         if state.startswith(("cut", "stopped:", "waiting:", "failed")):
             raise Refusal(f"{name} reads `{state}`: it takes a ruling of its own, not a follow-on.")
@@ -1245,8 +1296,11 @@ def record(opts) -> int:
         if "\n" in value or not value.strip():
             raise Refusal("a question, the words and the undo cost are one line each, and none is empty.")
     kind = opts.kind.strip()
-    reset, since = standing(feature, opts.note, kind, opts.who)
+    reset, since = standing(feature, opts.note, kind, opts.who, touches)
     state = report_rows(feature.report_text()).get(opts.note, "")
+    # A ruling on a merged note answers no typed question, so the sentence
+    # names the note, as a risk-class answer does.
+    names = opts.note if kind in RISK_CLASSES or state.startswith("merged") else None
     if kind == SCREEN or (kind != "correction" and state.startswith("stopped:") and not NOT_A_QUESTION.match(state)):
         # The class, the wait and a panel's count are all read from the row's
         # question, so the page carries that question and no other (review 3,
@@ -1266,7 +1320,7 @@ def record(opts) -> int:
                           + (f", \"{first[-1]['words']}\"" if first else "") + ", and no others. What changed in "
                           f"this note goes in --question.")
     elif opts.who == feature.who:
-        claim = said(opts.words, since, feature.who, feature.used(), opts.note if kind in RISK_CLASSES else None)
+        claim = said(opts.words, since, feature.who, feature.used(), names)
     more = panel_ruling(feature, opts.note, opts.words) if opts.who == PANEL and kind in RISK_CLASSES else ()
     lines = entry_text(opts.note, opts.kind, opts.date, opts.who, opts.question.strip(),
                        opts.words.strip().replace('"', "'"), touches, opts.undo.strip(), more)
@@ -1341,12 +1395,18 @@ def wait(opts) -> int:
             return 0
         why = f"{cls}: {question}"
     elif not why:
-        if NOT_A_QUESTION.match(state) or state.startswith("merged"):
+        if NOT_A_QUESTION.match(state):
             raise Refusal(f"note {opts.note} reads `{state}`, which asks him nothing. To make it wait for him, "
                           f"say why with --why.")
-        # A failed row, a waiting row or a note he may cut: he is shown it now,
-        # and only a message he types after this answers it.
+        # A failed row, a waiting row, a note he may cut, or a merged note he
+        # rules on: he is shown it now, and only a message he types after this
+        # answers it. The row stays as it is.
         at = feature.mark_sent(opts.note, "shown", again=True)
+        if state.startswith("merged"):
+            print(f"note {opts.note}: `{state}` shown at {clock(at)}. His ruling on it is a message he types after "
+                  f"this that starts with \"{opts.note}:\", and it is built as a new fix note that waits for "
+                  f"{opts.note}: `record --note {opts.note} --touches <the fix note>`.")
+            return 0
         print(f"note {opts.note}: `{state}` shown at {clock(at)}. His answer is a message he types after this, and "
               f"his answer to a risk-class question starts with \"{opts.note}:\"; to make the row wait for him, say "
               f"why with --why.")

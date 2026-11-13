@@ -42,7 +42,7 @@ One line per question, then its answer on the next line, written as Abdul gives 
 
 - [none] <nn>: <the question, in plain words>
   Ruled: <date>, <who>, "<Abdul's words, the agent's written default, or the road a panel's count gives>"
-  Touches: <none, or the numbers of the other notes the ruling reader named>
+  Touches: <none, or the numbers of the other notes the ruling reader named; on a merged note, its new fix note>
   Undo: <what reversing the ruling costs>
   Confirmed: <date; Abdul's answer at the gate, with his words for a risk class. A ruling he made himself carries no such line; a `follows` entry always takes one.>
 - [follows <nn>] <nn>: <what the first ruling changed in this note>

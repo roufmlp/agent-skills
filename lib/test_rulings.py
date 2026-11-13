@@ -682,6 +682,89 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.row("01"), "merged abc123456")
         self.assertEqual(self.record("01", "follows 02", "default")[0], 3)
 
+    # ── his ruling on a merged note: it records with its new fix note ──
+    # 13 Nov 2026: note 03 of a feature had merged, he typed "03: A, hide
+    # Delete", and no command took it. Only a new `Approved:` line got the fix
+    # note through the plan check.
+
+    FIX = "# 04 A closed job keeps its part payments\n\nScreens: none\nRisk: none\nWaits for: {waits}\n"
+    HIS = "03: A, hide Delete"
+
+    def merged_03(self, waits="03"):
+        """Note 03 merged after the approval; its fix note 04 is new and waits for it.
+        He was shown 03, and then typed his ruling."""
+        self.rows(n01="not started", n02="not started", n03="merged abc123456")
+        for args in (("config", "user.email", "s@d"), ("add", "-A"), ("commit", "-qm", "plan: bubble approved")):
+            subprocess.run(["git", *args], cwd=self.tree, check=True)
+        (self.plan.parent / "04-fix.md").write_text(self.FIX.format(waits=waits))
+        code, out = self.command("wait", "--note", "03")
+        self.assertEqual(code, 0, out)
+        self.assertIn("`merged abc123456` shown at", out)
+        self.assertEqual(self.row("03"), "merged abc123456", "showing him the note changes no row")
+        self.later(30)
+        self.says(self.HIS + ".")
+
+    def test_his_ruling_on_a_merged_note_records_with_its_new_fix_note(self):
+        self.merged_03()
+        code, out = self.record("03", "none", "Sam", self.HIS, "may a part payment be deleted on a closed job",
+                                touches="04")
+        self.assertEqual(code, 0, out)
+        self.assertIn("its report row stays as it is", out)
+        self.assertEqual(self.row("03"), "merged abc123456")
+        code, out = self.record("04", "follows 03", "Sam", "03: B", "a closed job keeps its part payments")
+        self.assertEqual(code, 3, out)
+        self.assertIn(f"carries the words of the ruling it follows, \"{self.HIS}\"", out)
+        code, out = self.record("04", "follows 03", "Sam", self.HIS, "a closed job keeps its part payments")
+        self.assertEqual(code, 0, out)
+        entries, found = entries_of(self.plan.read_text())
+        self.assertEqual(found, [])
+        self.assertEqual([(e["number"], e["kind"], e["who"], e["words"], e["touches"]) for e in entries],
+                         [("03", "none", "Sam", self.HIS, ["04"]), ("04", "follows 03", "Sam", self.HIS, [])])
+        self.assertEqual(mod.faults(entries, {"01", "02", "03", "04"}, "Sam", {"03"}), [])
+        self.assertEqual([e["number"] for e in mod.open_entries(entries, "Sam")], ["04"],
+                         "his own ruling needs no answer; he sees the fix note once, at the gate")
+
+    def test_a_default_or_a_panel_on_a_merged_note_is_refused_and_his_ruling_is_not(self):
+        self.merged_03()
+        for who in ("default", "panel"):
+            for kind in ("none", "money"):
+                code, out = self.record("03", kind, who, self.HIS, "q", touches="04")
+                self.assertEqual(code, 3, (who, kind, out))
+                self.assertIn("a merged note is never edited or built again", out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        for kind in ("re-arm", "correction", "follows 02"):
+            self.assertEqual(self.record("03", kind, "Sam", self.HIS, "q", touches="04")[0], 3, kind)
+        self.assertEqual(self.record("03", "none", "Sam", self.HIS, "q", touches="04")[0], 0)
+
+    def test_his_ruling_on_a_merged_note_that_names_no_new_fix_note_is_refused(self):
+        self.merged_03(waits="none")
+        (self.plan.parent / "05-merged.md").write_text(self.FIX.format(waits="03"))
+        self.rows(n01="not started", n02="not started", n03="merged abc123456", n05="merged def456789")
+        for touches, why in (("none", "names no note"), ("02", "was in the approved plan"),
+                             ("04", "does not name 03"), ("05", "reads `merged def456789`"),
+                             ("09", "no file changes/bubble/09-*.md")):
+            code, out = self.record("03", "none", "Sam", self.HIS, "q", touches=touches)
+            self.assertEqual(code, 3, (touches, out))
+            self.assertIn("a merged note is never edited or built again", out)
+            self.assertIn(why, out)
+        self.assertNotIn("## Rulings", self.plan.read_text())
+        (self.plan.parent / "04-fix.md").write_text(self.FIX.format(waits="01, 03"))
+        code, out = self.record("03", "none", "Sam", self.HIS, "q", touches="02, 04")
+        self.assertEqual(code, 0, out)
+
+    def test_his_ruling_on_a_merged_note_carries_words_he_typed_after_he_was_shown_it(self):
+        self.rows(n01="not started", n02="not started", n03="merged abc123456")
+        self.says("03: B.")  # before `wait` showed him note 03
+        self.merged_03()
+        self.says("A, hide Delete.")
+        for words in ("03: B", "03: hide every button", "A, hide Delete"):
+            code, out = self.record("03", "none", "Sam", words, "q", touches="04")
+            self.assertEqual(code, 3, (words, out))
+        self.assertIn("does not start with `03:`", out)
+        self.assertEqual(self.record("03", "none", "Sam", self.HIS, "q", touches="04")[0], 0)
+        self.assertEqual(self.record("03", "none", "Sam", self.HIS, "q", touches="04")[0], 3,
+                         "one sentence of his answers once")
+
     def test_a_cut_is_his_ruling_and_the_row_stays_cut(self):
         # Review finding 9: `record` set the row `cut <date>` back to `not started`.
         self.rows(n01="not started", n02="cut 2026-11-12")
