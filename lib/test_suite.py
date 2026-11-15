@@ -31,7 +31,11 @@ SCRIPT = os.path.join(HERE, "suite.py")
 # named in FAKE_NO_LOAD is reported failed with no cases; a file named in
 # FAKE_NOT_RUN is left out of the report unless `--config` is among the args,
 # as a vitest config that excludes the file would leave it. It records the text
-# of `src/a.ts` beside it, so a case can see which code it ran on.
+# of `src/a.ts` beside it, so a case can see which code it ran on. With
+# FAKE_NEEDS set (`test file<code file<text;...`) a named test file is red
+# unless the code file holds the text, in the report and in the exit, and a
+# run that reaches no file exits 1; FAKE_TYPE_NEEDS (`code file<text;...`)
+# does the same for the typecheck.
 FAKE_VITEST = textwrap.dedent("""\
     import json, os, pathlib, re, sys
     args = sys.argv[1:]
@@ -46,6 +50,26 @@ FAKE_VITEST = textwrap.dedent("""\
     if os.environ.get("FAKE_HOLD"):
         import time; time.sleep(float(os.environ["FAKE_HOLD"]))
     named = [a for a in args if a.endswith((".ts", ".tsx"))]
+    def lacks(path, text):
+        return not (cwd / path).exists() or text not in (cwd / path).read_text()
+    if args[:1] == ["typecheck"] and os.environ.get("FAKE_TYPE_NEEDS"):
+        sys.exit(1 if any(lacks(*p.split("<")) for p in os.environ["FAKE_TYPE_NEEDS"].split(";")) else 0)
+    if "FAKE_NEEDS" in os.environ and args[:1] == ["run"]:
+        needs = [p.split("<") for p in os.environ["FAKE_NEEDS"].split(";") if p]
+        left_out = os.environ.get("FAKE_NOT_RUN", "").split(",") if "--config" not in args else []
+        ran = [n for n in named if n not in left_out]
+        red = [n for n in ran if any(t == n and lacks(s, x) for t, s, x in needs)]
+        out = next((a.split("=", 1)[1] for a in args if a.startswith("--outputFile=")), None)
+        if out:
+            pathlib.Path(out).write_text(json.dumps({"testResults": [
+                {"name": str(cwd / n), "status": "failed" if n in red else "passed", "assertionResults": [
+                    {"title": t, "fullName": t, "status": "failed" if n in red else "passed"}
+                    for t in re.findall(r"\\bit\\(\\s*\\"([^\\"]*)\\"", (cwd / n).read_text())]}
+                for n in ran]}))
+        for n in red:
+            print(f" FAIL  {n} > a suite > a case")
+        print(f" Test Files  {len(ran)} passed ({len(ran)})")
+        sys.exit(1 if red or not ran else 0)
     out = next((a.split("=", 1)[1] for a in args if a.startswith("--outputFile=")), None)
     if out:
         statuses = dict(p.split("=") for p in os.environ.get("FAKE_STATUS", "").split(",") if p)
@@ -112,7 +136,7 @@ class Product(unittest.TestCase):
         self.lock = root / "lock"
         self.env = {**os.environ, mod.LOCK_ENV: str(self.lock), "FAKE_ARGV": str(self.argv)}
         for key in ("FAKE_FAILING", "FAKE_FLAKY", "FAKE_EXIT", "FAKE_RAN", "FAKE_STATUS",
-                    "FAKE_NO_LOAD", "FAKE_NOT_RUN", "FAKE_HOLD"):
+                    "FAKE_NO_LOAD", "FAKE_NOT_RUN", "FAKE_HOLD", "FAKE_NEEDS", "FAKE_TYPE_NEEDS"):
             self.env.pop(key, None)
         (self.tree / "CLAUDE.md").write_text(BLOCK.format(vitest=self.vitest))
         (self.tree / "src").mkdir()
@@ -643,6 +667,183 @@ class TheInterviewsTests(Product):
         self.assertIn("note/feat/02", done.stdout)
         self.assertIn("changes/feat/02-*.md", done.stdout)
         self.assertEqual(self.calls(), [])
+
+
+class TheRemovalCheck(Product):
+    """The note changes line 1 of `src/a.ts`, adds a line 4 to it and adds
+    `src/new.ts`: three hunks. `tests/b.test.ts` is its test. The fake vitest
+    turns the test red when the text FAKE_NEEDS names is gone from the code."""
+
+    ALL = ("tests/b.test.ts<src/a.ts<a = 2;tests/b.test.ts<src/a.ts<guard;"
+           "tests/b.test.ts<src/new.ts<fresh")
+
+    def setUp(self):
+        super().setUp()
+        (self.tree / "src" / "a.ts").write_text(
+            "export const a = 1;\nexport const keep = 0;\nexport const z = 9;\n")
+        (self.tree / "src" / "old.ts").write_text("export const old = 1;\nexport const dead = 2;\n")
+        (self.tree / "tests" / "harness").mkdir()
+        (self.tree / "tests" / "harness" / "reset.ts").write_text("export const reset = 1;\n")
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "more base")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+
+    def note(self):
+        (self.tree / "src" / "a.ts").write_text(
+            "export const a = 2;\nexport const keep = 0;\nexport const z = 9;\n"
+            "export const guard = true;\n")
+        (self.tree / "src" / "new.ts").write_text("export const fresh = 1;\n")
+        (self.tree / "tests" / "b.test.ts").write_text('it("reads b", () => {});\n')
+
+    def removal(self, needs=None, **env):
+        return self.run_suite("removal", "--base", self.base,
+                              env={"FAKE_NEEDS": self.ALL if needs is None else needs, **env})
+
+    def runs(self):
+        return [call for call in self.calls() if call["args"][:1] == ["run"]]
+
+    def test_every_hunk_a_test_needs_passes_and_each_ran_alone(self):
+        self.note()
+        done = self.removal()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("removal check passed", done.stdout)
+        runs = self.runs()
+        # The tests as they stand, then once per hunk with that hunk alone taken out.
+        self.assertEqual([call["src"] for call in runs], [
+            "export const a = 2;\nexport const keep = 0;\nexport const z = 9;\nexport const guard = true;\n",
+            "export const a = 1;\nexport const keep = 0;\nexport const z = 9;\nexport const guard = true;\n",
+            "export const a = 2;\nexport const keep = 0;\nexport const z = 9;\n",
+            "export const a = 2;\nexport const keep = 0;\nexport const z = 9;\nexport const guard = true;\n"])
+        for call in runs:
+            self.assertIn("tests/b.test.ts", call["args"])
+            self.assertIn("--maxWorkers=4", call["args"])
+            self.assertNotEqual(call["cwd"], str(self.tree))
+        self.assertFalse(pathlib.Path(runs[0]["cwd"]).exists(), "the throwaway tree was removed")
+        self.assertEqual(git(self.tree, "worktree", "list").count("\n"), 0)
+        # The tree itself and its index were not touched.
+        self.assertIn("guard", (self.tree / "src" / "a.ts").read_text())
+        self.assertTrue((self.tree / "src" / "new.ts").exists())
+        self.assertIn("?? src/new.ts", git(self.tree, "status", "--short"))
+        self.assertEqual(self.rows()[-1]["kind"], "removal")
+        self.assertEqual(self.rows()[-1]["hunks"], 3)
+        self.assertEqual(self.rows()[-1]["unproven"], [])
+
+    def test_a_hunk_no_test_needs_is_refused_by_file_line_and_text(self):
+        self.note()
+        done = self.removal("tests/b.test.ts<src/a.ts<a = 2;tests/b.test.ts<src/new.ts<fresh")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout + done.stderr)
+        self.assertIn("NOT src/a.ts:4", done.stdout)
+        self.assertIn("export const guard = true;", done.stdout)
+        self.assertIn("ok  src/a.ts:1", done.stdout)
+        self.assertIn("ok  src/new.ts:1", done.stdout)
+        self.assertNotIn("removal check passed", done.stdout)
+        self.assertEqual(self.rows()[-1]["unproven"], ["src/a.ts:4"])
+
+    def test_every_unproven_hunk_is_named_in_one_run(self):
+        self.note()
+        done = self.removal("tests/b.test.ts<src/a.ts<a = 2")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("NOT src/a.ts:4", done.stdout)
+        self.assertIn("NOT src/new.ts:1", done.stdout)
+
+    def test_a_hunk_the_typecheck_needs_is_not_refused(self):
+        self.note()
+        done = self.removal("tests/b.test.ts<src/a.ts<a = 2;tests/b.test.ts<src/new.ts<fresh",
+                            FAKE_TYPE_NEEDS="src/a.ts<guard")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("ok  src/a.ts:4: the typecheck fails without it", done.stdout)
+
+    def test_a_typecheck_that_fails_with_nothing_removed_proves_nothing(self):
+        self.note()
+        done = self.removal("tests/b.test.ts<src/a.ts<a = 2;tests/b.test.ts<src/new.ts<fresh",
+                            FAKE_TYPE_NEEDS="src/a.ts<no such text")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("typecheck", done.stdout)
+        self.assertIn("with nothing removed", done.stdout)
+
+    def test_tests_that_are_red_with_nothing_removed_are_refused_first(self):
+        self.note()
+        done = self.removal(self.ALL + ";tests/b.test.ts<src/a.ts<no such text")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("with nothing removed", done.stdout)
+        self.assertIn("tests/b.test.ts", done.stdout)
+        self.assertEqual(len(self.runs()), 1)
+
+    def test_a_committed_note_is_read_the_same_as_an_uncommitted_one(self):
+        self.note()
+        git(self.tree, "add", ".")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "note")
+        done = self.removal("tests/b.test.ts<src/a.ts<a = 2;tests/b.test.ts<src/new.ts<fresh")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("NOT src/a.ts:4", done.stdout)
+        self.assertEqual(len(self.runs()), 4)
+
+    def test_a_hunk_of_comments_and_a_removed_line_are_not_asked(self):
+        self.note()
+        (self.tree / "src" / "old.ts").write_text("// why old stays\n\nexport const old = 1;\n")
+        done = self.removal()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertEqual(len(self.runs()), 4)
+        self.assertNotIn("src/old.ts", done.stdout)
+
+    def test_a_changed_file_that_is_no_code_is_listed_and_not_asked(self):
+        self.note()
+        (self.tree / "src" / "look.css").write_text("a { color: red; }\n")
+        done = self.removal()
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("not checked: src/look.css", done.stdout)
+        self.assertEqual(len(self.runs()), 4)
+
+    def test_a_changed_harness_helper_is_code_and_a_test_file_is_not(self):
+        self.note()
+        (self.tree / "tests" / "harness" / "reset.ts").write_text("export const reset = 2;\n")
+        done = self.removal()
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("NOT tests/harness/reset.ts:1", done.stdout)
+        self.assertNotIn("tests/b.test.ts:", done.stdout)
+
+    def test_a_path_with_brackets_is_read_as_written(self):
+        self.note()
+        (self.tree / "src" / "[code]").mkdir()
+        (self.tree / "src" / "[code]" / "page.tsx").write_text("export const page = 1;\n")
+        done = self.removal(self.ALL + ";tests/b.test.ts<src/[code]/page.tsx<page")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("ok  src/[code]/page.tsx:1", done.stdout)
+
+    def test_a_test_file_the_suite_does_not_run_runs_under_the_harness_command(self):
+        self.note()
+        done = self.removal(FAKE_NOT_RUN="tests/b.test.ts")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("removal check passed", done.stdout)
+        self.assertEqual(sum("--config" in call["args"] for call in self.runs()), 4)
+
+    def test_a_test_file_neither_command_runs_is_refused(self):
+        self.note()
+        block = (self.tree / "CLAUDE.md").read_text()
+        (self.tree / "CLAUDE.md").write_text(
+            "\n".join(line for line in block.splitlines() if not line.startswith("Harness suite:")) + "\n")
+        git(self.tree, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "no harness line")
+        self.base = git(self.tree, "rev-parse", "HEAD")
+        self.note()
+        done = self.removal(FAKE_NOT_RUN="tests/b.test.ts")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertIn("tests/b.test.ts", done.stdout)
+
+    def test_a_note_with_no_vitest_file_is_refused(self):
+        (self.tree / "src" / "a.ts").write_text("export const a = 2;\n")
+        done = self.removal()
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
+        self.assertEqual(self.calls(), [])
+
+    def test_a_note_that_changes_no_code_passes_and_says_so(self):
+        (self.tree / "tests" / "b.test.ts").write_text('it("reads b", () => {});\n')
+        done = self.removal("")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("no code hunk", done.stdout)
+
+    def test_removal_without_base_is_refused(self):
+        done = self.run_suite("removal")
+        self.assertEqual(done.returncode, mod.REFUSED, done.stdout)
 
 
 if __name__ == "__main__":

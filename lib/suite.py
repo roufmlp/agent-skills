@@ -5,6 +5,7 @@
     python3 ~/.claude/skills/workflow/lib/suite.py scoped --base <ref>  # the tests a change since <ref> reaches
     python3 ~/.claude/skills/workflow/lib/suite.py files <test file>... # one or more named files
     python3 ~/.claude/skills/workflow/lib/suite.py red --base <ref>     # the red check: new tests on the old code
+    python3 ~/.claude/skills/workflow/lib/suite.py removal --base <ref> # the removal check: the tests with each hunk taken out
     python3 ~/.claude/skills/workflow/lib/suite.py typecheck | e2e      # the other two commands the block names
 
 Every verifier calls this and none runs the test command itself, so the rules
@@ -26,6 +27,7 @@ The careful-lane block of the product's `CLAUDE.md`, one command per line:
   lives", ticket 33); a suite that ran under other hooks would be a green
   nobody can trust. Exit 3, like every refusal here.
 - A red check whose new tests do not all fail on the old code (below).
+- A removal check that finds a hunk of the change no test needs (below).
 
 ## The machine lock
 
@@ -87,6 +89,43 @@ Migrations revert with the code, because the worktree holds the base's
 rebuilds its template database from empty when they change (`tests/harness/
 global-setup.ts`, issue 201); measured 2026-11-03, a build from empty through
 `scripts/migrate.mjs` took 0.3 to 0.5 s for 93 files.
+
+## The removal check
+
+The red check asks whether each new test fails on the old code. It does not
+ask whether each piece of the new code has a test. Measured 2026-11-15 on the
+59 reject reports of six Orderflow features: 24 named a test that stays green
+with the behaviour wrong, and a note rejected on it was rejected again, because
+a reviewer names one or two such lines by hand and the next reviewer finds the
+next (note 01 of a November feature, the bill warnings: eight rejections in a
+row, each on a different line). The implementer brief stated the rule already.
+Abdul approved the check on 2026-11-15.
+
+A throwaway worktree holds the change as it stands: the base, with every
+changed and untracked file copied over it and every deleted file gone. Its
+diff against `--base`, with no context lines, gives the hunks. A hunk counts
+when it adds a line to a code file: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`,
+`.cjs` or `.sql`, outside the test side, or a harness helper the red check
+runs at the base. For each one, alone, the hunk goes back to the base's text
+and the note's vitest files run: the test-side files the change touched and
+the files the note's `## Tests` part names. A red run proves the hunk. After a
+green run the typecheck runs; a typecheck that fails proves the hunk too,
+because types and imports have no test. A hunk that leaves both green is
+printed with its file, its lines and its first lines of text, and the check
+refuses. Every such hunk is printed in the one run.
+
+What it does not ask: a hunk that only removes lines, a hunk of comments and
+blank lines, and a changed file that is no code file, which it prints as `not
+checked:` for the reviewer. It runs no end-to-end spec, so a hunk only a spec
+proves is refused here: a vitest case is the road. A syntax error counts as a
+red run, so a hunk cut from the middle of a statement reads as proven; the
+check under-reports and the reviewer's first step stays.
+
+The tests must be green with nothing removed, and so must the typecheck before
+it is asked about a hunk, or a red would prove nothing: both are refusals. A
+test file the `Suite:` command does not run goes to the `Harness suite:`
+command, as in the red check. Each run appends a row to `suite/runs.jsonl`
+with its seconds, its hunks and the unproven ones.
 """
 
 from __future__ import annotations
@@ -135,6 +174,12 @@ HARNESS_FOLDER = re.compile(r"(^|/)tests?/harness/")
 TEST_FILE = re.compile(r"\.(test|spec)\.[cm]?[jt]sx?$")
 NOTE_BRANCH = re.compile(r"^note/([a-z0-9-]+)/(\d{2})$")
 COMMENT_LINE = re.compile(r"^\s*(//|/\*|\*)")
+# The removal check: the files whose hunks it takes out, a comment line of
+# SQL, and a hunk's header in a diff with no context lines.
+CODE_FILE = re.compile(r"\.([cm]?[jt]sx?|sql)$")
+SQL_COMMENT = re.compile(r"^\s*--")
+HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+SHOWN_LINES = 3
 TITLE = re.compile(
     r"\b(?:it|test)(?:\.(?:only|skip|todo|concurrent|sequential|fails))*\s*\(\s*"
     r"(?:\"((?:[^\"\\]|\\.)*)\"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)")
@@ -641,6 +686,164 @@ def red_check(tree: pathlib.Path, block: dict, base: str) -> int:
     return 0
 
 
+# ── The removal check ─────────────────────────────────────────────────────────
+
+def changed_paths(tree: pathlib.Path, base: str) -> tuple[list[str], list[str]]:
+    """The paths that differ from `base`, working tree and untracked files
+    included: those that exist now, and those that are gone."""
+    present, gone = [], []
+    for line in git(tree, "-c", "core.quotePath=false", "diff", "--name-status",
+                    "--no-renames", base).splitlines():
+        (gone if line.split("\t")[0] == "D" else present).append(line.split("\t")[-1])
+    present += git(tree, "-c", "core.quotePath=false", "ls-files", "--others",
+                   "--exclude-standard").splitlines()
+    return [path for path in dict.fromkeys(present) if (tree / path).is_file()], gone
+
+
+def note_tree(tree: pathlib.Path, base: str) -> tuple[pathlib.Path, list[str]]:
+    """A throwaway worktree holding the change as it stands, staged in the
+    worktree's own index, so one hunk can be taken out and put back there. The
+    tree and its index are not touched."""
+    present, gone = changed_paths(tree, base)
+    dest = old_tree(tree, base, present)
+    for path in gone:
+        (dest / path).unlink(missing_ok=True)
+    if present or gone:
+        git(dest, "--literal-pathspecs", "add", "-A", "--", *present, *gone)
+    return dest, present
+
+
+def code_hunks(dest: pathlib.Path, base: str, path: str) -> list[dict]:
+    """The hunks of `path` against `base` that add a line of code, each with
+    the one-hunk patch that takes it out."""
+    done = subprocess.run(["git", "-C", str(dest), "--literal-pathspecs", "diff", "--cached",
+                           "-U0", "--no-color", "--no-ext-diff", "--no-renames", base, "--", path],
+                          capture_output=True, text=True, errors="replace", check=True)
+    lines = done.stdout.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line.startswith("@@")]
+    comment = SQL_COMMENT if path.endswith(".sql") else COMMENT_LINE
+    found = []
+    for start, end in zip(starts, [*starts[1:], len(lines)]):
+        first, count = HUNK.match(lines[start]).groups()
+        added = [line[1:].rstrip("\n") for line in lines[start + 1:end] if line.startswith("+")]
+        if count == "0" or all(not line.strip() or comment.match(line) for line in added):
+            continue
+        last = int(first) + int(count or 1) - 1
+        found.append({"path": path, "where": f"{path}:{first}" + (f"-{last}" if last > int(first) else ""),
+                      "added": added, "patch": "".join(lines[:starts[0]] + lines[start:end])})
+    return found
+
+
+def test_runs(block: dict, tests: list[str], dest: pathlib.Path, logs: pathlib.Path,
+              stem: str) -> list[tuple[list[str], list[str]]]:
+    """Run the note's tests with nothing removed and return (command, files)
+    per command that runs them. A red here is a refusal: nothing a later red
+    says would be about a hunk."""
+    runs, left = [], tests
+    for name, command in (("suite", block["suite"]), ("harness", block["harness"])):
+        if not left or not command:
+            continue
+        report = logs / f"{stem}-whole-{name}.json"
+        log = logs / f"{stem}-whole-{name}.log"
+        code, text = run_logged(place_args(command, ["--reporter=json", f"--outputFile={report}",
+                                                     *SMALL_RUN, *left]), dest, log)
+        seen = [path for path in left if path in read_report(report, dest)]
+        if seen and code:
+            raise Refusal(f"the note's tests are red with nothing removed, so a red run would "
+                          f"prove nothing about a hunk:\n  "
+                          + "\n  ".join(failing_files(text) or seen) + f"\nwhole output: {log}")
+        if seen:
+            runs.append((command, seen))
+        left = [path for path in left if path not in seen]
+    if left:
+        raise Refusal("neither the `Suite:` command nor a `Harness suite:` command runs these "
+                      "test files, so nothing can prove a hunk through them:\n  " + "\n  ".join(left))
+    return runs
+
+
+def removal_check(tree: pathlib.Path, block: dict, base: str) -> int:
+    """Take each code hunk of the change out, alone, and run the note's tests.
+    Exit 0 when every hunk turns a test or the typecheck red, 3 otherwise."""
+    started = now()
+    note = note_file(tree)
+    side = changed_test_side(tree, base)
+    tests = [path for path in dict.fromkeys([*side, *note_test_files(tree, note)])
+             if VITEST_TEST.search(path)]
+    if not tests:
+        raise Refusal(f"no vitest test file changed since {base} and the note names none, so "
+                      f"nothing can prove a hunk.")
+    stem = f"{started:%Y%m%dT%H%M%S.%fZ}-removal"
+    logs = common_dir(tree) / "suite" / "logs"
+    logs.mkdir(parents=True, exist_ok=True)
+    dest, present = note_tree(tree, base)
+    unproven, typed = [], None
+    try:
+        helpers = old_harness_helpers(tree, base, present)
+        code_paths = [path for path in present if CODE_FILE.search(path)
+                      and (not TEST_SIDE.search(path) or path in helpers)]
+        for path in present:
+            if path not in code_paths and not TEST_SIDE.search(path):
+                print(f"not checked: {path} (no code file; the reviewer reads it)")
+        hunks = [hunk for path in code_paths for hunk in code_hunks(dest, base, path)]
+        if not hunks:
+            print(f"removal check passed: no code hunk since {base} adds a line.")
+            return 0
+        runs = test_runs(block, tests, dest, logs, stem)
+        print(f"removal check: {len(hunks)} hunk(s) in {len({h['path'] for h in hunks})} file(s), "
+              f"against {len(tests)} test file(s), on the change since {base} ({dest})", flush=True)
+        patch = dest.parent / "hunk.patch"
+        for number, hunk in enumerate(hunks, 1):
+            patch.write_text(hunk["patch"], encoding="utf-8")
+            took = subprocess.run(["git", "-C", str(dest), "apply", "-R", "--unidiff-zero",
+                                   "--whitespace=nowarn", str(patch)], capture_output=True, text=True)
+            try:
+                if took.returncode:
+                    verdict = f"could not be taken out ({took.stderr.strip().splitlines()[-1:]})"
+                elif any(run_logged(place_args(command, [*SMALL_RUN, "--bail=1", *files]), dest,
+                                    logs / f"{stem}-{number}.log")[0] for command, files in runs):
+                    verdict = None
+                    print(f"  ok  {hunk['where']}: a test goes red without it", flush=True)
+                else:
+                    if typed is None:
+                        git(dest, "--literal-pathspecs", "checkout", "--", hunk["path"])
+                        typed = run_logged(block["typecheck"], dest, logs / f"{stem}-whole-typecheck.log")[0]
+                        if typed:
+                            raise Refusal(f"the typecheck fails in the throwaway tree with nothing "
+                                          f"removed, so it cannot say what a hunk is for. Whole "
+                                          f"output: {logs / f'{stem}-whole-typecheck.log'}")
+                        subprocess.run(["git", "-C", str(dest), "apply", "-R", "--unidiff-zero",
+                                        "--whitespace=nowarn", str(patch)], check=True, capture_output=True)
+                    if run_logged(block["typecheck"], dest, logs / f"{stem}-{number}-typecheck.log")[0]:
+                        verdict = None
+                        print(f"  ok  {hunk['where']}: the typecheck fails without it", flush=True)
+                    else:
+                        verdict = "every test and the typecheck stay green without it"
+                if verdict:
+                    unproven.append(hunk["where"])
+                    print(f"  NOT {hunk['where']}: {verdict}\n" + "\n".join(
+                        f"        {line}" for line in hunk["added"][:SHOWN_LINES])
+                          + (f"\n        ... {len(hunk['added']) - SHOWN_LINES} more line(s)"
+                             if len(hunk["added"]) > SHOWN_LINES else ""), flush=True)
+            finally:
+                git(dest, "--literal-pathspecs", "checkout", "--", hunk["path"])
+    finally:
+        drop_tree(tree, dest)
+        seconds = round((now() - started).total_seconds(), 1)
+    record_run(tree, {"kind": "removal", "tree": str(tree), "seconds": seconds,
+                      "exit": REFUSED if unproven else 0, "hunks": len(hunks),
+                      "unproven": unproven, "log": str(logs / stem)})
+    print(f"removal run: {seconds} s; logs: {logs / stem}-*.log")
+    if unproven:
+        raise Refusal(f"{len(unproven)} of {len(hunks)} hunk(s) of the change are needed by no "
+                      f"test:\n  " + "\n  ".join(unproven) +
+                      "\nEach is code the note's tests cannot tell from its absence. Add a case "
+                      "to a test file of the note that fails without it, or take the lines out "
+                      "when nothing needs them.")
+    print(f"removal check passed: each of {len(hunks)} hunk(s) turns a test or the typecheck red "
+          f"when it is taken out.")
+    return 0
+
+
 # ── The runs ──────────────────────────────────────────────────────────────────
 
 def full_run(tree: pathlib.Path, block: dict) -> int:
@@ -700,13 +903,13 @@ def plain_run(tree: pathlib.Path, command: list[str], kind: str, lock: bool) -> 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("kind", choices=("full", "scoped", "files", "red", "typecheck", "e2e"))
+    parser.add_argument("kind", choices=("full", "scoped", "files", "red", "removal", "typecheck", "e2e"))
     parser.add_argument("--tree", default=os.getcwd())
-    parser.add_argument("--base", help="scoped and red: the commit before the change")
+    parser.add_argument("--base", help="scoped, red and removal: the commit before the change")
     parser.add_argument("paths", nargs="*", help="files: the test files to run")
     args = parser.parse_args(argv)
     try:
-        if args.kind in ("scoped", "red") and not args.base:
+        if args.kind in ("scoped", "red", "removal") and not args.base:
             raise Refusal(f"{args.kind} needs --base <ref>, the commit before the change.")
         if args.kind == "files" and not args.paths:
             raise Refusal("files needs at least one test file.")
@@ -726,6 +929,8 @@ def main(argv=None) -> int:
             return small_run(tree, block, "files", args.paths)
         if args.kind == "red":
             return red_check(tree, block, args.base)
+        if args.kind == "removal":
+            return removal_check(tree, block, args.base)
         return plain_run(tree, block[args.kind], args.kind, lock=args.kind == "e2e")
     except Refusal as error:
         print(f"REFUSED: {error}\nNothing ran.")

@@ -121,6 +121,10 @@ _Avoid_: Flaky run, intermittent failure
 The check that each new test fails on the code from before the change. A test that passes there proves nothing. A test named `keeps:` protects behaviour the change does not touch, and the check skips it. The change's migrations count as code from the change, so the code from before it has none of them.
 _Avoid_: Test-first check, mutation test, red-before-green
 
+**Removal check**:
+The check that each hunk of a change is needed by a test. It takes each hunk of code out, alone, and runs the change's vitest files; a hunk that leaves every test and the typecheck green is refused by file and line. It works by hunk and does not see inside a line.
+_Avoid_: Mutation test, proof check, coverage
+
 **Hostile walk**:
 The verifier's pass through a change note's new and changed actions in the running app, with throwaway cases that try to break them: a reload, a second road, two fast clicks, the narrow width, the empty and error states. A case that finds a fault becomes a spec in the fix.
 _Avoid_: Browser walk, acceptance walk, manual QA
