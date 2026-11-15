@@ -83,7 +83,7 @@ spot something else broken, add it to the register as a new `candidate`, carryin
 `audience` of `operator`, `tester` or `agent`, a severity, the same capped
 `owner-notes`, and an `origin` -- the issue and the run that shipped the code the
 fault is in, written `<issue>/<run>`, with `unknown` for a half you cannot
-establish. `origin-row-guard.py` refuses a row without it (ticket 37, ruling 7). **You never write an issue file.** Findings leave this loop through
+establish. No hook checks it: the claim gate refuses a row without it (ticket 37, ruling 7). **You never write an issue file.** Findings leave this loop through
 promotion at round end, and through nothing else.
 
 **Ground every claim.** Before marking anything `fix-ready`, check it against a

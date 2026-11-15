@@ -65,8 +65,8 @@ real:
      inside `owner-notes`, where nothing can read it. Where you genuinely do
      not know a half, write `unknown` in its place (`unknown/batch-170a59`),
      or `unknown` alone for neither: it is legal, it is counted, and it is
-     worth more than a guess. `origin-row-guard.py` refuses a row without it,
-     and refuses a table that declares no `origin` column at all. (Ticket 37
+     worth more than a guess. No hook checks it: the claim gate refuses a row
+     without it. (Ticket 37
      of the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
    - **`audience`** is `operator`, `tester` or `agent` — who can see this fault at
      all. Promotion decides on this field, so it is not a formality. `agent` means

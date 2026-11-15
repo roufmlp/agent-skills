@@ -110,9 +110,8 @@ its fixes on the old code is read against it.
 - **`origin`** names where the fault came from: the issue and the run that shipped
   the code it is in, written `<issue>/<run>`, with `unknown` legal for either half
   or for both. It is what makes an escaped fault countable, and nothing else in the
-  record carries it. `origin-row-guard.py` in the hooks refuses a row without it and
-  a table that declares no such column; `check_origin.py` grades a file that already
-  exists. A table declaring no `origin` column is history and is never graded, which
+  record carries it. No hook checks it: the claim gate refuses a row without it.
+  A table declaring no `origin` column is history and is never graded, which
   is how the count starts the day the key landed and backfills nothing. (Ticket 37 of
   the pilot-delivery map, ruling 7, ruled by the human 2026-09-05.)
 - **`audience`** is `operator`, `tester` or `agent` — who can see the fault at all.
